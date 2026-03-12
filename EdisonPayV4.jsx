@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import React from "react";
+import { createClient } from "@supabase/supabase-js";
 
 /* ── FONTS ── */
 const Fonts = () => (
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 );
 
 /* ── CSS KEYFRAMES injected once ── */
@@ -30,10 +31,16 @@ const GlobalStyles = () => {
       @keyframes slideUp  { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
       @keyframes slideDown { from{opacity:0;transform:translateY(-8px);} to{opacity:1;transform:translateY(0);} }
       @keyframes drawerIn { from{transform:translateX(-100%);} to{transform:translateX(0);} }
+      @keyframes upFloat  { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
+      @keyframes popPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.05);} }
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
       .ep-card { background:#fff; border-radius:16px; border:1px solid #EBEBEB; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+      .ep-upgrade-btn { animation: popPulse 1.6s ease-in-out infinite; }
+      .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
+      .ep-frame-dark { box-shadow: 0 0 0 2px #111, 0 8px 18px rgba(0,0,0,0.12); }
+      .ep-frame-light { box-shadow: 0 0 0 1.5px #fff, 0 8px 18px rgba(0,0,0,0.08); }
       * { box-sizing:border-box; margin:0; padding:0; }
       ::-webkit-scrollbar { width:5px; height:5px; }
       ::-webkit-scrollbar-track { background:transparent; }
@@ -53,7 +60,8 @@ const GlobalStyles = () => {
         .ep-auth-left { display:none !important; }
         .ep-dash-sidebar { position:fixed !important; z-index:200 !important; height:100vh !important; top:0 !important; left:0 !important; transform:translateX(-100%) !important; transition:transform .28s cubic-bezier(.4,0,.2,1) !important; }
         .ep-dash-sidebar.open { transform:translateX(0) !important; animation:drawerIn .28s cubic-bezier(.4,0,.2,1) !important; }
-        .ep-dash-overlay { display:block !important; }
+        .ep-dash-overlay { display:none !important; }
+        .ep-dash-overlay.open { display:block !important; }
         .ep-topbar-search { display:none !important; }
         .ep-topbar-date { display:none !important; }
         .ep-page-actions { display:none !important; }
@@ -81,6 +89,22 @@ const GlobalStyles = () => {
   }, []);
   return null;
 };
+
+/* ── SUPABASE (optional) ── */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
+
+async function fetchTable(table) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.from(table).select("*").limit(200);
+    if (error) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
 
 /* ── ICON LIBRARY ── */
 const I = ({ n, s = 16, c = "currentColor", w = 1.75 }) => {
@@ -124,6 +148,149 @@ const I = ({ n, s = 16, c = "currentColor", w = 1.75 }) => {
     </svg>
   );
 };
+
+/* PAYMENT LOGOS (monochrome) */
+const PAY_LOGO_GREY = "#B8B8B8";
+const Wordmark = ({ text, width = 90 }) => (
+  <svg viewBox={`0 0 ${width} 24`} height="20" role="img" aria-label={text} style={{ display:"block" }}>
+    <text x="0" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="700" fontFamily="Sora, Geist, sans-serif" letterSpacing="0.04em">
+      {text}
+    </text>
+  </svg>
+);
+function PaymentLogo({ name }) {
+  switch (name) {
+    case "Mastercard":
+      return (
+        <svg viewBox="0 0 64 24" height="20" role="img" aria-label="Mastercard" style={{ display:"block" }}>
+          <circle cx="26" cy="12" r="9" fill={PAY_LOGO_GREY} opacity="0.45" />
+          <circle cx="38" cy="12" r="9" fill={PAY_LOGO_GREY} opacity="0.45" />
+          <circle cx="26" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
+          <circle cx="38" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
+        </svg>
+      );
+    case "Visa":
+      return <Wordmark text="VISA" width={64} />;
+    case "M-Pesa":
+      return <Wordmark text="M-PESA" width={72} />;
+    case "Google Pay":
+      return <Wordmark text="Google Pay" width={110} />;
+    case "Binance Pay":
+      return (
+        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Binance Pay" style={{ display:"block" }}>
+          <g transform="translate(6 4)">
+            <rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)" fill={PAY_LOGO_GREY} opacity="0.6" />
+            <rect x="10" y="2" width="8" height="8" transform="rotate(45 14 6)" fill={PAY_LOGO_GREY} opacity="0.35" />
+          </g>
+          <text x="32" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif" letterSpacing="0.04em">Binance Pay</text>
+        </svg>
+      );
+    case "BNB":
+      return (
+        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="BNB" style={{ display:"block" }}>
+          <g transform="translate(10 4)" fill={PAY_LOGO_GREY}>
+            <rect x="8" y="0" width="6" height="6" transform="rotate(45 11 3)" />
+            <rect x="0" y="8" width="6" height="6" transform="rotate(45 3 11)" opacity="0.6" />
+            <rect x="16" y="8" width="6" height="6" transform="rotate(45 19 11)" opacity="0.6" />
+            <rect x="8" y="16" width="6" height="6" transform="rotate(45 11 19)" opacity="0.6" />
+          </g>
+        </svg>
+      );
+    case "Bitcoin":
+      return (
+        <svg viewBox="0 0 50 24" height="20" role="img" aria-label="Bitcoin" style={{ display:"block" }}>
+          <circle cx="14" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
+          <text x="10.5" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">B</text>
+          <line x1="11" y1="6" x2="11" y2="18" stroke={PAY_LOGO_GREY} strokeWidth="1" />
+          <line x1="14.5" y1="6" x2="14.5" y2="18" stroke={PAY_LOGO_GREY} strokeWidth="1" />
+        </svg>
+      );
+    case "USDT":
+      return (
+        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="USDT" style={{ display:"block" }}>
+          <circle cx="12" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
+          <text x="9" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">T</text>
+          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">USDT</text>
+        </svg>
+      );
+    case "USDC":
+      return (
+        <svg viewBox="0 0 58 24" height="20" role="img" aria-label="USDC" style={{ display:"block" }}>
+          <circle cx="12" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
+          <text x="9" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">$</text>
+          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">USDC</text>
+        </svg>
+      );
+    case "Ethereum":
+      return (
+        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="Ethereum" style={{ display:"block" }}>
+          <polygon points="12,2 18,12 12,22 6,12" fill={PAY_LOGO_GREY} opacity="0.6" />
+          <polygon points="12,2 18,12 12,12 6,12" fill={PAY_LOGO_GREY} />
+          <text x="28" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">ETH</text>
+        </svg>
+      );
+    case "Litecoin":
+      return (
+        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="Litecoin" style={{ display:"block" }}>
+          <circle cx="12" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
+          <text x="9.5" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">L</text>
+          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">LTC</text>
+        </svg>
+      );
+    case "Flutterwave":
+      return (
+        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Flutterwave" style={{ display:"block" }}>
+          <circle cx="12" cy="12" r="8" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
+          <path d="M6 12c2.5-3 6.5-3 12 0" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
+          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">Flutterwave</text>
+        </svg>
+      );
+    case "PayPal":
+      return <Wordmark text="PayPal" width={70} />;
+    case "Apple Pay":
+      return (
+        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Apple Pay" style={{ display:"block" }}>
+          <path d="M12 6c1-2 2.6-3 4.4-3-0.1 1.8-1.2 3.1-2.6 3.8-0.8 0.4-1.6 0.5-1.8 0.5 0-0.5 0-1.1 0-1.3z" fill={PAY_LOGO_GREY} />
+          <path d="M12 8c-2 0-4 1.6-4 4.7 0 2.7 1.5 5.3 3.4 5.3 0.8 0 1.4-0.3 2.2-0.3 0.9 0 1.4 0.3 2.4 0.3 1.7 0 3.2-2.2 3.2-4.4-0.9-0.4-2-1.4-2-3.1 0-1.7 1.1-2.6 1.8-3-0.4-0.6-1.7-1.5-3.2-1.5-1 0-1.8 0.4-2.4 0.4-0.6 0-1.4-0.4-2.4-0.4z" fill={PAY_LOGO_GREY} opacity="0.6" />
+          <text x="34" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">Apple Pay</text>
+        </svg>
+      );
+    case "Samsung Pay":
+      return <Wordmark text="Samsung Pay" width={120} />;
+    case "Stripe":
+      return <Wordmark text="Stripe" width={70} />;
+    case "Alipay":
+      return <Wordmark text="Alipay" width={70} />;
+    case "WeChat Pay":
+      return (
+        <svg viewBox="0 0 100 24" height="20" role="img" aria-label="WeChat Pay" style={{ display:"block" }}>
+          <circle cx="12" cy="11" r="8" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
+          <circle cx="20" cy="13" r="6" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
+          <text x="34" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">WeChat Pay</text>
+        </svg>
+      );
+    case "Skrill":
+      return <Wordmark text="Skrill" width={60} />;
+    case "Neteller":
+      return <Wordmark text="Neteller" width={78} />;
+    case "Cash App":
+      return (
+        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Cash App" style={{ display:"block" }}>
+          <rect x="2" y="4" width="16" height="16" rx="4" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
+          <text x="7" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">$</text>
+          <text x="26" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">Cash App</text>
+        </svg>
+      );
+    case "Payoneer":
+      return <Wordmark text="Payoneer" width={86} />;
+    case "Paystack":
+      return <Wordmark text="Paystack" width={86} />;
+    case "Airtel Money":
+      return <Wordmark text="Airtel Money" width={110} />;
+    default:
+      return <Wordmark text={name} width={90} />;
+  }
+}
 
 /* ── TIERS ── */
 const TIERS = [
@@ -183,7 +350,11 @@ function Landing({ go }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const payments = ["M-Pesa","Visa","Mastercard","Bitcoin","BNB","Paystack","Airtel Money","PayPal","Stripe","Apple Pay","Google Pay","USDT","Flutterwave","Binance Pay"];
+  const payments = [
+    "Google Pay","USDT","Flutterwave","Binance Pay","M-Pesa","Visa","Mastercard","Bitcoin","BNB",
+    "PayPal","Apple Pay","Samsung Pay","Stripe","Alipay","WeChat Pay","Skrill","Neteller","Ethereum","Litecoin","USDC","Cash App","Payoneer",
+    "Paystack","Airtel Money"
+  ];
 
   const anim = (delay = 0) => ({ animation: `fadeUp .55s ease both`, animationDelay: `${delay}ms`, opacity: heroVisible ? 1 : 0 });
 
@@ -340,11 +511,11 @@ function Landing({ go }) {
 
       {/* ── SCROLLING LOGOS ── */}
       <div style={{ borderTop: "1px solid #EBEBEB", borderBottom: "1px solid #EBEBEB", background: "#FAFAFA", padding: "16px 0", overflow: "hidden" }}>
-        <div style={{ display: "flex", gap: 56, width: "max-content", animation: "ticker 22s linear infinite" }}>
+        <div style={{ display: "flex", gap: 48, width: "max-content", animation: "ticker 22s linear infinite", alignItems:"center" }}>
           {[...payments, ...payments].map((p, i) => (
-            <span key={i} style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0", letterSpacing: "0.08em", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 7 }}>
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#D8D8D8", display: "inline-block" }} />{p}
-            </span>
+            <div key={i} style={{ minWidth: 96, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <PaymentLogo name={p} />
+            </div>
           ))}
         </div>
       </div>
@@ -698,20 +869,147 @@ function ClientDash({ t, go }) {
   const [tab, setTab] = useState("overview");
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
+  const [profile, setProfile] = useState({
+    id: null,
+    name: "Alex Johnson",
+    email: "alex@example.com",
+    phone: "0712 345 678",
+    avatar: "",
+    balance: null,
+  });
+  const [draftProfile, setDraftProfile] = useState({
+    id: null,
+    name: "Alex Johnson",
+    email: "alex@example.com",
+    phone: "0712 345 678",
+    avatar: "",
+    balance: null,
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMsg, setProfileMsg] = useState("");
+  const avatarUrlRef = useRef(null);
+  const [clientTx, setClientTx] = useState([]);
+  const [clientRefs, setClientRefs] = useState([]);
+  const [clientRefTable, setClientRefTable] = useState([]);
   const earn = Math.round(t.deposit * 0.47);
   const goal = t.deposit * 3;
   const pct = Math.round((earn / goal) * 100);
+  const profileName = profile.name || "Account";
+  const profileParts = profileName.split(" ").filter(Boolean);
+  const profileInitials = profileParts.map(n=>n[0]).join("").slice(0,2).toUpperCase() || "EP";
+  const profileShort = profileParts.length > 1 ? `${profileParts[0]} ${profileParts[1][0]}.` : profileName;
+  const balanceVal = Number(profile.balance);
+  const balance = Number.isFinite(balanceVal) ? balanceVal : earn;
+  const nextTier = TIERS[t.id];
+  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - balance, 0) : 0;
+  const canUpgrade = !!nextTier && balance >= nextTier.deposit;
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
   const canWithdraw = ["Tuesday","Wednesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
   const SIDEBAR_W = 260;
   const ICON_W = 60;
+  const headingFont = "Sora, Geist, sans-serif";
+  const pagePad = isMobile ? "14px 16px 96px" : "26px 34px 48px";
+  const headerPad = isMobile ? "12px 16px 0" : "18px 28px 0";
 
   useEffect(() => {
     const fn = () => { const m = window.innerWidth < 769; setIsMobile(m); if (m) setOpen(false); };
     window.addEventListener("resize", fn); fn();
     return () => window.removeEventListener("resize", fn);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    setDraftProfile(profile);
+  }, [profile]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let ignore = false;
+    const fmtShort = (d) => {
+      if (!d) return "—";
+      const dt = new Date(d);
+      return Number.isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+    };
+    const txIcon = (type) => {
+      const t = String(type || "").toLowerCase();
+      if (t.includes("withdraw")) return "up";
+      if (t.includes("referral")) return "gift";
+      if (t.includes("video") || t.includes("watch")) return "play";
+      return "wallet";
+    };
+    const txColor = (type) => {
+      const typeLower = String(type || "").toLowerCase();
+      if (typeLower.includes("withdraw")) return "#E8820C";
+      if (typeLower.includes("referral")) return "#0066FF";
+      if (typeLower.includes("video") || typeLower.includes("watch")) return "#059669";
+      return t.acc;
+    };
+    const normalizeTx = (r, i) => {
+      const rawAmt = Number(r.amount ?? r.amt ?? r.value ?? r.earnings);
+      const amt = Number.isFinite(rawAmt) ? rawAmt : null;
+      return {
+        ic: r.ic || txIcon(r.type),
+        text: r.text || r.title || (r.type ? `${r.type} activity` : "Transaction"),
+        sub: r.sub || r.method || r.note || "Processed",
+        time: r.time || fmtShort(r.created_at || r.date),
+        c: r.color || txColor(r.type),
+        amt,
+      };
+    };
+    const normalizeRef = (r, i) => {
+      const name = r.name || r.full_name || r.user || `User ${i+1}`;
+      const rawStatus = String(r.status || "Pending");
+      const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+      return { name, init: name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase(), status };
+    };
+    const normalizeRefRow = (r, i) => ({
+      name: r.name || r.full_name || r.user || `User ${i+1}`,
+      email: r.email || r.user_email || "—",
+      tier: r.tier || r.plan || "Regular",
+      date: fmtShort(r.date || r.created_at),
+      bonus: Number(r.bonus || r.ref_bonus || t.deposit * 0.1),
+      status: (() => {
+        const raw = String(r.status || "Pending");
+        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+      })(),
+      earnings: Number(r.earnings || r.total_earnings || 0),
+    });
+    (async () => {
+      const [txRows, refRows, profileRows] = await Promise.all([
+        fetchTable("client_transactions"),
+        fetchTable("client_referrals"),
+        fetchTable("client_profile"),
+      ]);
+      if (ignore) return;
+      if (Array.isArray(txRows) && txRows.length) setClientTx(txRows.map(normalizeTx));
+      if (Array.isArray(refRows) && refRows.length) {
+        setClientRefs(refRows.map(normalizeRef));
+        setClientRefTable(refRows.map(normalizeRefRow));
+      }
+      if (Array.isArray(profileRows) && profileRows.length) {
+        const p = profileRows[0];
+        const rawBal = Number(p.balance ?? p.earnings ?? p.wallet_balance ?? p.available_balance);
+        const bal = Number.isFinite(rawBal) ? rawBal : null;
+        setProfile(prev => ({
+          ...prev,
+          id: p.id ?? p.user_id ?? prev.id,
+          name: p.name ?? p.full_name ?? prev.name,
+          email: p.email ?? prev.email,
+          phone: p.phone ?? prev.phone,
+          avatar: p.avatar_url ?? p.avatar ?? prev.avatar,
+          balance: bal ?? prev.balance,
+        }));
+      }
+    })();
+    return () => { ignore = true; };
+  }, [t.acc, t.deposit]);
 
   const navItems = [
     { id:"overview",  label:"Overview",  ic:"grid"   },
@@ -730,12 +1028,71 @@ function ClientDash({ t, go }) {
   ];
 
   const closeSidebar = () => { if (isMobile) setOpen(false); };
+  const setProfileField = (key, value) => setDraftProfile(p => ({ ...p, [key]: value }));
+  const draftBalanceRaw = draftProfile.balance;
+  const draftBalanceVal = draftBalanceRaw === null || draftBalanceRaw === "" || typeof draftBalanceRaw === "undefined" ? null : Number(draftBalanceRaw);
+  const draftBalance = Number.isFinite(draftBalanceVal) ? draftBalanceVal : null;
+  const profileBalanceVal = profile.balance === null || typeof profile.balance === "undefined" ? null : Number(profile.balance);
+  const profileBalance = Number.isFinite(profileBalanceVal) ? profileBalanceVal : null;
+  const profileDirty = ["name","email","phone","avatar"].some(k => (draftProfile[k] || "") !== (profile[k] || "")) || draftBalance !== profileBalance;
+
+  const handleAvatarFile = (file) => {
+    if (!file) return;
+    if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
+    const url = URL.createObjectURL(file);
+    avatarUrlRef.current = url;
+    setProfileField("avatar", url);
+  };
+
+  const saveProfile = async () => {
+    if (profileSaving) return;
+    setProfileSaving(true);
+    setProfileMsg("");
+    const cleaned = {
+      id: draftProfile.id ?? profile.id ?? null,
+      name: (draftProfile.name || "").trim() || profile.name,
+      email: (draftProfile.email || "").trim() || profile.email,
+      phone: (draftProfile.phone || "").trim() || profile.phone,
+      avatar: (draftProfile.avatar || "").trim(),
+      balance: Number.isFinite(draftBalance) ? draftBalance : profile.balance,
+    };
+    setProfile(prev => ({
+      ...prev,
+      id: cleaned.id ?? prev.id,
+      name: cleaned.name,
+      email: cleaned.email,
+      phone: cleaned.phone,
+      avatar: cleaned.avatar,
+      balance: Number.isFinite(cleaned.balance) ? cleaned.balance : prev.balance,
+    }));
+    if (supabase) {
+      const payload = {
+        id: cleaned.id ?? undefined,
+        name: cleaned.name,
+        email: cleaned.email,
+        phone: cleaned.phone,
+        avatar_url: cleaned.avatar || null,
+        balance: Number.isFinite(cleaned.balance) ? cleaned.balance : null,
+        updated_at: new Date().toISOString(),
+      };
+      if (payload.id == null) delete payload.id;
+      try {
+        const { error } = await supabase.from("client_profile").upsert(payload);
+        setProfileMsg(error ? "Saved locally - sync failed." : "Profile updated.");
+      } catch (e) {
+        setProfileMsg("Saved locally - sync failed.");
+      }
+    } else {
+      setProfileMsg("Profile updated.");
+    }
+    setProfileSaving(false);
+  };
 
   return (
-    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#F2F4F8", fontFamily:"Geist,sans-serif", color:"#111", position:"relative" }}>
+    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#F2F4F8", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#111", position:"relative" }}>
 
       {/* ── Mobile overlay ── */}
-      <div className="ep-dash-overlay" onClick={closeSidebar}
+      <div className={`ep-dash-overlay${isMobile && open ? " open" : ""}`} onClick={closeSidebar}
         style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:199, display:"none", backdropFilter:"blur(2px)" }}/>
 
       {/* ══════════ SIDEBAR ══════════ */}
@@ -781,8 +1138,51 @@ function ClientDash({ t, go }) {
           })}
 
           {open && t.id < 5 && (
-            <div style={{ margin:"8px 0 0", padding:"10px 12px", borderRadius:9, border:`1.5px dashed ${t.mid}`, display:"flex", alignItems:"center", gap:9, cursor:"pointer", color:t.acc, fontWeight:700, fontSize:12, background:`${t.acc}08` }}>
-              <I n="star" s={14} c={t.acc}/> Upgrade to {TIERS[t.id]?.name}
+            <button
+              onClick={() => { if (canUpgrade) setTab("withdraw"); }}
+              disabled={!canUpgrade}
+              style={{
+                margin:"8px 0 0",
+                padding:"10px 12px",
+                borderRadius:9,
+                border:`1.5px dashed ${t.mid}`,
+                display:"flex",
+                alignItems:"center",
+                gap:9,
+                cursor: canUpgrade ? "pointer" : "not-allowed",
+                color: canUpgrade ? t.acc : "#A8A8A8",
+                fontWeight:700,
+                fontSize:12,
+                background: canUpgrade ? `${t.acc}08` : "#F5F5F5",
+                opacity: canUpgrade ? 1 : 0.7
+              }}>
+              <I n="star" s={14} c={canUpgrade ? t.acc : "#A8A8A8"}/>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2 }}>
+                <span>Upgrade to {nextTier?.name}</span>
+                <span style={{ fontSize:10, fontWeight:700, color: canUpgrade ? t.acc : "#A8A8A8" }}>
+                  {canUpgrade ? "Ready now" : `Top up KES ${upgradeNeed.toLocaleString()}`}
+                </span>
+              </div>
+            </button>
+          )}
+
+          {open && (
+            <div style={{ margin:"10px 0 0" }}>
+              <button onClick={()=>setQuickOpen(o=>!o)}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:9, border:"1px solid #E8E8E8", background:"#FAFAFA", fontSize:12, fontWeight:800, color:"#555", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, fontFamily:"Geist,sans-serif" }}>
+                Quick Actions
+                <I n="chevR" s={11} c="#BBB"/>
+              </button>
+              {quickOpen && (
+                <div style={{ marginTop:8, display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <button onClick={()=>setTab("videos")} style={{ padding:"8px 10px", background:"#111", color:"#fff", border:"none", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                    <I n="play" s={11} c="#fff"/> Videos
+                  </button>
+                  <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 10px", background:"#F5F5F5", color:"#111", border:"1px solid #E8E8E8", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                    <I n="wallet" s={11} c="#111"/> Withdraw
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </nav>
@@ -790,22 +1190,23 @@ function ClientDash({ t, go }) {
         {/* ── Bottom: recent tx + links ── */}
         {open && (
           <div style={{ borderTop:"1px solid #F0F0F0", flexShrink:0 }}>
-            <div style={{ padding:"12px 16px 8px" }}>
-              <div style={{ fontSize:9, fontWeight:800, color:"#CCC", letterSpacing:"0.12em", marginBottom:10 }}>RECENT TRANSACTIONS</div>
-              {recentTx.slice(0,4).map((w,i) => (
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                    <div style={{ width:22, height:22, borderRadius:6, background: w.s==="Paid"?"#ECFDF5":"#FEF3C7", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <I n={w.s==="Paid"?"check":"calendar"} s={10} c={w.s==="Paid"?"#059669":"#D97706"}/>
+            <div style={{ padding:"10px 16px 6px" }}>
+              <div style={{ fontSize:9, fontWeight:800, color:"#D1D5DB", letterSpacing:"0.12em", marginBottom:8 }}>RECENT TRANSACTIONS</div>
+              {recentTx.slice(0,2).map((w,i) => (
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                    <div style={{ width:18, height:18, borderRadius:5, background: w.s==="Paid"?"#F0FDF4":"#FFFBEB", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <I n={w.s==="Paid"?"check":"calendar"} s={9} c={w.s==="Paid"?"#22C55E":"#D97706"}/>
                     </div>
                     <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:"#111" }}>KES {w.a.toLocaleString()}</div>
-                      <div style={{ fontSize:9, color:"#BBB" }}>{w.d}</div>
+                      <div style={{ fontSize:10, fontWeight:700, color:"#666" }}>KES {w.a.toLocaleString()}</div>
+                      <div style={{ fontSize:9, color:"#D1D5DB" }}>{w.d}</div>
                     </div>
                   </div>
-                  <span style={{ fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:50, background:w.s==="Paid"?"#ECFDF5":"#FEF3C7", color:w.s==="Paid"?"#059669":"#D97706" }}>{w.s}</span>
+                  <span style={{ fontSize:8, fontWeight:800, padding:"2px 6px", borderRadius:50, background:w.s==="Paid"?"#F0FDF4":"#FFFBEB", color:w.s==="Paid"?"#22C55E":"#D97706" }}>{w.s}</span>
                 </div>
               ))}
+              <div style={{ marginTop:4, fontSize:9, color:"#D1D5DB", fontWeight:700 }}>View all in Transactions</div>
             </div>
             <div style={{ padding:"10px 16px 16px", display:"flex", justifyContent:"space-between" }}>
               {["About","Contact","Help"].map(l => <span key={l} style={{ fontSize:11, color:"#CCC", cursor:"pointer" }}>{l}</span>)}
@@ -827,56 +1228,106 @@ function ClientDash({ t, go }) {
       <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0 }}>
 
         {/* ── TOP BAR ── */}
-        <header style={{ height:62, background:"#fff", borderBottom:"1px solid #E8E8E8", display:"flex", alignItems:"center", padding:"0 20px", gap:12, flexShrink:0, boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+        <header style={{
+          minHeight: isMobile ? 64 : 62,
+          height: isMobile ? "auto" : 62,
+          background:"#fff",
+          borderBottom:"1px solid #E8E8E8",
+          display:"flex",
+          alignItems:"center",
+          padding: isMobile ? "10px 14px" : "0 20px",
+          gap: isMobile ? 8 : 12,
+          flexShrink:0,
+          boxShadow:"0 1px 4px rgba(0,0,0,0.04)",
+          flexWrap: isMobile ? "wrap" : "nowrap",
+          rowGap: isMobile ? 8 : 0
+        }}>
 
-          {/* Toggle */}
-          <button onClick={() => setOpen(o => !o)}
-            style={{ width:36, height:36, borderRadius:9, border:"1.5px solid #E8E8E8", background:"#FAFAFA", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s", flexShrink:0 }}
-            onMouseEnter={e=>{e.currentTarget.style.background="#F0F0F0";}} onMouseLeave={e=>{e.currentTarget.style.background="#FAFAFA";}}>
-            <I n="menu" s={16} c="#555"/>
-          </button>
+          {/* Toggle / Upgrade */}
+          {!isMobile && (
+            <button onClick={() => setOpen(o => !o)}
+              style={{ width:36, height:36, borderRadius:9, border:"1.5px solid #E8E8E8", background:"#FAFAFA", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s", flexShrink:0 }}
+              onMouseEnter={e=>{e.currentTarget.style.background="#F0F0F0";}} onMouseLeave={e=>{e.currentTarget.style.background="#FAFAFA";}}>
+              <I n="menu" s={16} c="#555"/>
+            </button>
+          )}
+          {isMobile && (
+            <button
+              onClick={() => { if (canUpgrade) setTab("withdraw"); }}
+              disabled={!canUpgrade}
+              title={nextTier ? (canUpgrade ? `Upgrade to ${nextTier.name}` : `Need KES ${upgradeNeed.toLocaleString()} more`) : "Max tier"}
+              className="ep-upgrade-btn"
+              style={{
+                padding:"7px 12px",
+                borderRadius:12,
+                border:"1px solid #E8E8E8",
+                background: canUpgrade ? "#111" : "#E5E7EB",
+                cursor: canUpgrade ? "pointer" : "not-allowed",
+                display:"flex",
+                alignItems:"center",
+                gap:6,
+                transition:"all .15s",
+                flexShrink:0,
+                boxShadow: canUpgrade ? "0 6px 18px rgba(0,0,0,0.18)" : "none"
+              }}>
+              <span className="ep-upgrade-arrow" style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <I n="trendUp" s={14} c={canUpgrade ? "#fff" : "#9CA3AF"}/>
+              </span>
+              <span style={{ fontSize:11, fontWeight:800, color: canUpgrade ? "#fff" : "#9CA3AF", letterSpacing:"0.02em" }}>
+                {canUpgrade ? "Upgrade" : "Locked"}
+              </span>
+            </button>
+          )}
 
           {/* Page breadcrumb */}
-          <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden" }}>
-            <span style={{ fontSize:13, color:"#BBB", fontWeight:500, whiteSpace:"nowrap" }}>Dashboard</span>
-            <I n="chevR" s={12} c="#DDD"/>
-            <span style={{ fontSize:13, fontWeight:800, color:"#111", whiteSpace:"nowrap", letterSpacing:"-0.02em" }}>{navItems.find(n=>n.id===tab)?.label || "Overview"}</span>
-          </div>
+          {!isMobile && (
+            <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden" }}>
+              <span style={{ fontSize:13, color:"#BBB", fontWeight:500, whiteSpace:"nowrap" }}>Dashboard</span>
+              <I n="chevR" s={12} c="#DDD"/>
+              <span style={{ fontSize:13, fontWeight:800, color:"#111", whiteSpace:"nowrap", letterSpacing:"-0.02em" }}>{navItems.find(n=>n.id===tab)?.label || "Overview"}</span>
+            </div>
+          )}
 
           {/* Search */}
-          <div className="ep-topbar-search" style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", background:"#FAFAFA", border:"1.5px solid #EBEBEB", borderRadius:10, flex:1, maxWidth:280 }}>
-            <I n="search" s={13} c="#CCC"/>
-            <input placeholder="Search transactions, videos…" style={{ border:"none", background:"transparent", outline:"none", fontSize:13, color:"#111", width:"100%", fontFamily:"Geist,sans-serif" }}/>
-          </div>
-
-          <div style={{ flex:1 }}/>
-
-          {/* Date */}
-          <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#FAFAFA", border:"1px solid #EBEBEB", borderRadius:9, flexShrink:0 }}>
-            <I n="calendar" s={13} c="#BBB"/>
-            <span style={{ fontSize:12, color:"#888", fontWeight:500, whiteSpace:"nowrap" }}>{today}</span>
-          </div>
-
-          {/* Withdrawal day indicator */}
-          <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background: canWithdraw?"#ECFDF5":"#FFF5F5", border:`1px solid ${canWithdraw?"#A7F3D0":"#FCA5A5"}`, borderRadius:9, flexShrink:0 }}>
-            <div style={{ width:6, height:6, borderRadius:"50%", background: canWithdraw?"#059669":"#EF4444", animation:"pulse 2s infinite" }}/>
-            <span style={{ fontSize:11, fontWeight:800, color: canWithdraw?"#059669":"#EF4444", whiteSpace:"nowrap" }}>
-              {canWithdraw ? "Withdrawals Open" : "Withdrawals Closed"}
-            </span>
-          </div>
-
-          <div className="ep-topbar-date" style={{ width:1, height:24, background:"#E8E8E8", flexShrink:0 }}/>
-
-          {/* Earnings chip */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background:t.lgt, border:`1.5px solid ${t.mid}`, borderRadius:10, flexShrink:0 }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:900, color:t.acc, letterSpacing:"-0.03em", lineHeight:1.1 }}>KES {earn.toLocaleString()}</div>
-              <div style={{ fontSize:9, color:t.acc, opacity:0.65, fontWeight:700 }}>{pct}% TO GOAL</div>
+          {!isMobile && (
+            <div className="ep-topbar-search" style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", background:"#FAFAFA", border:"1.5px solid #EBEBEB", borderRadius:10, flex:1, maxWidth:280 }}>
+              <I n="search" s={13} c="#CCC"/>
+              <input placeholder="Search transactions, videos…" style={{ border:"none", background:"transparent", outline:"none", fontSize:13, color:"#111", width:"100%", fontFamily:"Geist,sans-serif" }}/>
             </div>
-            <Donut pct={pct} acc={t.acc} size={34} thickness={4}/>
-          </div>
+          )}
 
-          <div style={{ width:1, height:24, background:"#E8E8E8", flexShrink:0 }}/>
+          <div style={{ flex:1, minWidth:0 }}/>
+
+          {!isMobile && (
+            <>
+              {/* Date */}
+              <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#FAFAFA", border:"1px solid #EBEBEB", borderRadius:9, flexShrink:0 }}>
+                <I n="calendar" s={13} c="#BBB"/>
+                <span style={{ fontSize:12, color:"#888", fontWeight:500, whiteSpace:"nowrap" }}>{today}</span>
+              </div>
+
+              {/* Withdrawal day indicator */}
+              <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background: canWithdraw?"#ECFDF5":"#FFF5F5", border:`1px solid ${canWithdraw?"#A7F3D0":"#FCA5A5"}`, borderRadius:9, flexShrink:0 }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background: canWithdraw?"#059669":"#EF4444", animation:"pulse 2s infinite" }}/>
+                <span style={{ fontSize:11, fontWeight:800, color: canWithdraw?"#059669":"#EF4444", whiteSpace:"nowrap" }}>
+                  {canWithdraw ? "Withdrawals Open" : "Withdrawals Closed"}
+                </span>
+              </div>
+
+              <div className="ep-topbar-date" style={{ width:1, height:24, background:"#E8E8E8", flexShrink:0 }}/>
+
+              {/* Earnings chip */}
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background:t.lgt, border:`1.5px solid ${t.mid}`, borderRadius:10, flexShrink:0 }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:900, color:t.acc, letterSpacing:"-0.03em", lineHeight:1.1 }}>KES {earn.toLocaleString()}</div>
+                  <div style={{ fontSize:9, color:t.acc, opacity:0.65, fontWeight:700 }}>{pct}% TO GOAL</div>
+                </div>
+                <Donut pct={pct} acc={t.acc} size={34} thickness={4}/>
+              </div>
+
+              <div style={{ width:1, height:24, background:"#E8E8E8", flexShrink:0 }}/>
+            </>
+          )}
 
           {/* Notifications */}
           <div style={{ position:"relative" }}>
@@ -914,17 +1365,21 @@ function ClientDash({ t, go }) {
           {/* Profile */}
           <div style={{ position:"relative" }}>
             <div onClick={()=>{setProfileOpen(o=>!o); setNotifOpen(false);}} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 10px 4px 4px", border:"1.5px solid #E8E8E8", borderRadius:50, background:"#FAFAFA" }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:t.acc, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <span style={{ fontSize:11, fontWeight:900, color:"#fff" }}>AJ</span>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:t.acc, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+                {profile.avatar ? (
+                  <img src={profile.avatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                ) : (
+                  <span style={{ fontSize:11, fontWeight:900, color:"#fff" }}>{profileInitials}</span>
+                )}
               </div>
-              <span style={{ fontSize:12, fontWeight:700, color:"#111", whiteSpace:"nowrap" }}>Alex J.</span>
-              <I n="chevR" s={12} c="#CCC"/>
+              {!isMobile && <span style={{ fontSize:12, fontWeight:700, color:"#111", whiteSpace:"nowrap" }}>{profileShort}</span>}
+              {!isMobile && <I n="chevR" s={12} c="#CCC"/>}
             </div>
             {profileOpen && (
               <div style={{ position:"absolute", top:46, right:0, width:220, background:"#fff", border:"1px solid #E8E8E8", borderRadius:14, boxShadow:"0 8px 32px rgba(0,0,0,0.12)", zIndex:999, padding:"8px", animation:"scaleIn .18s ease both", transformOrigin:"top right" }}>
                 <div style={{ padding:"10px 12px 10px", borderBottom:"1px solid #F5F5F5", marginBottom:4 }}>
-                  <div style={{ fontSize:13, fontWeight:800 }}>Alex Johnson</div>
-                  <div style={{ fontSize:11, color:"#888" }}>alex@example.com</div>
+                  <div style={{ fontSize:13, fontWeight:800 }}>{profileName}</div>
+                  <div style={{ fontSize:11, color:"#888" }}>{profile.email}</div>
                   <div style={{ marginTop:6, display:"inline-flex", alignItems:"center", gap:5, padding:"3px 8px", background:t.lgt, borderRadius:50 }}>
                     <div style={{ width:5, height:5, borderRadius:"50%", background:t.acc }}/>
                     <span style={{ fontSize:9, fontWeight:800, color:t.acc }}>{t.name.toUpperCase()}</span>
@@ -948,36 +1403,162 @@ function ClientDash({ t, go }) {
         </header>
 
         {/* ── PAGE HEADER STRIP ── */}
-        <div style={{ padding:"16px 24px 0", background:"#F2F4F8", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
-          <div>
-            <h2 style={{ fontSize:20, fontWeight:900, letterSpacing:"-0.04em", color:"#111", lineHeight:1.1 }}>
-              {navItems.find(n=>n.id===tab)?.label || "Overview"}
-            </h2>
-            <p style={{ fontSize:12, color:"#AAA", marginTop:4, fontWeight:500 }}>
-              {today} · <span style={{ color:t.acc, fontWeight:700 }}>{t.name} Tier</span> · KES {earn.toLocaleString()} earned
-            </p>
-          </div>
-          {/* Quick action buttons */}
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>setTab("videos")} style={{ padding:"8px 16px", background:"#111", color:"#fff", border:"none", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", gap:6 }}>
-              <I n="play" s={12} c="#fff"/> Watch Now
-            </button>
-            <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 16px", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", gap:6 }}>
-              <I n="wallet" s={12} c="#111"/> Withdraw
-            </button>
-          </div>
+        <div style={{ padding:headerPad, background:"#F2F4F8", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+          {!isMobile && (
+            <>
+              <div>
+                <h2 style={{ fontSize:20, fontWeight:900, letterSpacing:"-0.04em", color:"#111", lineHeight:1.1, fontFamily: headingFont }}>
+                  {navItems.find(n=>n.id===tab)?.label || "Overview"}
+                </h2>
+                <p style={{ fontSize:12, color:"#AAA", marginTop:4, fontWeight:500 }}>
+                  {today} · <span style={{ color:t.acc, fontWeight:700 }}>{t.name} Tier</span> · KES {earn.toLocaleString()} earned
+                </p>
+              </div>
+              {/* Quick action buttons */}
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={()=>setTab("videos")} style={{ padding:"8px 16px", background:"#111", color:"#fff", border:"none", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
+                  <I n="play" s={12} c="#fff"/> Watch Now
+                </button>
+                <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 16px", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
+                  <I n="wallet" s={12} c="#111"/> Withdraw
+                </button>
+              </div>
+            </>
+          )}
+
+          {isMobile && (
+            <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap" }}>
+                <h2 style={{ fontSize:16, fontWeight:900, letterSpacing:"-0.04em", color:"#111", lineHeight:1.1, fontFamily: headingFont, flex:"1 1 140px", minWidth:0 }}>
+                  {navItems.find(n=>n.id===tab)?.label || "Overview"}
+                </h2>
+                <span style={{ fontSize:10, fontWeight:800, color:t.acc, background:t.lgt, border:`1px solid ${t.mid}`, borderRadius:99, padding:"4px 10px", whiteSpace:"nowrap", flexShrink:0 }}>
+                  {t.name} Tier
+                </span>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                <span style={{ fontSize:10, fontWeight:700, color:"#555", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>{today}</span>
+                <span style={{ fontSize:10, fontWeight:700, color:"#111", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>KES {earn.toLocaleString()} earned</span>
+              </div>
+              {tab !== "overview" && (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+                    Watch Now
+                  </button>
+                  <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+                    Withdraw
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div style={{ flex:1, overflowY:"auto", padding:"16px 24px 36px" }} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} setTab={setTab}/>}
+        <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
-          {tab==="analytics" && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} setTab={setTab}/>}
-          {tab==="referrals" && <ReferralsContent t={t} earn={earn}/>}
+          {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile}/>}
+          {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined}/>}
           {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn}/>}
           {tab==="settings"  && (
-            <div style={{ background:"#fff", borderRadius:14, padding:"32px", border:"1px solid #EBEBEB", boxShadow:"0 1px 4px rgba(0,0,0,0.04)", textAlign:"center" }}>
-              <I n="settings" s={32} c="#DDD"/><br/><br/>
-              <div style={{ fontSize:16, fontWeight:700, color:"#BBB" }}>Settings coming soon</div>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
+              <div className="ep-card" style={{ borderRadius:14, padding:"20px 22px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, gap:12, flexWrap:"wrap" }}>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:900, color:"#111" }}>Profile Settings</div>
+                    <div style={{ fontSize:11, color:"#888", marginTop:2 }}>Update your account details and photo.</div>
+                  </div>
+                  <button onClick={saveProfile} disabled={!profileDirty || profileSaving}
+                    style={{ padding:"8px 14px", borderRadius:9, border:"none", background: profileDirty ? "#111" : "#E5E7EB", color: profileDirty ? "#fff" : "#9CA3AF", fontSize:12, fontWeight:800, cursor: profileDirty ? "pointer" : "not-allowed", fontFamily:"Geist,sans-serif" }}>
+                    {profileSaving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+
+                {profileMsg && (
+                  <div style={{ marginBottom:14, padding:"8px 12px", background:"#F8FAFC", border:"1px solid #E5E7EB", borderRadius:9, fontSize:11, color:"#475569", fontWeight:700 }}>
+                    {profileMsg}
+                  </div>
+                )}
+
+                <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "140px 1fr", gap:16 }}>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+                    <div style={{ width:88, height:88, borderRadius:"50%", background:"#111", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"3px solid #F3F4F6" }}>
+                      {draftProfile.avatar ? (
+                        <img src={draftProfile.avatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                      ) : (
+                        <span style={{ fontSize:20, fontWeight:900, color:"#fff" }}>{profileInitials}</span>
+                      )}
+                    </div>
+                    <label style={{ fontSize:10, fontWeight:800, color:"#666", cursor:"pointer", background:"#F8FAFC", border:"1px solid #E5E7EB", padding:"6px 10px", borderRadius:9 }}>
+                      Upload Photo
+                      <input type="file" accept="image/*" onChange={e=>handleAvatarFile(e.target.files?.[0])} style={{ display:"none" }} />
+                    </label>
+                    {draftProfile.avatar && (
+                      <button onClick={() => setProfileField("avatar", "")} style={{ fontSize:10, fontWeight:800, color:"#EF4444", background:"transparent", border:"none", cursor:"pointer" }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12 }}>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Full Name</label>
+                      <input value={draftProfile.name} onChange={e=>setProfileField("name", e.target.value)} placeholder="Your full name"
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Email</label>
+                      <input type="email" value={draftProfile.email} onChange={e=>setProfileField("email", e.target.value)} placeholder="you@email.com"
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Phone</label>
+                      <input value={draftProfile.phone} onChange={e=>setProfileField("phone", e.target.value)} placeholder="07xx xxx xxx"
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Avatar URL</label>
+                      <input value={draftProfile.avatar} onChange={e=>setProfileField("avatar", e.target.value)} placeholder="https://"
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ep-card" style={{ borderRadius:14, padding:"20px 22px", display:"flex", flexDirection:"column", gap:16 }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:900, color:"#111" }}>Account & Tier</div>
+                  <div style={{ fontSize:11, color:"#888", marginTop:2 }}>Manage balance and upgrade status.</div>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  <div style={{ background:"#F8FAFC", border:"1px solid #E5E7EB", borderRadius:12, padding:"12px" }}>
+                    <div style={{ fontSize:10, fontWeight:800, color:"#94A3B8", letterSpacing:"0.08em" }}>CURRENT TIER</div>
+                    <div style={{ fontSize:14, fontWeight:900, color:"#111", marginTop:6 }}>{t.name}</div>
+                    <div style={{ fontSize:11, color:"#94A3B8", marginTop:4 }}>Deposit KES {t.deposit.toLocaleString()}</div>
+                  </div>
+                  <div style={{ background:"#FFF7ED", border:"1px solid #F3E2C7", borderRadius:12, padding:"12px" }}>
+                    <div style={{ fontSize:10, fontWeight:800, color:"#92400E", letterSpacing:"0.08em" }}>NEXT TIER</div>
+                    <div style={{ fontSize:14, fontWeight:900, color:"#111", marginTop:6 }}>{nextTier ? nextTier.name : "Max Tier"}</div>
+                    <div style={{ fontSize:11, color:"#92400E", marginTop:4 }}>
+                      {nextTier ? `Need KES ${upgradeNeed.toLocaleString()}` : "You're at the top"}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Wallet Balance (KES)</label>
+                  <input type="number" value={draftProfile.balance ?? ""} onChange={e=>setProfileField("balance", e.target.value === "" ? null : e.target.value)} placeholder={balance.toString()}
+                    style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                  <div style={{ fontSize:10, color:"#9CA3AF" }}>Used to calculate upgrade eligibility.</div>
+                </div>
+                <div style={{ padding:"10px 12px", borderRadius:10, background: canUpgrade ? "#ECFDF5" : "#FFF7ED", border:`1px solid ${canUpgrade ? "#A7F3D0" : "#F3E2C7"}`, display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:26, height:26, borderRadius:8, background: canUpgrade ? "#059669" : "#F59E0B", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <I n={canUpgrade ? "check" : "lock"} s={12} c="#fff"/>
+                  </div>
+                  <div style={{ fontSize:11, fontWeight:700, color: canUpgrade ? "#065F46" : "#92400E" }}>
+                    {canUpgrade ? "Upgrade ready - you can move to the next tier now." : `Top up KES ${upgradeNeed.toLocaleString()} to unlock the next tier.`}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -988,12 +1569,32 @@ function ClientDash({ t, go }) {
         <nav style={{ position:"fixed", bottom:0, left:0, right:0, height:60, background:"#fff", borderTop:"1px solid #E8E8E8", display:"flex", alignItems:"stretch", zIndex:150, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)" }}>
           {navItems.filter(n=>["overview","videos","referrals","withdraw","settings"].includes(n.id)).map(({id,ic,label}) => {
             const active = tab===id;
+            const isRef = id === "referrals";
             return (
               <button key={id} onClick={()=>{setTab(id); setOpen(false);}}
-                style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, background:"transparent", border:"none", cursor:"pointer", color: active?t.acc:"#BBB", transition:"color .15s", fontFamily:"Geist,sans-serif" }}>
-                <I n={ic} s={active?18:16} c={active?t.acc:"#BBBBBB"}/>
-                <span style={{ fontSize:9, fontWeight:active?800:500, whiteSpace:"nowrap", letterSpacing:"0.02em" }}>{label}</span>
-                {active && <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:28, height:2, background:t.acc, borderRadius:99 }}/>}
+                style={{
+                  flex:1,
+                  display:"flex",
+                  flexDirection:"column",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  gap:3,
+                  background:isRef?"linear-gradient(180deg,#FFF7E6 0%,#FFE4B3 100%)":"transparent",
+                  border:isRef?"2px solid #111":"none",
+                  cursor:"pointer",
+                  color: isRef ? "#111" : (active?t.acc:"#BBB"),
+                  transition:"all .15s",
+                  fontFamily:"IBM Plex Sans, Geist, sans-serif",
+                  position:"relative",
+                  margin:isRef?"6px 8px 10px":0,
+                  borderRadius:isRef?16:0,
+                  transform:isRef?"translateY(-6px)":"none",
+                  boxShadow:isRef?"0 8px 18px rgba(0,0,0,0.18)":"none"
+                }}>
+                <I n={ic} s={active?18:16} c={isRef? "#111" : (active?t.acc:"#BBBBBB")}/>
+                <span style={{ fontSize:9, fontWeight:800, whiteSpace:"nowrap", letterSpacing:"0.04em", color:isRef? "#111" : (active?t.acc:"#888") }}>{label}</span>
+                {isRef && <div style={{ position:"absolute", top:6, right:10, padding:"2px 6px", borderRadius:8, background:"#111", color:"#fff", fontSize:8, fontWeight:800, letterSpacing:"0.06em" }}>PRIZE</div>}
+                {active && !isRef && <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:28, height:2, background:t.acc, borderRadius:99 }}/>}
               </button>
             );
           })}
@@ -1009,21 +1610,32 @@ function ClientDash({ t, go }) {
 }
 
 /* ── REFERRAL MINI CARD (shown in overview) ── */
-function ReferralMiniCard({ t }) {
+function ReferralMiniCard({ t, data, frame }) {
   const [copied, setCopied] = useState(false);
   const code = `edisonpay.co.ke/ref/edisonpay-${t.tag.toLowerCase()}-AX7K`;
   const short = `edisonpay-${t.tag.toLowerCase()}-AX7K`;
   const copy = () => { try { navigator.clipboard?.writeText(`https://${code}`); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
-  const referrals = [
+  const baseRefs = [
     { name:"John M.", bonus: t.deposit*.1, status:"Active", when:"2d ago" },
     { name:"Amina K.", bonus: t.deposit*.1, status:"Active", when:"5d ago" },
     { name:"Peter O.", bonus: t.deposit*.1, status:"Pending", when:"1w ago" },
   ];
-  const earned = referrals.filter(r=>r.status==="Active").length * t.deposit * .1;
+  const mapRef = (r, i) => {
+    const name = r.name || r.full_name || r.user || `User ${i+1}`;
+    const init = (r.init || name.split(" ").map(n=>n[0]).join("").slice(0,2)).toUpperCase();
+    const rawStatus = String(r.status || "Pending");
+    const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+    const rawBonus = Number(r.bonus ?? r.ref_bonus);
+    const bonus = Number.isFinite(rawBonus) ? rawBonus : t.deposit * 0.1;
+    return { name, init, status, bonus, when: r.when || r.date || r.created_at || "" };
+  };
+  const refList = Array.isArray(data) && data.length ? data.map(mapRef) : baseRefs.map(mapRef);
+  const referrals = refList.slice(0,3);
+  const earned = refList.filter(r=>r.status==="Active").reduce((sum,r)=>sum + (Number.isFinite(r.bonus)?r.bonus:0),0);
 
   return (
-    <div style={{ background:"#fff", borderRadius:14, border:`1px solid ${t.mid}`, boxShadow:`0 2px 12px rgba(${t.rgb},0.08)`, overflow:"hidden" }}>
+    <div className={frame ? "ep-frame-dark" : undefined} style={{ background:"#fff", borderRadius:14, border:`1px solid ${t.mid}`, boxShadow:`0 2px 12px rgba(${t.rgb},0.08)`, overflow:"hidden" }}>
       {/* Header stripe */}
       <div style={{ background:`linear-gradient(135deg, #0D1B36 0%, ${t.acc}DD 100%)`, padding:"18px 22px", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -1036,7 +1648,7 @@ function ReferralMiniCard({ t }) {
           </div>
         </div>
         <div style={{ display:"flex", gap:20 }}>
-          {[["3","Referrals"],[`KES ${earned.toLocaleString()}`,"Total Earned"],["10%","Your Bonus"]].map(([v,l],i) => (
+          {[[`${refList.length}`,"Referrals"],[`KES ${earned.toLocaleString()}`,"Total Earned"],["10%","Your Bonus"]].map(([v,l],i) => (
             <div key={i} style={{ textAlign:"right" }}>
               <div style={{ fontSize:16, fontWeight:900, color:"#fff", letterSpacing:"-0.03em" }}>{v}</div>
               <div style={{ fontSize:10, color:"rgba(255,255,255,0.45)", fontWeight:600, letterSpacing:"0.06em" }}>{l.toUpperCase()}</div>
@@ -1076,7 +1688,7 @@ function ReferralMiniCard({ t }) {
 }
 
 /* ── OVERVIEW ── */
-function OverviewContent({ t, earn, goal, pct, setTab }) {
+function OverviewContent({ t, earn, goal, pct, balance, setTab, isMobile, activityData, referralData }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const weekData = days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) }));
   const maxV = Math.max(...weekData.map(x=>x.v));
@@ -1087,7 +1699,7 @@ function OverviewContent({ t, earn, goal, pct, setTab }) {
   const curMonth = new Date().getMonth();
   const [activeMonth, setActiveMonth] = useState(curMonth);
 
-  const activity = [
+  const defaultActivity = [
     { ic:"play",  text:"Watched 2 videos", sub:"KES 100 credited", time:"2h ago",  c:"#059669" },
     { ic:"gift",  text:"Referral joined",  sub:"John M. signed up · +KES 500", time:"5h ago",  c:t.acc },
     { ic:"up",    text:"Withdrawal sent",  sub:"KES 1,200 → M-Pesa", time:"1d ago",  c:"#E8820C" },
@@ -1095,15 +1707,292 @@ function OverviewContent({ t, earn, goal, pct, setTab }) {
     { ic:"users", text:"New referral",     sub:"Amina K. deposited", time:"3d ago",  c:"#0066FF" },
   ];
 
-  const referrals = [
+  const defaultReferrals = [
     { name:"John M.", init:"JM", status:"Active" },
     { name:"Amina K.", init:"AK", status:"Active" },
     { name:"Peter O.", init:"PO", status:"Pending" },
     { name:"Grace W.", init:"GW", status:"Active" },
   ];
+  const activity = Array.isArray(activityData) ? activityData : defaultActivity;
+  const referrals = Array.isArray(referralData) ? referralData : defaultReferrals;
+
+  const [openSections, setOpenSections] = useState({
+    income: true,
+    transactions: false,
+    referrals: false,
+    mix: false,
+    summary: false
+  });
+
+  const toggleSection = (id) => setOpenSections(s => ({ ...s, [id]: !s[id] }));
+  const [deskOpen, setDeskOpen] = useState({ tx: true, mix: false, summary: false });
+  const toggleDesk = (id) => setDeskOpen(s => ({ ...s, [id]: !s[id] }));
+
+  const MobileSection = ({ id, title, children }) => {
+    const open = !!openSections[id];
+    return (
+      <div style={{ background:"#fff", borderRadius:12, border:"1px solid #EBEBEB", overflow:"hidden" }}>
+        <button onClick={() => toggleSection(id)}
+          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"Geist,sans-serif" }}>
+          <span style={{ fontSize:13, fontWeight:800, color:"#111" }}>{title}</span>
+          <div style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition:"transform .15s" }}>
+            <I n="chevR" s={12} c="#999"/>
+          </div>
+        </button>
+        {open && <div style={{ padding:"0 14px 14px" }}>{children}</div>}
+      </div>
+    );
+  };
+
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const nextTier = TIERS[t.id]; // next in list (t.id is 1-based)
+  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - balance, 0) : 0;
+  const canUpgrade = !!nextTier && balance >= nextTier.deposit;
+  const mobileSummary = (
+    <div className="ep-frame-dark" style={{ background:"linear-gradient(135deg,#FFF7ED 0%,#FFEBD1 60%,#FFF 100%)", borderRadius:18, padding:"16px 16px 14px", border:"1px solid #F3E2C7" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.12em", color:"#92400E" }}>ACCOUNT + GOAL</div>
+        <div style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 8px", background:"#fff", border:"1px solid #F3E2C7", borderRadius:99 }}>
+          <I n="shield" s={10} c="#92400E"/>
+          <span style={{ fontSize:9, fontWeight:800, color:"#92400E" }}>SECURE</span>
+        </div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        <div style={{ background:"#fff", border:"1px solid #F3E2C7", borderRadius:12, padding:"10px 12px" }}>
+          <div style={{ fontSize:9, color:"#A16207", fontWeight:800, letterSpacing:"0.1em", marginBottom:6 }}>ACCOUNT</div>
+          <div style={{ fontSize:20, fontWeight:900, letterSpacing:"-0.03em", color:"#111" }}>KES {balance.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"#A16207", marginTop:4 }}>{t.name} Tier</div>
+        </div>
+        <div style={{ background:"#fff", border:"1px solid #F3E2C7", borderRadius:12, padding:"10px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:9, color:"#A16207", fontWeight:800, letterSpacing:"0.1em", marginBottom:6 }}>GOAL</div>
+            <div style={{ fontSize:16, fontWeight:900, letterSpacing:"-0.03em", color:"#111" }}>KES {goal.toLocaleString()}</div>
+            <div style={{ fontSize:10, color:"#A16207", marginTop:4 }}>{pct}% complete</div>
+          </div>
+          <div style={{ height:6, background:"#F3E2C7", borderRadius:99, overflow:"hidden", marginTop:10 }}>
+            <div style={{ height:"100%", width:`${pct}%`, background:"#F59E0B", borderRadius:99 }}/>
+          </div>
+        </div>
+      </div>
+
+      <div className="ep-frame-light" style={{ background:"#111", borderRadius:14, padding:"12px 14px", marginTop:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+        <div>
+          <div style={{ fontSize:9, color:"rgba(255,255,255,0.55)", fontWeight:800, letterSpacing:"0.12em" }}>NEXT TIER</div>
+          <div style={{ fontSize:14, fontWeight:900, color:"#fff", letterSpacing:"-0.02em" }}>{nextTier ? nextTier.name : "Max Tier"}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", marginTop:2 }}>
+            {nextTier ? (canUpgrade ? "Ready to upgrade" : `Top up KES ${upgradeNeed.toLocaleString()} to unlock`) : "You're already at the top"}
+          </div>
+        </div>
+        <button onClick={()=>{ if (canUpgrade) setTab("withdraw"); }} disabled={!canUpgrade}
+          style={{ padding:"8px 12px", background: canUpgrade ? "linear-gradient(135deg,#F59E0B,#F97316)" : "#374151", color: canUpgrade ? "#111" : "#9CA3AF", border:"none", borderRadius:10, fontSize:11, fontWeight:900, cursor: canUpgrade ? "pointer" : "not-allowed", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+          {canUpgrade ? "Upgrade" : "Locked"}
+        </button>
+      </div>
+
+      <div style={{ marginTop:8, fontSize:11, color:"#92400E" }}>Deposit and watch promotional videos to earn daily rewards.</div>
+    </div>
+  );
+  const mobileActions = (
+    <div style={{ background:"#fff", borderRadius:12, border:"1px solid #E8E8E8", overflow:"hidden" }}>
+      <button onClick={()=>setActionsOpen(o=>!o)}
+        style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:"#F8FAFC", border:"none", cursor:"pointer", fontFamily:"Geist,sans-serif" }}>
+        <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", color:"#64748B" }}>PULL DOWN FOR ACTIONS</span>
+        <div style={{ transform: actionsOpen ? "rotate(-90deg)" : "rotate(90deg)", transition:"transform .2s" }}>
+          <I n="chevR" s={12} c="#94A3B8"/>
+        </div>
+      </button>
+      <div style={{ maxHeight: actionsOpen ? 120 : 0, overflow:"hidden", transition:"max-height .25s ease" }}>
+        <div style={{ padding:"12px 14px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+            Watch Now
+          </button>
+          <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1px solid #E8E8E8", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+            Withdraw
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+  const mobilePlan = (
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <div className="ep-frame-light" style={{ background:"#111", borderRadius:16, padding:"16px 18px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:900, color:"#fff" }}>Plan & Actions</div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{t.id} of 5 Tiers</div>
+          </div>
+          <div style={{ width:28, height:28, borderRadius:8, background:t.acc, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <I n="bolt" s={13} c="#fff"/>
+          </div>
+        </div>
+        <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden" }}>
+          <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
+          <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.08em", marginBottom:10 }}>**** **** {t.deposit.toString().slice(0,3)} {t.id.toString().padStart(4,"0")}</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>3× Goal<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {goal.toLocaleString()}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="ep-card" style={{ borderRadius:14, padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ width:34, height:34, borderRadius:10, background:canW?"#ECFDF5":"#FFF5F5", border:`1.5px solid ${canW?"#A7F3D0":"#FCA5A5"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <I n="wallet" s={14} c={canW?"#059669":"#EF4444"}/>
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:"#111" }}>Withdrawal Window</div>
+          <div style={{ fontSize:11, color:canW?"#059669":"#EF4444", fontWeight:700, marginTop:2 }}>
+            {canW ? "Open · Closes 17:30" : "Opens Tue/Wed/Fri"}
+          </div>
+        </div>
+        {canW && <div style={{ width:7, height:7, borderRadius:"50%", background:"#059669", animation:"pulse 2s infinite", flexShrink:0 }}/>}
+      </div>
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        {mobilePlan}
+        {mobileActions}
+        {mobileSummary}
+
+        <MobileSection id="income" title="Income">
+          <div className="ep-card" style={{ borderRadius:18, padding:"18px 18px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+              <div>
+                <div style={{ fontSize:11, color:"#AAA", fontWeight:700, letterSpacing:"0.06em", marginBottom:4 }}>INCOME</div>
+                <div style={{ fontSize:22, fontWeight:900, color:"#111", letterSpacing:"-0.04em", lineHeight:1 }}>
+                  <AnimNum target={earn} prefix="KES "/>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:6 }}>
+                  <div style={{ width:18, height:18, borderRadius:5, background:`${t.acc}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <I n="trendUp" s={10} c={t.acc}/>
+                  </div>
+                  <span style={{ fontSize:12, fontWeight:700, color:t.acc }}>+28% this month</span>
+                </div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 10px", background:"#F7F7F7", border:"1px solid #EBEBEB", borderRadius:9, fontSize:11, color:"#888", fontWeight:600, cursor:"pointer" }}>
+                30 days <I n="chevR" s={10} c="#CCC"/>
+              </div>
+            </div>
+            <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:100, marginTop:18, paddingBottom:18, position:"relative" }}>
+              {[0.25,0.5,0.75,1].map(p=>(
+                <div key={p} style={{ position:"absolute", left:0, right:0, bottom:`${p*100}%`, height:1, background:"#F5F5F5", marginBottom:18 }}/>
+              ))}
+              {weekData.map((b,i)=> {
+                const h = Math.max(8,(b.v/maxV)*100);
+                const isToday = i === new Date().getDay()-1;
+                return (
+                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, zIndex:1 }}>
+                    <div style={{ width:"100%", height:h, background: isToday ? t.acc : `${t.acc}40`, borderRadius:"6px 6px 0 0", position:"relative", overflow:"hidden", transition:"height .8s ease" }} />
+                    <div style={{ fontSize:9, color:isToday?"#111":"#CCC", fontWeight:isToday?800:500 }}>{b.d}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </MobileSection>
+
+        <MobileSection id="transactions" title="Transactions">
+          <div className="ep-card" style={{ borderRadius:18, padding:"16px 18px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <h3 style={{ fontWeight:900, fontSize:14, letterSpacing:"-0.03em" }}>Transactions</h3>
+              <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", background:"#F7F7F7", border:"1px solid #EBEBEB", borderRadius:9, fontSize:11, color:"#888", fontWeight:600, cursor:"pointer" }}>
+                This Week <I n="chevR" s={10} c="#CCC"/>
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+              {activity.length === 0 && (
+                <div style={{ padding:"12px 10px", fontSize:11, color:"#AAA" }}>No recent activity yet.</div>
+              )}
+              {activity.map((a,i)=>(
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:12 }}>
+                  <div style={{ width:34, height:34, borderRadius:10, background:`${a.c}14`, border:`1px solid ${a.c}22`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <I n={a.ic} s={14} c={a.c}/>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:"#111" }}>{a.text}</div>
+                    <div style={{ fontSize:10, color:"#AAA", marginTop:2 }}>{a.sub}</div>
+                  </div>
+                  <div style={{ textAlign:"right", flexShrink:0 }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:a.c }}>+KES {(Number.isFinite(a.amt) ? a.amt : Math.round(dailyEarn * (0.15 + i * 0.08))).toLocaleString()}</div>
+                    <div style={{ fontSize:9, color:"#CCC", marginTop:2 }}>{a.time}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </MobileSection>
+
+        <MobileSection id="referrals" title="Referrals">
+          <div className="ep-card" style={{ borderRadius:16, padding:"16px 18px", marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Recent Referrals</div>
+                <div style={{ fontSize:11, color:"#AAA", marginTop:2 }}>{referrals.length} Referrals</div>
+              </div>
+              <button onClick={()=>setTab("referrals")} style={{ width:28, height:28, borderRadius:8, background:t.acc, border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <I n="chevR" s={12} c="#fff"/>
+              </button>
+            </div>
+            <div style={{ display:"flex", gap:12, marginTop:12, flexWrap:"wrap" }}>
+              {referrals.length === 0 && (
+                <div style={{ fontSize:11, color:"#AAA" }}>No referrals yet.</div>
+              )}
+              {referrals.map((r,i)=>(
+                <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                  <div style={{ width:40, height:40, borderRadius:"50%", background:r.status==="Active"?t.lgt:"#F5F5F5", border:`2px solid ${r.status==="Active"?t.mid:"#E8E8E8"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:900, color:r.status==="Active"?t.acc:"#BBB" }}>{r.init}</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#555", textAlign:"center", maxWidth:50, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name.split(" ")[0]}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <ReferralMiniCard t={t} data={referralData} frame/>
+        </MobileSection>
+
+        <MobileSection id="mix" title="Earning Mix">
+          <div className="ep-card" style={{ borderRadius:14, padding:"14px 16px" }}>
+            <h3 style={{ fontWeight:900, fontSize:13, letterSpacing:"-0.02em", marginBottom:12 }}>Earning Mix</h3>
+            {[["Videos",68,t.acc],["Bot",22,t.mid],["Referrals",10,"#059669"]].map(([l,p,c],i)=>(
+              <div key={i} style={{ marginBottom:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:4 }}>
+                  <span style={{ color:"#666", fontWeight:600 }}>{l}</span>
+                  <span style={{ fontWeight:800, color:"#111" }}>{p}%</span>
+                </div>
+                <div style={{ height:5, background:"#F5F5F5", borderRadius:99, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${p}%`, background:c, borderRadius:99, transition:"width .9s ease" }}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </MobileSection>
+
+        <MobileSection id="summary" title="Account Summary">
+          <div className="ep-card" style={{ padding:"16px 18px", borderRadius:16 }}>
+            <div className="ep-grid-2" style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
+              {[
+                ["Tier", `${t.name} (#${t.id}/5)`, t.acc],
+                ["Manual Videos", `${t.videos}/day`, "#111"],
+                ["Bot Videos", `${t.bot}/day`, "#111"],
+                ["Daily Earnings", `KES ${dailyEarn.toLocaleString()}`, t.acc],
+              ].map(([l,v,c],i)=>(
+                <div key={i} style={{ padding:"12px 12px", background:"#FAFAFA", borderRadius:12, border:"1px solid #F0F0F0" }}>
+                  <div style={{ fontSize:9, color:"#BBB", fontWeight:700, letterSpacing:"0.06em", marginBottom:6 }}>{l.toUpperCase()}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:c, letterSpacing:"-0.02em" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </MobileSection>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
 
       {/* ══════════════════════════════════════
           MOBILE HERO — Image 2 inspired
@@ -1202,7 +2091,7 @@ function OverviewContent({ t, earn, goal, pct, setTab }) {
           DESKTOP — Image 1 style
           Top 3 stat cards
       ══════════════════════════════════════ */}
-      <div className="ep-grid-4 ep-desktop-only" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 }}>
+      <div className="ep-grid-4 ep-desktop-only" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:18 }}>
         {/* Card 1 — Total Balance (dark) */}
         <div className="ep-hover-lift" style={{ borderRadius:18, background:"#111", padding:"22px 24px", position:"relative", overflow:"hidden" }}>
           <div style={{ position:"absolute", top:-20, right:-20, width:120, height:120, borderRadius:"50%", background:`${t.acc}33`, pointerEvents:"none" }}/>
@@ -1261,10 +2150,10 @@ function OverviewContent({ t, earn, goal, pct, setTab }) {
           MAIN CONTENT GRID
           Left: Chart | Right: My Plan card + Referrals
       ══════════════════════════════════════ */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 300px", gap:14 }} className="ep-overview-chart-grid">
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 320px", gap:18 }} className="ep-overview-chart-grid">
 
         {/* Left: Income Chart + Transactions */}
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
 
           {/* Income/Weekly Earnings Chart */}
           <div className="ep-card" style={{ borderRadius:18, padding:"24px 26px" }}>
@@ -1318,31 +2207,41 @@ function OverviewContent({ t, earn, goal, pct, setTab }) {
 
           {/* Transactions list — Image 1 right panel style */}
           <div className="ep-card" style={{ borderRadius:18, padding:"22px 24px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:deskOpen.tx?18:0 }}>
               <h3 style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.03em" }}>Transactions</h3>
-              <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", background:"#F7F7F7", border:"1px solid #EBEBEB", borderRadius:9, fontSize:12, color:"#888", fontWeight:600, cursor:"pointer" }}>
-                This Week <I n="chevR" s={11} c="#CCC"/>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", background:"#F7F7F7", border:"1px solid #EBEBEB", borderRadius:9, fontSize:12, color:"#888", fontWeight:600, cursor:"pointer" }}>
+                  This Week <I n="chevR" s={11} c="#CCC"/>
+                </div>
+                <button onClick={()=>toggleDesk("tx")} style={{ padding:"6px 10px", borderRadius:9, border:"1px solid #E8E8E8", background:"#fff", fontSize:11, fontWeight:800, color:"#555", cursor:"pointer" }}>
+                  {deskOpen.tx ? "Hide" : "Show"}
+                </button>
               </div>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-              {activity.map((a,i)=>(
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", borderRadius:12, transition:"background .12s", cursor:"default" }}
-                  onMouseEnter={e=>e.currentTarget.style.background="#FAFAFA"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  {/* Icon circle (like brand icons in Image 1) */}
-                  <div style={{ width:38, height:38, borderRadius:11, background:`${a.c}14`, border:`1px solid ${a.c}22`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <I n={a.ic} s={16} c={a.c}/>
+            {deskOpen.tx && (
+              <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                {activity.length === 0 && (
+                  <div style={{ padding:"12px", fontSize:12, color:"#AAA" }}>No recent activity yet.</div>
+                )}
+                {activity.map((a,i)=>(
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", borderRadius:12, transition:"background .12s", cursor:"default" }}
+                    onMouseEnter={e=>e.currentTarget.style.background="#FAFAFA"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    {/* Icon circle (like brand icons in Image 1) */}
+                    <div style={{ width:38, height:38, borderRadius:11, background:`${a.c}14`, border:`1px solid ${a.c}22`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <I n={a.ic} s={16} c={a.c}/>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:"#111" }}>{a.text}</div>
+                      <div style={{ fontSize:11, color:"#AAA", marginTop:2 }}>{a.sub}</div>
+                    </div>
+                    <div style={{ textAlign:"right", flexShrink:0 }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:a.c }}>+KES {(Number.isFinite(a.amt) ? a.amt : Math.round(dailyEarn * (0.15 + i * 0.08))).toLocaleString()}</div>
+                      <div style={{ fontSize:10, color:"#CCC", marginTop:2 }}>{a.time}</div>
+                    </div>
                   </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:"#111" }}>{a.text}</div>
-                    <div style={{ fontSize:11, color:"#AAA", marginTop:2 }}>{a.sub}</div>
-                  </div>
-                  <div style={{ textAlign:"right", flexShrink:0 }}>
-                    <div style={{ fontSize:13, fontWeight:800, color:a.c }}>+KES {Math.round(dailyEarn * (0.15 + i * 0.08)).toLocaleString()}</div>
-                    <div style={{ fontSize:10, color:"#CCC", marginTop:2 }}>{a.time}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1401,6 +2300,9 @@ function OverviewContent({ t, earn, goal, pct, setTab }) {
               </button>
             </div>
             <div style={{ display:"flex", gap:14, marginTop:16, flexWrap:"wrap" }}>
+              {referrals.length === 0 && (
+                <div style={{ fontSize:11, color:"#AAA" }}>No referrals yet.</div>
+              )}
               {referrals.map((r,i)=>(
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
                   <div style={{ width:44, height:44, borderRadius:"50%", background:r.status==="Active"?t.lgt:"#F5F5F5", border:`2px solid ${r.status==="Active"?t.mid:"#E8E8E8"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:900, color:r.status==="Active"?t.acc:"#BBB" }}>{r.init}</div>
@@ -1426,45 +2328,61 @@ function OverviewContent({ t, earn, goal, pct, setTab }) {
 
           {/* Earning Mix */}
           <div className="ep-card" style={{ borderRadius:14, padding:"16px 18px" }}>
-            <h3 style={{ fontWeight:900, fontSize:13, letterSpacing:"-0.02em", marginBottom:12 }}>Earning Mix</h3>
-            {[["Videos",68,t.acc],["Bot",22,t.mid],["Referrals",10,"#059669"]].map(([l,p,c],i)=>(
-              <div key={i} style={{ marginBottom:10 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:4 }}>
-                  <span style={{ color:"#666", fontWeight:600 }}>{l}</span>
-                  <span style={{ fontWeight:800, color:"#111" }}>{p}%</span>
-                </div>
-                <div style={{ height:5, background:"#F5F5F5", borderRadius:99, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${p}%`, background:c, borderRadius:99, transition:"width .9s ease" }}/>
-                </div>
-              </div>
-            ))}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:deskOpen.mix?12:0 }}>
+              <h3 style={{ fontWeight:900, fontSize:13, letterSpacing:"-0.02em" }}>Earning Mix</h3>
+              <button onClick={()=>toggleDesk("mix")} style={{ padding:"4px 8px", borderRadius:8, border:"1px solid #E8E8E8", background:"#fff", fontSize:10, fontWeight:800, color:"#666", cursor:"pointer" }}>
+                {deskOpen.mix ? "Hide" : "Show"}
+              </button>
+            </div>
+            {deskOpen.mix && (
+              <>
+                {[["Videos",68,t.acc],["Bot",22,t.mid],["Referrals",10,"#059669"]].map(([l,p,c],i)=>(
+                  <div key={i} style={{ marginBottom:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:4 }}>
+                      <span style={{ color:"#666", fontWeight:600 }}>{l}</span>
+                      <span style={{ fontWeight:800, color:"#111" }}>{p}%</span>
+                    </div>
+                    <div style={{ height:5, background:"#F5F5F5", borderRadius:99, overflow:"hidden" }}>
+                      <div style={{ height:"100%", width:`${p}%`, background:c, borderRadius:99, transition:"width .9s ease" }}/>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {/* ── Referral mini card ── */}
-      <ReferralMiniCard t={t}/>
+      <ReferralMiniCard t={t} data={referralData}/>
 
       {/* ── Account Summary ── */}
       <div className="ep-card" style={{ padding:"22px 26px", borderRadius:18 }}>
-        <h3 style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.03em", marginBottom:18 }}>Account Summary</h3>
-        <div className="ep-grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
-          {[
-            ["Tier", `${t.name} (#${t.id}/5)`, t.acc],
-            ["Manual Videos", `${t.videos}/day`, "#111"],
-            ["Bot Videos", `${t.bot}/day`, "#111"],
-            ["Referrals", "3 active", "#059669"],
-            ["Daily Earnings", `KES ${dailyEarn.toLocaleString()}`, t.acc],
-            ["Goal Amount", `KES ${goal.toLocaleString()}`, "#111"],
-            ["Days to Goal", `~${daysLeft} days`, "#E8820C"],
-            ["Withdraw Days", "Tue · Wed · Fri", "#059669"],
-          ].map(([l,v,c],i)=>(
-            <div key={i} style={{ padding:"14px 16px", background:"#FAFAFA", borderRadius:12, border:"1px solid #F0F0F0" }}>
-              <div style={{ fontSize:10, color:"#BBB", fontWeight:700, letterSpacing:"0.06em", marginBottom:6 }}>{l.toUpperCase()}</div>
-              <div style={{ fontSize:14, fontWeight:800, color:c, letterSpacing:"-0.02em" }}>{v}</div>
-            </div>
-          ))}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:deskOpen.summary?18:0 }}>
+          <h3 style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.03em" }}>Account Summary</h3>
+          <button onClick={()=>toggleDesk("summary")} style={{ padding:"6px 10px", borderRadius:9, border:"1px solid #E8E8E8", background:"#fff", fontSize:11, fontWeight:800, color:"#555", cursor:"pointer" }}>
+            {deskOpen.summary ? "Hide" : "Show"}
+          </button>
         </div>
+        {deskOpen.summary && (
+          <div className="ep-grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+            {[
+              ["Tier", `${t.name} (#${t.id}/5)`, t.acc],
+              ["Manual Videos", `${t.videos}/day`, "#111"],
+              ["Bot Videos", `${t.bot}/day`, "#111"],
+              ["Referrals", "3 active", "#059669"],
+              ["Daily Earnings", `KES ${dailyEarn.toLocaleString()}`, t.acc],
+              ["Goal Amount", `KES ${goal.toLocaleString()}`, "#111"],
+              ["Days to Goal", `~${daysLeft} days`, "#E8820C"],
+              ["Withdraw Days", "Tue · Wed · Fri", "#059669"],
+            ].map(([l,v,c],i)=>(
+              <div key={i} style={{ padding:"14px 16px", background:"#FAFAFA", borderRadius:12, border:"1px solid #F0F0F0" }}>
+                <div style={{ fontSize:10, color:"#BBB", fontWeight:700, letterSpacing:"0.06em", marginBottom:6 }}>{l.toUpperCase()}</div>
+                <div style={{ fontSize:14, fontWeight:800, color:c, letterSpacing:"-0.02em" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1494,6 +2412,10 @@ const YT_VIDEOS = [
 function VideosContent({ t }) {
   const MANUAL_COUNT = 2;
   const BOT_COUNT = 14; // 16 total - 2 manual
+  const todayKey = new Date().toISOString().slice(0,10);
+  const initialActivatedOn = (() => {
+    try { return localStorage?.getItem("ep-bot-activated-on") || ""; } catch (e) { return ""; }
+  })();
   // watched: 0 = none done, 1 = first done, 2 = both done
   const [watched, setWatched] = useState(0);
   // playing: null | 0 | 1 (which manual video index)
@@ -1501,10 +2423,12 @@ function VideosContent({ t }) {
   const [timer, setTimer] = useState(30);
   const [timerRunning, setTimerRunning] = useState(false);
   const [errMsg, setErrMsg] = useState("");
-  const [botPct, setBotPct] = useState(11);
-  const [botDone, setBotDone] = useState(2);
+  const [botActivatedOn, setBotActivatedOn] = useState(initialActivatedOn);
+  const [botPct, setBotPct] = useState(initialActivatedOn === todayKey ? 100 : 0);
+  const [botDone, setBotDone] = useState(initialActivatedOn === todayKey ? BOT_COUNT : 0);
   const [activeTab, setActiveTab] = useState("manual");
   const [imgErrors, setImgErrors] = useState({});
+  const [imgLoaded, setImgLoaded] = useState({});
 
   // ── Manual video timer
   useEffect(() => {
@@ -1522,18 +2446,30 @@ function VideosContent({ t }) {
     return () => clearTimeout(id);
   }, [timerRunning, timer]);
 
-  // ── Bot ticker
+  const botActive = botActivatedOn === todayKey;
+  const canActivateBot = !botActive;
+
+  const activateBot = () => {
+    const key = new Date().toISOString().slice(0,10);
+    setBotActivatedOn(key);
+    try { localStorage?.setItem("ep-bot-activated-on", key); } catch (e) {}
+    setBotPct(0);
+    setBotDone(0);
+  };
+
+  // ── Bot ticker (runs only after activation)
   useEffect(() => {
+    if (!botActive || botPct >= 100) return;
     const id = setInterval(() => {
       setBotPct(p => {
         if (p >= 100) { clearInterval(id); return 100; }
-        const next = Math.min(p + 0.15, 100);
+        const next = Math.min(p + 0.2, 100);
         setBotDone(Math.floor((next / 100) * BOT_COUNT));
         return next;
       });
-    }, 100);
+    }, 120);
     return () => clearInterval(id);
-  }, []);
+  }, [botActive, botPct]);
 
   const startWatch = (idx) => {
     setErrMsg("");
@@ -1550,9 +2486,16 @@ function VideosContent({ t }) {
   };
 
   const todayEarn = watched * V_PRICE + Math.floor(botDone * V_PRICE * 0.4);
+  const nextManual = playing !== null ? playing : (watched < MANUAL_COUNT ? watched : null);
+  const manualStatus = playing !== null
+    ? `Watching Video ${playing + 1}`
+    : watched >= MANUAL_COUNT
+      ? "All manual videos completed"
+      : `Ready for Video ${watched + 1}`;
+  const manualPct = playing !== null ? Math.round(((30 - timer) / 30) * 100) : (watched >= MANUAL_COUNT ? 100 : 0);
 
   return (
-    <div style={{ display:"flex",flexDirection:"column",gap:18 }}>
+    <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
 
       {/* ── Error toast ── */}
       {errMsg && (
@@ -1564,7 +2507,7 @@ function VideosContent({ t }) {
       )}
 
       {/* ── Summary bar ── */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
         {[
           [`${watched}/${MANUAL_COUNT}`,"Manual Watched","#111"],
           [`${botDone}/${BOT_COUNT}`,"Bot Completed","#059669"],
@@ -1579,7 +2522,7 @@ function VideosContent({ t }) {
       </div>
 
       {/* ── Tab switcher ── */}
-      <div style={{ display:"flex",gap:2,background:"#F5F5F5",borderRadius:10,padding:3,width:"fit-content" }}>
+      <div style={{ display:"flex",gap:2,background:"#F5F5F5",borderRadius:10,padding:3,width:"100%",justifyContent:"center",flexWrap:"wrap" }}>
         {[["manual",`Manual (${MANUAL_COUNT})`],["bot",`Bot Auto-Watch (${BOT_COUNT})`]].map(([id,lbl])=>(
           <button key={id} onClick={()=>setActiveTab(id)}
             style={{ padding:"7px 18px",borderRadius:8,border:"none",background:activeTab===id?"#fff":"transparent",color:activeTab===id?"#111":"#888",fontWeight:activeTab===id?800:500,fontSize:13,cursor:"pointer",fontFamily:"Geist,sans-serif",boxShadow:activeTab===id?"0 1px 4px rgba(0,0,0,0.08)":"none",transition:"all .15s" }}>
@@ -1607,6 +2550,30 @@ function VideosContent({ t }) {
             )}
           </div>
 
+          {/* Now Playing / Status */}
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"12px 14px",background:"#F8FAFC",border:"1px solid #E8EEF5",borderRadius:12,marginBottom:16,flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontSize:10,color:"#94A3B8",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>MANUAL STATUS</div>
+              <div style={{ fontSize:14,fontWeight:900,color:"#111" }}>{manualStatus}</div>
+              {nextManual !== null && (
+                <div style={{ fontSize:11,color:"#64748B",marginTop:3,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden" }}>
+                  {YT_VIDEOS[nextManual]?.title}
+                </div>
+              )}
+            </div>
+            <div style={{ textAlign:"right",minWidth:90 }}>
+              {playing !== null ? (
+                <div style={{ fontSize:20,fontWeight:900,color:"#111",fontVariantNumeric:"tabular-nums" }}>{timer}s</div>
+              ) : (
+                <div style={{ fontSize:18,fontWeight:900,color:"#111" }}>{manualPct}%</div>
+              )}
+              <div style={{ fontSize:10,color:"#94A3B8" }}>{playing !== null ? "Time left" : "Progress"}</div>
+            </div>
+            <div style={{ flexBasis:"100%",height:6,background:"#E8EEF5",borderRadius:99,overflow:"hidden" }}>
+              <div style={{ height:"100%",width:`${manualPct}%`,background:playing!==null?t.acc:"#059669",borderRadius:99,transition:"width .4s ease" }}/>
+            </div>
+          </div>
+
           {/* Unlock chain indicator */}
           <div style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#F7F7F7",border:"1px solid #EBEBEB",borderRadius:10,marginBottom:20,fontSize:12,color:"#888" }}>
             {[1,2].map((n,i) => (
@@ -1623,7 +2590,7 @@ function VideosContent({ t }) {
           </div>
 
           {/* Video cards */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16 }}>
             {YT_VIDEOS.slice(0, MANUAL_COUNT).map((vid, i) => {
               const isDone   = watched > i;
               const isActive = playing === i && timerRunning;
@@ -1638,8 +2605,13 @@ function VideosContent({ t }) {
                   <div style={{ position:"relative",paddingTop:"56.25%",background:"#0D1117",overflow:"hidden",cursor:isReady?"pointer":"default" }}
                     onClick={()=>isReady&&startWatch(i)}>
                     {!imgErrors[vid.id] ? (
-                      <img src={vid.thumb} alt={vid.title} onError={()=>setImgErrors(e=>({...e,[vid.id]:true}))}
-                        style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isDone?.45:isLocked?.25:1 }}/>
+                      <>
+                        {!imgLoaded[vid.id] && <div className="ep-shimmer" style={{ position:"absolute",inset:0 }} />}
+                        <img src={vid.thumb} alt={vid.title}
+                          onLoad={()=>setImgLoaded(s=>({...s,[vid.id]:true}))}
+                          onError={()=>setImgErrors(e=>({...e,[vid.id]:true}))}
+                          style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isDone?.45:isLocked?.25:1,transition:"opacity .2s" }}/>
+                      </>
                     ) : (
                       <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,#1a1a2e,#16213e)",display:"flex",alignItems:"center",justifyContent:"center" }}>
                         <I n="play" s={32} c="rgba(255,255,255,0.15)"/>
@@ -1749,22 +2721,36 @@ function VideosContent({ t }) {
               <div style={{ fontSize:11,color:"#BBB",marginTop:2 }}>{botDone}/{BOT_COUNT} complete · {Math.round(botPct)}%</div>
             </div>
           </div>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap" }}>
+            <div style={{ fontSize:12, fontWeight:700, color: botActive ? "#059669" : "#888" }}>
+              {botActive ? "Bot activated today" : "Activate the bot to run once today."}
+            </div>
+            <button onClick={activateBot} disabled={!canActivateBot}
+              style={{ padding:"8px 14px", background:canActivateBot?"#111":"#F5F5F5", color:canActivateBot?"#fff":"#AAA", border:canActivateBot?"none":"1px solid #E0E0E0", borderRadius:9, fontSize:12, fontWeight:800, cursor:canActivateBot?"pointer":"not-allowed", fontFamily:"Geist,sans-serif" }}>
+              {canActivateBot ? "Activate Bot" : "Activated Today"}
+            </button>
+          </div>
           <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:24 }}>
             <div style={{ flex:1,height:7,background:"#F0F0F0",borderRadius:99,overflow:"hidden" }}>
               <div style={{ height:"100%",width:`${botPct}%`,background:"#059669",borderRadius:99,transition:"width .2s" }}/>
             </div>
             <span style={{ fontSize:12,fontWeight:800,color:"#059669",minWidth:40 }}>{Math.round(botPct)}%</span>
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(185px,1fr))",gap:12 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
             {YT_VIDEOS.slice(MANUAL_COUNT).map((vid, i) => {
-              const done = i < botDone;
-              const isActive = i === botDone;
+              const done = botActive && i < botDone;
+              const isActive = botActive && i === botDone;
               return (
                 <div key={i} style={{ borderRadius:12,border:`1px solid ${done?"#A7F3D0":isActive?"#FCD34D":"#F0F0F0"}`,overflow:"hidden",background:done?"#F0FDF4":isActive?"#FFFBEB":"#FAFAFA",transition:"all .3s" }}>
                   <div style={{ position:"relative",paddingTop:"52%",background:"#0D1117",overflow:"hidden" }}>
                     {!imgErrors[`bot-${vid.id}`] ? (
-                      <img src={vid.thumb} alt={vid.title} onError={()=>setImgErrors(e=>({...e,[`bot-${vid.id}`]:true}))}
-                        style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:done?.5:isActive?.88:.35 }}/>
+                      <>
+                        {!imgLoaded[`bot-${vid.id}`] && <div className="ep-shimmer" style={{ position:"absolute",inset:0 }} />}
+                        <img src={vid.thumb} alt={vid.title}
+                          onLoad={()=>setImgLoaded(s=>({...s,[`bot-${vid.id}`]:true}))}
+                          onError={()=>setImgErrors(e=>({...e,[`bot-${vid.id}`]:true}))}
+                          style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:done?.5:isActive?.88:.35,transition:"opacity .2s" }}/>
+                      </>
                     ) : (
                       <div style={{ position:"absolute",inset:0,background:"#111",display:"flex",alignItems:"center",justifyContent:"center" }}>
                         <I n="play" s={24} c="rgba(255,255,255,0.1)"/>
@@ -1773,11 +2759,11 @@ function VideosContent({ t }) {
                     <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center" }}>
                       {done?<div style={{ width:28,height:28,borderRadius:"50%",background:"#059669",display:"flex",alignItems:"center",justifyContent:"center" }}><I n="check" s={13} c="#fff"/></div>
                       :isActive?<div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:3 }}><div style={{ width:9,height:9,borderRadius:"50%",background:"#FCD34D",animation:"pulse 0.8s infinite" }}/><div style={{ fontSize:8,color:"#FCD34D",fontWeight:800,letterSpacing:"0.1em" }}>BOT LIVE</div></div>
-                      :<I n="lock" s={15} c="rgba(255,255,255,0.25)"/>}
+                      :<I n="lock" s={15} c="rgba(255,255,255,0.35)"/>}
                     </div>
                     <div style={{ position:"absolute",bottom:5,right:5,padding:"1px 5px",background:"rgba(0,0,0,0.8)",borderRadius:3,fontSize:9,color:"#fff",fontWeight:700 }}>{vid.dur}</div>
-                    <div style={{ position:"absolute",top:5,left:5,padding:"2px 6px",background:done?"#059669":isActive?"#F59E0B":"rgba(0,0,0,0.55)",borderRadius:4,fontSize:8,fontWeight:800,color:"#fff" }}>
-                      {done?"BOT ✓":isActive?"LIVE":"BOT"}
+                    <div style={{ position:"absolute",top:5,left:5,padding:"2px 6px",background:done?"#059669":isActive?"#F59E0B":botActive?"rgba(0,0,0,0.55)":"#334155",borderRadius:4,fontSize:8,fontWeight:800,color:"#fff" }}>
+                      {!botActive ? "INACTIVE" : done?"BOT ✓":isActive?"LIVE":"BOT"}
                     </div>
                   </div>
                   <div style={{ padding:"9px 11px" }}>
@@ -1795,7 +2781,7 @@ function VideosContent({ t }) {
           </div>
           <div style={{ marginTop:18,padding:"12px 16px",background:"#F7FDF9",borderRadius:10,border:"1px solid #A7F3D0",fontSize:12,color:"#065F46",display:"flex",alignItems:"center",gap:8 }}>
             <I n="shield" s={14} c="#059669"/>
-            Bot runs automatically every day — no action needed. Earnings credited once each video completes.
+            Activate once per day to run the bot. Earnings credit as each video completes.
           </div>
         </div>
       )}
@@ -1803,14 +2789,98 @@ function VideosContent({ t }) {
   );
 }
 
-/* ── REFERRALS CONTENT ── */
-function ReferralsContent({ t, earn }) {
+/* ── REFERRAL LINK CARD (shared) ── */
+function ReferralLinkCard({ t }) {
   const [copied, setCopied] = useState(false);
-  const [filter, setFilter] = useState("all");
   const code = `edisonpay-${t.tag.toLowerCase()}-AX7K`;
-  const copy = () => { try { navigator.clipboard?.writeText(`https://edisonpay.co.ke/ref/${code}`); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2e3); };
+  const link = `https://edisonpay.co.ke/ref/${code}`;
+  const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2e3); };
+  const socials = [
+    ["WhatsApp","#25D366"],
+    ["Telegram","#2AABEE"],
+    ["Facebook","#1877F2"],
+    ["X","#111111"],
+    ["Instagram","#E1306C"],
+    ["TikTok","#000000"],
+  ];
 
-  const ALL_REFS = [
+  return (
+    <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+      <div className="ep-grid-2" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24 }}>
+        <div>
+          <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em",marginBottom:6 }}>Your Referral Link</h3>
+          <p style={{ fontSize:12,color:"#888",marginBottom:14,lineHeight:1.6 }}>Share this link — when they deposit their tier balance, you earn <strong style={{ color:t.acc }}>10% of their deposit</strong> and they get a bonus too.</p>
+          <div style={{ display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
+            <div style={{ flex:1,display:"flex",alignItems:"center",gap:9,padding:"10px 12px",background:"#FAFAFA",border:`1.5px dashed ${t.mid}`,borderRadius:9,minWidth:180 }}>
+              <button onClick={copy} style={{ width:28,height:28,borderRadius:8,background:t.lgt,border:`1px solid ${t.mid}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                <I n="link" s={12} c={t.acc}/>
+              </button>
+              <span style={{ flex:1,fontSize:12,fontWeight:700,color:"#111",letterSpacing:"0.01em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{link}</span>
+            </div>
+            <button onClick={copy} style={{ padding:"10px 18px",background:copied?"#059669":"#111",color:"#fff",border:"none",borderRadius:9,fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"background .2s",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>
+              <I n={copied?"check":"copy"} s={12} c="#fff"/>{copied?"Copied!":"Copy Link"}
+            </button>
+          </div>
+          <div style={{ display:"flex",gap:7,marginTop:10,flexWrap:"wrap" }}>
+            {socials.map(([b,c])=>(
+              <button key={b} style={{ padding:"6px 12px",background:"#FAFAFA",border:"1px solid #EBEBEB",borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
+                <div style={{ width:7,height:7,borderRadius:"50%",background:c }}/>{b}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* How it works */}
+        <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:"1px solid #F0F0F0" }}>
+          <div style={{ fontSize:11,fontWeight:700,color:"#BBB",letterSpacing:"0.08em",marginBottom:14 }}>HOW REFERRALS WORK</div>
+          {[
+            ["1","Friend clicks your link and signs up",t.acc],
+            ["2","They choose a tier and deposit",t.acc],
+            ["3","You instantly earn 10% of their deposit",t.acc],
+            ["4","They earn 10% bonus on their first deposit",t.acc],
+            ["5","You get 2% from anyone who referred you",t.acc],
+          ].map(([n,step,c],i) => (
+            <div key={i} style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:10 }}>
+              <div style={{ width:20,height:20,borderRadius:6,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff",flexShrink:0,marginTop:1 }}>{n}</div>
+              <span style={{ fontSize:12,color:"#555",lineHeight:1.5 }}>{step}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── ANALYTICS CONTENT ── */
+function AnalyticsContent({ t, earn }) {
+  const dailyEarn = (t.videos + t.bot) * V_PRICE;
+  const refBonus = Math.round(t.deposit * 0.1);
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
+      <div className="ep-grid-3" style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14 }}>
+        {[
+          [`KES ${earn.toLocaleString()}`,"Total Earned",t.acc],
+          [`KES ${dailyEarn.toLocaleString()}`,"Daily Potential","#111"],
+          [`KES ${refBonus.toLocaleString()}`,"Referral Bonus","#059669"],
+        ].map(([v,l,c],i)=>(
+          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div style={{ fontSize:10,color:"#BBB",fontWeight:700,letterSpacing:"0.08em",marginBottom:8 }}>{l.toUpperCase()}</div>
+            <div style={{ fontSize:20,fontWeight:900,letterSpacing:"-0.04em",color:c }}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      <ReferralLinkCard t={t} />
+    </div>
+  );
+}
+
+/* ── REFERRALS CONTENT ── */
+function ReferralsContent({ t, earn, refData }) {
+  const [filter, setFilter] = useState("all");
+
+  const fallbackRefs = [
     { name:"John Mwangi",    email:"j.mwangi@gmail.com",  tier:"Standard",     date:"Mar 8, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 3.2) },
     { name:"Amina Kariuki",  email:"amina.k@yahoo.com",   tier:"Regular",      date:"Mar 5, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 1.8) },
     { name:"Peter Otieno",   email:"p.otieno@gmail.com",  tier:"Deluxe",       date:"Mar 1, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 5.1) },
@@ -1820,20 +2890,39 @@ function ReferralsContent({ t, earn }) {
     { name:"Kevin Odhiambo", email:"kevin.o@gmail.com",   tier:"Standard",     date:"Jan 30, 2025", bonus:t.deposit*.1,  status:"Inactive",earnings: 0 },
     { name:"Beatrice Njoki",  email:"b.njoki@yahoo.com",  tier:"Deluxe",       date:"Jan 25, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 4.7) },
   ];
+  const normalizeRefRow = (r, i) => {
+    const name = r.name || r.full_name || r.user || `User ${i+1}`;
+    const email = r.email || r.user_email || "—";
+    const tier = r.tier || r.plan || "Regular";
+    const date = r.date || r.created_at || "—";
+    const rawBonus = Number(r.bonus ?? r.ref_bonus);
+    const bonus = Number.isFinite(rawBonus) ? rawBonus : t.deposit * 0.1;
+    const rawEarn = Number(r.earnings ?? r.total_earnings);
+    const earnings = Number.isFinite(rawEarn) ? rawEarn : 0;
+    const rawStatus = String(r.status || "Pending");
+    const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+    return { name, email, tier, date, bonus, status, earnings };
+  };
+  const ALL_REFS = Array.isArray(refData) ? refData.map(normalizeRefRow) : fallbackRefs.map(normalizeRefRow);
 
   const filtered = filter === "all" ? ALL_REFS : ALL_REFS.filter(r => r.status.toLowerCase() === filter);
-  const totalBonus = ALL_REFS.filter(r=>r.status==="Active").length * t.deposit * .1;
+  const totalBonus = ALL_REFS.filter(r=>r.status==="Active").reduce((sum,r)=>sum + (Number.isFinite(r.bonus)?r.bonus:0),0);
   const activeCount = ALL_REFS.filter(r=>r.status==="Active").length;
   const pendingCount = ALL_REFS.filter(r=>r.status==="Pending").length;
 
   const statusColor = s => s==="Active" ? {bg:"#ECFDF5",col:"#059669"} : s==="Pending" ? {bg:"#FEF3C7",col:"#D97706"} : {bg:"#F5F5F5",col:"#888"};
   const tierColor = tn => TIERS.find(tr=>tr.name===tn)?.acc || "#888";
+  const shortDate = (d) => {
+    if (!d) return "—";
+    const s = String(d);
+    return s.includes(",") ? s.split(",")[0] : s;
+  };
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:18 }}>
 
       {/* Stats */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:14 }}>
         {[
           [ALL_REFS.length,"Total Referred","#111"],
           [activeCount,"Active","#059669"],
@@ -1848,48 +2937,7 @@ function ReferralsContent({ t, earn }) {
         ))}
       </div>
 
-      {/* Referral link card */}
-      <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24 }}>
-          <div>
-            <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em",marginBottom:6 }}>Your Referral Link</h3>
-            <p style={{ fontSize:12,color:"#888",marginBottom:14,lineHeight:1.6 }}>Share this link — when they deposit their tier balance, you earn <strong style={{ color:t.acc }}>10% of their deposit</strong> and they get a bonus too.</p>
-            <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-              <div style={{ flex:1,display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"#FAFAFA",border:`1.5px dashed ${t.mid}`,borderRadius:9,minWidth:180 }}>
-                <I n="link" s={13} c={t.acc}/>
-                <span style={{ flex:1,fontSize:12,fontWeight:700,color:"#111",letterSpacing:"0.01em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>edisonpay.co.ke/ref/{code}</span>
-              </div>
-              <button onClick={copy} style={{ padding:"10px 18px",background:copied?"#059669":"#111",color:"#fff",border:"none",borderRadius:9,fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"background .2s",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>
-                <I n={copied?"check":"copy"} s={12} c="#fff"/>{copied?"Copied!":"Copy Link"}
-              </button>
-            </div>
-            <div style={{ display:"flex",gap:7,marginTop:10,flexWrap:"wrap" }}>
-              {[["WhatsApp","#25D366"],["Telegram","#2AABEE"],["Facebook","#1877F2"],["Twitter","#111"]].map(([b,c])=>(
-                <button key={b} style={{ padding:"6px 13px",background:"#FAFAFA",border:"1px solid #EBEBEB",borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
-                  <div style={{ width:7,height:7,borderRadius:"50%",background:c }}/>{b}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* How it works */}
-          <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:"1px solid #F0F0F0" }}>
-            <div style={{ fontSize:11,fontWeight:700,color:"#BBB",letterSpacing:"0.08em",marginBottom:14 }}>HOW REFERRALS WORK</div>
-            {[
-              ["1","Friend clicks your link and signs up",t.acc],
-              ["2","They choose a tier and deposit",t.acc],
-              ["3","You instantly earn 10% of their deposit",t.acc],
-              ["4","They earn 10% bonus on their first deposit",t.acc],
-              ["5","You get 2% from anyone who referred you",t.acc],
-            ].map(([n,step,c],i) => (
-              <div key={i} style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:10 }}>
-                <div style={{ width:20,height:20,borderRadius:6,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff",flexShrink:0,marginTop:1 }}>{n}</div>
-                <span style={{ fontSize:12,color:"#555",lineHeight:1.5 }}>{step}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ReferralLinkCard t={t} />
 
       {/* Referral table */}
       <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
@@ -1931,7 +2979,7 @@ function ReferralsContent({ t, earn }) {
                 <div style={{ width:7,height:7,borderRadius:2,background:tc }}/>
                 <span style={{ fontSize:12,fontWeight:600,color:"#555" }}>{r.tier}</span>
               </div>
-              <span style={{ fontSize:11,color:"#888" }}>{r.date.split(",")[0]}</span>
+              <span style={{ fontSize:11,color:"#888" }}>{shortDate(r.date)}</span>
               <span style={{ fontSize:13,fontWeight:800,color:"#059669" }}>+KES {r.bonus.toLocaleString()}</span>
               <span style={{ fontSize:12,fontWeight:700,color: r.earnings > 0 ? "#111" : "#CCC" }}>{r.earnings > 0 ? `KES ${r.earnings.toLocaleString()}` : "—"}</span>
               <span style={{ fontSize:10,fontWeight:800,padding:"3px 9px",borderRadius:50,background:sc.bg,color:sc.col,display:"inline-block",width:"fit-content" }}>{r.status}</span>
@@ -1958,18 +3006,74 @@ function ReferralsContent({ t, earn }) {
 
 /* ── WITHDRAW ── */
 function WithdrawContent({ t, earn }) {
-  const [amt,setAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
+  const [wdAmt,setWdAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
+  const [cryptoNet, setCryptoNet] = useState("USDT-TRC20");
+  const [cryptoAmt, setCryptoAmt] = useState("");
+  const [cryptoWdAmt, setCryptoWdAmt] = useState("");
+  const [cryptoWallet, setCryptoWallet] = useState("");
+  const [cryptoCopied, setCryptoCopied] = useState(false);
+  const [cryptoWdDone, setCryptoWdDone] = useState(false);
+  const [cryptoTopupDone, setCryptoTopupDone] = useState(false);
   const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
   const can=["Tuesday","Wednesday","Friday"].includes(today);
+  const cryptoAddresses = {
+    "USDT-TRC20": "TV4bY7fK7yFQJt9iWcQk2L3S8P2Vw7HcJ9",
+    "USDT-ERC20": "0x7a7b9C2e6C4B9cA2cB7e0a1d9A8BfF3C2D4E5F6a",
+    "BTC": "bc1q9v4r6k0d9g2w4f5t7p8m0q1r3s5u6v7x8y9z0",
+    "ETH": "0x2f1aB4cD5e6F7a8B9c0D1e2F3a4B5c6D7e8F9a0B",
+    "BNB": "bnb1grpf0955h0ykj3m0w6t2k7fsf2gj2p0u3y4a5b",
+  };
+  const curAddress = cryptoAddresses[cryptoNet];
+  const copyCrypto = () => { try { navigator.clipboard?.writeText(curAddress); } catch(e){} setCryptoCopied(true); setTimeout(()=>setCryptoCopied(false), 2000); };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
       <div style={{ padding:"14px 18px",borderRadius:10,border:`1px solid ${can?"#A7F3D0":"#FCA5A5"}`,background:can?"#ECFDF5":"#FFF0F0",display:"flex",alignItems:"center",gap:12 }}>
         <div style={{ width:30,height:30,borderRadius:"50%",background:can?"#059669":"#DC2626",display:"flex",alignItems:"center",justifyContent:"center" }}>
           <I n={can?"check":"xmark"} s={14} c="#fff"/>
         </div>
-        <div>
-          <div style={{ fontWeight:800,fontSize:14,color:can?"#065F46":"#991B1B" }}>{can?"Withdrawals open today":"Withdrawals are closed today"}</div>
-          <div style={{ fontSize:12,color:"#888",marginTop:2 }}>Available: Tue, Wed & Fri · 08:30 – 17:30</div>
+          <div>
+            <div style={{ fontWeight:800,fontSize:14,color:can?"#065F46":"#991B1B" }}>{can?"Withdrawals open today":"Withdrawals are closed today"}</div>
+            <div style={{ fontSize:12,color:"#888",marginTop:2 }}>Available: Tue, Wed & Fri · 08:30 – 17:30</div>
+          </div>
+        </div>
+      <div style={{ background:"#fff",borderRadius:14,padding:"20px 22px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
+          <div>
+            <div style={{ fontSize:12,fontWeight:800,color:"#111" }}>Crypto Top Up & Upgrade</div>
+            <div style={{ fontSize:11,color:"#888",marginTop:2 }}>Use crypto to top up your deposit and upgrade your tier.</div>
+          </div>
+          <div style={{ padding:"5px 10px",background:"#F7F7F7",border:"1px solid #EBEBEB",borderRadius:8,fontSize:11,color:"#888",fontWeight:700 }}>Instant credit</div>
+        </div>
+        <div className="ep-grid-2" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
+          <div style={{ border:"1px solid #F0F0F0",borderRadius:12,padding:"14px 16px",background:"#FAFAFA" }}>
+            <div style={{ fontSize:11,fontWeight:800,color:"#111",marginBottom:10 }}>Top Up Wallet</div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
+              {Object.keys(cryptoAddresses).map(n=>(
+                <button key={n} onClick={()=>setCryptoNet(n)} style={{ padding:"5px 10px",borderRadius:8,border:`1px solid ${cryptoNet===n?"#111":"#E8E8E8"}`,background:cryptoNet===n?"#111":"#fff",color:cryptoNet===n?"#fff":"#777",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{n}</button>
+              ))}
+            </div>
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
+              <div style={{ flex:1, padding:"8px 10px",background:"#fff",border:"1px solid #E8E8E8",borderRadius:8,fontSize:11,color:"#444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{curAddress}</div>
+              <button onClick={copyCrypto} style={{ padding:"7px 10px",borderRadius:8,border:"none",background:cryptoCopied?"#059669":"#111",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{cryptoCopied?"Copied":"Copy"}</button>
+            </div>
+            <input type="number" value={cryptoAmt} onChange={e=>setCryptoAmt(e.target.value)} placeholder="Amount to top up (KES)" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
+            <button onClick={()=>{if(cryptoAmt){setCryptoTopupDone(true);setTimeout(()=>setCryptoTopupDone(false),2500);}}} style={{ width:"100%",padding:"10px 12px",background:"#111",color:"#fff",border:"none",borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>
+              {cryptoTopupDone ? "Top Up Submitted" : "I Sent Crypto"}
+            </button>
+          </div>
+          <div style={{ border:"1px solid #F0F0F0",borderRadius:12,padding:"14px 16px",background:"#FAFAFA" }}>
+            <div style={{ fontSize:11,fontWeight:800,color:"#111",marginBottom:10 }}>Crypto Withdrawal</div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
+              {Object.keys(cryptoAddresses).map(n=>(
+                <button key={n} onClick={()=>setCryptoNet(n)} style={{ padding:"5px 10px",borderRadius:8,border:`1px solid ${cryptoNet===n?"#111":"#E8E8E8"}`,background:cryptoNet===n?"#111":"#fff",color:cryptoNet===n?"#fff":"#777",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{n}</button>
+              ))}
+            </div>
+            <input type="text" value={cryptoWallet} onChange={e=>setCryptoWallet(e.target.value)} placeholder="Your wallet address" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
+            <input type="number" value={cryptoWdAmt} onChange={e=>setCryptoWdAmt(e.target.value)} placeholder="Amount to withdraw (KES)" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
+            <button onClick={()=>{if(can&&cryptoWdAmt&&cryptoWallet){setCryptoWdDone(true);setTimeout(()=>setCryptoWdDone(false),2500);}}} style={{ width:"100%",padding:"10px 12px",background:can?"#111":"#E8E8E8",color:can?"#fff":"#BBB",border:"none",borderRadius:8,fontWeight:800,fontSize:12,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif" }}>
+              {cryptoWdDone ? "Withdrawal Submitted" : "Withdraw to Crypto"}
+            </button>
+          </div>
         </div>
       </div>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
@@ -1980,14 +3084,19 @@ function WithdrawContent({ t, earn }) {
             <div style={{ fontSize:30,fontWeight:900,letterSpacing:"-0.04em",color:"#059669" }}>KES {earn.toLocaleString()}</div>
           </div>
           <label style={{ display:"block",fontSize:12,fontWeight:700,color:"#555",marginBottom:6 }}>Amount</label>
-          <input type="number" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="Enter amount…" style={{ width:"100%",padding:"11px 14px",background:"#FAFAFA",border:"1.5px solid #EBEBEB",borderRadius:9,fontSize:14,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:14 }}/>
+          <input type="number" value={wdAmt} onChange={e=>setWdAmt(e.target.value)} placeholder="Enter amount…" style={{ width:"100%",padding:"11px 14px",background:"#FAFAFA",border:"1.5px solid #EBEBEB",borderRadius:9,fontSize:14,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:14 }}/>
           <label style={{ display:"block",fontSize:12,fontWeight:700,color:"#555",marginBottom:8 }}>Method</label>
           <div style={{ display:"flex",gap:7,marginBottom:18,flexWrap:"wrap" }}>
             {["M-Pesa","Airtel","Bank","Crypto"].map(m=>(
               <button key={m} onClick={()=>setMethod(m)} style={{ padding:"7px 14px",borderRadius:8,border:`1.5px solid ${method===m?"#111":"#EBEBEB"}`,background:method===m?"#111":"#fff",color:method===m?"#fff":"#888",fontWeight:method===m?700:500,cursor:"pointer",fontSize:12,fontFamily:"Geist,sans-serif",transition:"all .15s" }}>{m}</button>
             ))}
           </div>
-          <button onClick={()=>{if(can&&amt){setDone(true);setTimeout(()=>setDone(false),3e3);}}} style={{ width:"100%",padding:"13px",background:can?"#111":"#EBEBEB",color:can?"#fff":"#BBB",border:"none",borderRadius:9,fontWeight:800,fontSize:14,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s" }}>
+          {method==="Crypto" && (
+            <div style={{ marginBottom:12,padding:"8px 12px",background:"#F7F9FF",border:"1px solid #DBEAFE",borderRadius:8,fontSize:11,color:"#3B82F6",fontWeight:600 }}>
+              Use the Crypto Withdrawal panel above for wallet-based payouts.
+            </div>
+          )}
+          <button onClick={()=>{if(can&&wdAmt){setDone(true);setTimeout(()=>setDone(false),3e3);}}} style={{ width:"100%",padding:"13px",background:can?"#111":"#EBEBEB",color:can?"#fff":"#BBB",border:"none",borderRadius:9,fontWeight:800,fontSize:14,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s" }}>
             <I n={done?"check":"wallet"} s={14} c={can?"#fff":"#BBB"}/>{done?"Submitted!":"Submit Withdrawal"}
           </button>
         </div>
@@ -2062,7 +3171,9 @@ function AdminDash({ go }) {
   const [userFilter, setUserFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
   const [wdFilter, setWdFilter] = useState("all");
+  const [users, setUsers] = useState(ADMIN_USERS);
   const [withdrawals, setWithdrawals] = useState(ADMIN_WITHDRAWALS);
+  const [txs, setTxs] = useState(ADMIN_TXS);
   const [txFilter, setTxFilter] = useState("all");
   const [wdDays, setWdDays] = useState({ tue:true, wed:false, fri:true });
   const [videoPrice, setVideoPrice] = useState(50);
@@ -2070,11 +3181,69 @@ function AdminDash({ go }) {
   const [payoutMode, setPayoutMode] = useState("manual");
   const [notifOpen, setNotifOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const adminHeadingFont = "Sora, Geist, sans-serif";
+
+  const fmtDate = (d) => {
+    if (!d) return "—";
+    const dt = new Date(d);
+    return Number.isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+  };
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const normalizeUser = (u, i) => ({
+    id: u.id || u.user_id || `U${String(i+1).padStart(3,"0")}`,
+    name: u.name || u.full_name || u.username || "Unknown",
+    email: u.email || u.user_email || "—",
+    tier: u.tier || u.plan || "Regular",
+    deposit: num(u.deposit || u.deposit_amount || u.amount),
+    status: u.status || "Active",
+    joined: fmtDate(u.joined || u.created_at || u.date),
+    earn: num(u.earn || u.earnings || u.total_earnings),
+    phone: u.phone || u.msisdn || "—",
+  });
+  const normalizeWithdrawal = (w, i) => ({
+    id: w.id || w.withdrawal_id || `W${String(i+1).padStart(3,"0")}`,
+    user: w.user || w.name || w.user_name || "Unknown",
+    amount: num(w.amount || w.amount_kes),
+    method: w.method || w.channel || "M-Pesa",
+    date: fmtDate(w.date || w.created_at),
+    status: w.status || "Pending",
+    phone: w.phone || w.msisdn || "—",
+    tier: w.tier || w.plan || "—",
+  });
+  const normalizeTx = (t, i) => ({
+    id: t.id || t.tx_id || `T${String(i+1).padStart(3,"0")}`,
+    user: t.user || t.name || t.user_name || "Unknown",
+    type: t.type || t.category || "Earning",
+    amount: num(t.amount || t.amount_kes),
+    method: t.method || t.channel || "—",
+    date: fmtDate(t.date || t.created_at),
+    status: t.status || "Paid",
+  });
 
   useEffect(() => {
     const fn = () => { const m = window.innerWidth<769; setIsMobile(m); if(m) setSideOpen(false); };
     window.addEventListener("resize", fn); fn();
     return () => window.removeEventListener("resize", fn);
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let ignore = false;
+    (async () => {
+      const [u, w, t] = await Promise.all([
+        fetchTable("users"),
+        fetchTable("withdrawals"),
+        fetchTable("transactions"),
+      ]);
+      if (ignore) return;
+      if (Array.isArray(u) && u.length) setUsers(u.map(normalizeUser));
+      if (Array.isArray(w) && w.length) setWithdrawals(w.map(normalizeWithdrawal));
+      if (Array.isArray(t) && t.length) setTxs(t.map(normalizeTx));
+    })();
+    return () => { ignore = true; };
   }, []);
 
   const adminNav = [
@@ -2091,14 +3260,14 @@ function AdminDash({ go }) {
   const rejectWd  = (id) => setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status:"Rejected"} : w));
   const payWd     = (id) => setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status:"Paid"} : w));
 
-  const filteredUsers = ADMIN_USERS.filter(u => {
+  const filteredUsers = users.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase());
     const matchFilter = userFilter==="all" || u.status.toLowerCase()===userFilter;
     return matchSearch && matchFilter;
   });
 
   const filteredWd = wdFilter==="all" ? withdrawals : withdrawals.filter(w=>w.status.toLowerCase()===wdFilter);
-  const filteredTx = txFilter==="all" ? ADMIN_TXS : ADMIN_TXS.filter(t=>t.type.toLowerCase()===txFilter||t.status.toLowerCase()===txFilter);
+  const filteredTx = txFilter==="all" ? txs : txs.filter(t=>t.type.toLowerCase()===txFilter||t.status.toLowerCase()===txFilter);
 
   const S = (label, txt) => ({ fontSize:11, color:"#475569", fontWeight:600, label, txt });
 
@@ -2116,7 +3285,7 @@ function AdminDash({ go }) {
   const CARD = {background:"#0D1117",borderRadius:14,padding:"20px 22px",border:"1px solid #1A2234"};
 
   return (
-    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#080A0F", fontFamily:"Geist,sans-serif", color:"#F1F5F9" }}>
+    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#080A0F", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#F1F5F9" }}>
 
       {/* Mobile overlay */}
       {isMobile && sideOpen && (
@@ -2217,7 +3386,7 @@ function AdminDash({ go }) {
           {/* Page title */}
           <div style={{ marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12 }}>
             <div>
-              <h2 style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:"#F1F5F9" }}>
+              <h2 style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:"#F1F5F9",fontFamily:adminHeadingFont }}>
                 {adminNav.find(n=>n.id===tab)?.label}
               </h2>
               <p style={{ fontSize:12,color:"#475569",marginTop:3 }}>{new Date().toDateString()} · EdisonPay Admin</p>
@@ -2240,19 +3409,15 @@ function AdminDash({ go }) {
                   ["KES 8.9M","Total Paid Out","wallet","#E8820C","Since launch",true],
                   [withdrawals.filter(w=>w.status==="Pending").length,"Pending Withdrawals","up","#DC2626","Needs attention",false],
                 ].map(([v,l,ic,c,sub,_],i)=>(
-                  <div key={i} className="ep-hover-lift" style={{ ...CARD, position:"relative", overflow:"hidden" }}>
-                    <div style={{ position:"absolute",top:0,right:0,width:60,height:60,borderRadius:"0 14px 0 100%",background:`${c}10`,pointerEvents:"none" }}/>
-                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
-                      <div style={{ width:34,height:34,borderRadius:9,background:`${c}18`,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                        <I n={ic} s={15} c={c}/>
+                  <div key={i} className="ep-hover-lift" style={{ ...CARD }}>
+                    <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
+                      <div style={{ width:32,height:32,borderRadius:9,background:`${c}18`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                        <I n={ic} s={14} c={c}/>
                       </div>
+                      <div style={{ fontSize:10,color:c,fontWeight:800 }}>{sub}</div>
                     </div>
-                    <div style={{ fontSize:26,fontWeight:900,letterSpacing:"-0.04em",color:"#F1F5F9",marginBottom:4 }}>{typeof v==="number"?v.toLocaleString():v}</div>
-                    <div style={{ fontSize:11,color:"#64748B",fontWeight:600,marginBottom:6 }}>{l}</div>
-                    <div style={{ fontSize:11,color:c,fontWeight:700 }}>{sub}</div>
-                    <div style={{ height:2,background:"#131A26",borderRadius:99,marginTop:14 }}>
-                      <div style={{ height:"100%",width:`${40+i*15}%`,background:c,borderRadius:99 }}/>
-                    </div>
+                    <div style={{ fontSize:24,fontWeight:900,letterSpacing:"-0.04em",color:"#F1F5F9",marginBottom:4 }}>{typeof v==="number"?v.toLocaleString():v}</div>
+                    <div style={{ fontSize:11,color:"#64748B",fontWeight:600 }}>{l}</div>
                   </div>
                 ))}
               </div>
@@ -2264,7 +3429,7 @@ function AdminDash({ go }) {
                     <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9" }}>Recent Users</h3>
                     <span onClick={()=>setTab("users")} style={{ fontSize:11,color:"#4A9EFF",cursor:"pointer",fontWeight:700 }}>View All</span>
                   </div>
-                  {ADMIN_USERS.slice(0,5).map((u,i)=>(
+                  {users.slice(0,5).map((u,i)=>(
                     <div key={i} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:i>0?"1px solid #131A26":"none" }}>
                       <div style={{ width:30,height:30,borderRadius:"50%",background:`${TIERS.find(t=>u.tier.includes(t.name.split(" ")[0]))?.acc||"#888"}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:TIERS.find(t=>u.tier.includes(t.name.split(" ")[0]))?.acc||"#888",flexShrink:0 }}>{u.name[0]}</div>
                       <div style={{ flex:1,minWidth:0 }}>
