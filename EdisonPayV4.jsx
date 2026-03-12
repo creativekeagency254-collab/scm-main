@@ -1722,14 +1722,17 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
               <button onClick={()=>{ setStripHidden(s => !s); }}
                 style={{
                   pointerEvents:"auto",
-                  padding:"7px 18px",
-                  borderRadius:8,
+                  minWidth:180,
+                  height:32,
+                  padding:"0 18px",
+                  borderRadius:6,
                   border:"1.5px solid #111",
                   background:"#fff",
                   color:"#111",
                   cursor:"pointer",
                   display:"flex",
                   alignItems:"center",
+                  justifyContent:"center",
                   gap:6,
                   boxShadow:"0 4px 0 #111, 0 10px 18px rgba(0,0,0,0.15)",
                   fontSize:11,
@@ -4315,23 +4318,23 @@ export default function App() {
           right:18,
           bottom:18,
           zIndex:9999,
-          padding:"10px 16px",
-          borderRadius:10,
-          border:"1.5px solid #111",
-          background:"#fff",
+          padding:"9px 14px",
+          borderRadius:999,
+          border:"1px solid #0F172A",
+          background:"linear-gradient(180deg,#FFFFFF 0%, #F1F5F9 100%)",
           color:"#111",
-          fontWeight:800,
+          fontWeight:700,
           fontSize:12,
           cursor:"pointer",
           display:"flex",
           alignItems:"center",
           gap:8,
-          boxShadow:"0 5px 0 #111, 0 12px 22px rgba(0,0,0,0.18)",
+          boxShadow:"0 8px 18px rgba(15,23,42,0.16)",
           fontFamily:"IBM Plex Sans, Geist, sans-serif",
-          letterSpacing:"0.02em"
+          letterSpacing:"0.01em"
         }}>
-        <div style={{ width:18, height:18, borderRadius:"50%", background:"#111", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:900, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.25)" }}>?</div>
-        Help
+        <div style={{ width:18, height:18, borderRadius:"50%", background:"#0F172A", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800 }}>?</div>
+        Help Center
       </button>
     </ErrorBoundary>
   );
