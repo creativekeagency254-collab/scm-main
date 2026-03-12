@@ -1183,13 +1183,39 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
       ]);
       if (ignore) return;
       if (Array.isArray(txRows) && txRows.length) setClientTx(txRows.map(normalizeTx));
+
+      let appliedRefs = false;
       if (Array.isArray(refRows) && refRows.length) {
         setClientRefs(refRows.map(normalizeRef));
         setClientRefTable(refRows.map(normalizeRefRow));
+        appliedRefs = true;
+      }
+
+      if (!appliedRefs && refCode) {
+        try {
+          const { data } = await supabase
+            .from("profiles")
+            .select("id,name,email,tier,status,created_at,referred_by")
+            .eq("referred_by", refCode)
+            .order("created_at", { ascending: false })
+            .limit(200);
+          if (!ignore && Array.isArray(data) && data.length) {
+            setClientRefs(data.map(normalizeRef));
+            setClientRefTable(data.map(normalizeRefRow));
+            appliedRefs = true;
+          }
+        } catch (e) {
+          /* no-op */
+        }
+      }
+
+      if (!appliedRefs) {
+        setClientRefs([]);
+        setClientRefTable([]);
       }
     })();
     return () => { ignore = true; };
-  }, [t.acc, t.deposit, authId]);
+  }, [t.acc, t.deposit, authId, refCode]);
 
   const navItems = [
     { id:"overview",  label:"Overview",  ic:"grid"   },

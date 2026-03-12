@@ -108,6 +108,14 @@ $$;
 -- Profiles
 create policy "profiles_select_self" on profiles
 for select using (auth.uid() = id or public.is_admin());
+create policy "profiles_select_referrals" on profiles
+for select using (
+  exists (
+    select 1 from profiles p
+    where p.id = auth.uid()
+      and profiles.referred_by = p.ref_code
+  )
+);
 create policy "profiles_insert_self" on profiles
 for insert with check (auth.uid() = id);
 create policy "profiles_update_self" on profiles
