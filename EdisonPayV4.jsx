@@ -988,6 +988,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
+  const [recentOpen, setRecentOpen] = useState(false);
   const [stripHidden, setStripHidden] = useState(false);
   const lastScrollRef = useRef(0);
   const authId = authUser?.id || null;
@@ -1352,29 +1353,50 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           )}
         </nav>
 
-        {/* ── Bottom: recent tx + links ── */}
-        {open && (
+        {/* ── Bottom: recent tx (desktop only) ── */}
+        {open && !isMobile && (
           <div style={{ borderTop:"1px solid #F0F0F0", flexShrink:0 }}>
-            <div style={{ padding:"10px 16px 6px" }}>
-              <div style={{ fontSize:9, fontWeight:800, color:"#D1D5DB", letterSpacing:"0.12em", marginBottom:8 }}>RECENT TRANSACTIONS</div>
-              {recentTx.slice(0,2).map((w,i) => (
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <div style={{ width:18, height:18, borderRadius:5, background: w.s==="Paid"?"#F0FDF4":"#FFFBEB", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <I n={w.s==="Paid"?"check":"calendar"} s={9} c={w.s==="Paid"?"#22C55E":"#D97706"}/>
+            <button onClick={()=>setRecentOpen(o=>!o)}
+              style={{
+                width:"100%",
+                display:"flex",
+                alignItems:"center",
+                justifyContent:"space-between",
+                padding:"10px 14px",
+                background:"#fff",
+                border:"none",
+                cursor:"pointer",
+                fontSize:10,
+                fontWeight:900,
+                letterSpacing:"0.12em",
+                color:"#111"
+              }}>
+              RECENT TRANSACTIONS
+              <div style={{ transform: recentOpen ? "rotate(90deg)" : "rotate(-90deg)", transition:"transform .18s ease" }}>
+                <I n="chevR" s={12} c="#111"/>
+              </div>
+            </button>
+            <div style={{ maxHeight: recentOpen ? 200 : 0, overflow:"hidden", transition:"max-height .25s ease" }}>
+              <div style={{ padding:"6px 16px 10px" }}>
+                {recentTx.slice(0,2).map((w,i) => (
+                  <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <div style={{ width:18, height:18, borderRadius:5, background: w.s==="Paid"?"#F0FDF4":"#FFFBEB", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <I n={w.s==="Paid"?"check":"calendar"} s={9} c={w.s==="Paid"?"#22C55E":"#D97706"}/>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#666" }}>KES {w.a.toLocaleString()}</div>
+                        <div style={{ fontSize:9, color:"#D1D5DB" }}>{w.d}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize:10, fontWeight:700, color:"#666" }}>KES {w.a.toLocaleString()}</div>
-                      <div style={{ fontSize:9, color:"#D1D5DB" }}>{w.d}</div>
-                    </div>
+                    <span style={{ fontSize:8, fontWeight:800, padding:"2px 6px", borderRadius:50, background:w.s==="Paid"?"#F0FDF4":"#FFFBEB", color:w.s==="Paid"?"#22C55E":"#D97706" }}>{w.s}</span>
                   </div>
-                  <span style={{ fontSize:8, fontWeight:800, padding:"2px 6px", borderRadius:50, background:w.s==="Paid"?"#F0FDF4":"#FFFBEB", color:w.s==="Paid"?"#22C55E":"#D97706" }}>{w.s}</span>
-                </div>
-              ))}
-              <div style={{ marginTop:4, fontSize:9, color:"#D1D5DB", fontWeight:700 }}>View all in Transactions</div>
-            </div>
-            <div style={{ padding:"10px 16px 16px", display:"flex", justifyContent:"space-between" }}>
-              {["About","Contact","Help"].map(l => <span key={l} style={{ fontSize:11, color:"#CCC", cursor:"pointer" }}>{l}</span>)}
+                ))}
+                <div style={{ marginTop:6, fontSize:9, color:"#D1D5DB", fontWeight:700 }}>View all in Transactions</div>
+              </div>
+              <div style={{ padding:"6px 16px 14px", display:"flex", justifyContent:"space-between" }}>
+                {["About","Contact","Help"].map(l => <span key={l} style={{ fontSize:11, color:"#CCC", cursor:"pointer" }}>{l}</span>)}
+              </div>
             </div>
           </div>
         )}
