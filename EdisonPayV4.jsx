@@ -75,12 +75,15 @@ const GlobalStyles = () => {
         .ep-footer-bottom { flex-direction:column !important; align-items:flex-start !important; gap:10px !important; }
         .ep-footer-bottom-links { flex-wrap:wrap !important; gap:10px !important; }
       }
-      @media (max-width:480px) {
-        .ep-grid-4 { grid-template-columns:1fr !important; }
-        .ep-admin-stats { grid-template-columns:1fr !important; }
-        .ep-footer-grid { grid-template-columns:1fr !important; }
-        .ep-footer-cta-actions button { width:100% !important; }
-      }
+        @media (max-width:600px) {
+          .ep-footer-grid { grid-template-columns:1fr !important; gap:20px !important; }
+        }
+        @media (max-width:480px) {
+          .ep-grid-4 { grid-template-columns:1fr !important; }
+          .ep-admin-stats { grid-template-columns:1fr !important; }
+          .ep-footer-grid { grid-template-columns:1fr !important; }
+          .ep-footer-cta-actions button { width:100% !important; }
+        }
       @media (max-width:420px) {
         .ep-card { border-radius:14px !important; }
         .ep-card, .ep-frame-dark, .ep-frame-light { padding:14px 14px !important; }
@@ -976,12 +979,16 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState("overview");
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState([
+    { ic:"check", title:"Withdrawal Approved", sub:"KES 1,200 sent to M-Pesa", time:"2h ago", c:"#059669", read:false },
+    { ic:"play",  title:"Bot videos complete", sub:"14 videos · KES 280 earned", time:"5h ago", c:t.acc, read:false },
+    { ic:"gift",  title:"New referral joined", sub:"Amina K. signed up via your link", time:"1d ago", c:"#E8820C", read:false },
+  ]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
   const [stripHidden, setStripHidden] = useState(false);
-  const [showStripToggle, setShowStripToggle] = useState(false);
   const lastScrollRef = useRef(0);
   const authId = authUser?.id || null;
   const [profile, setProfile] = useState({
@@ -1074,15 +1081,14 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   }, []);
 
   const onBodyScroll = (e) => {
+    if (!isMobile) return;
     const y = e.currentTarget.scrollTop;
     const delta = y - lastScrollRef.current;
-    if (y > 80 && delta > 4) {
+    if (y > 80 && delta < -4) {
       setStripHidden(true);
-      setShowStripToggle(true);
     }
     if (y < 30) {
       setStripHidden(false);
-      setShowStripToggle(false);
     }
     lastScrollRef.current = y;
   };
@@ -1491,20 +1497,18 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
             <button onClick={()=>{setNotifOpen(o=>!o); setProfileOpen(false);}}
               style={{ width:36, height:36, borderRadius:9, border:"1.5px solid #E8E8E8", background:"#FAFAFA", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
               <I n="bell" s={15} c="#666"/>
-              <div style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:"#EF4444", border:"1.5px solid #fff" }}/>
+              {notifs.some(n=>!n.read) && (
+                <div style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:"#EF4444", border:"1.5px solid #fff" }}/>
+              )}
             </button>
             {notifOpen && (
               <div style={{ position:"absolute", top:44, right:0, width:300, background:"#fff", border:"1px solid #E8E8E8", borderRadius:14, boxShadow:"0 8px 32px rgba(0,0,0,0.12)", zIndex:999, padding:"14px 0", animation:"scaleIn .18s ease both", transformOrigin:"top right" }}>
                 <div style={{ padding:"0 16px 10px", borderBottom:"1px solid #F5F5F5", display:"flex", justifyContent:"space-between" }}>
                   <span style={{ fontSize:13, fontWeight:800 }}>Notifications</span>
-                  <span style={{ fontSize:11, color:t.acc, fontWeight:700, cursor:"pointer" }}>Mark all read</span>
+                  <span onClick={()=>setNotifs(ns=>ns.map(n=>({ ...n, read:true })))} style={{ fontSize:11, color:t.acc, fontWeight:700, cursor:"pointer" }}>Mark all read</span>
                 </div>
-                {[
-                  {ic:"check", title:"Withdrawal Approved", sub:"KES 1,200 sent to M-Pesa", time:"2h ago", c:"#059669"},
-                  {ic:"play",  title:"Bot videos complete", sub:"14 videos · KES 280 earned", time:"5h ago", c:t.acc},
-                  {ic:"gift",  title:"New referral joined", sub:"Amina K. signed up via your link", time:"1d ago", c:"#E8820C"},
-                ].map((n,i)=>(
-                  <div key={i} style={{ display:"flex", gap:10, padding:"11px 16px", background:"#FAFAFA", margin:"0 8px 4px", borderRadius:10 }}>
+                {notifs.map((n,i)=>(
+                  <div key={i} style={{ display:"flex", gap:10, padding:"11px 16px", background:n.read?"#fff":"#FAFAFA", margin:"0 8px 4px", borderRadius:10, opacity:n.read?0.7:1 }}>
                     <div style={{ width:32, height:32, borderRadius:9, background:`${n.c}18`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                       <I n={n.ic} s={14} c={n.c}/>
                     </div>
@@ -1613,10 +1617,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                 <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 16px", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
                   <I n="wallet" s={12} c="#111"/> Withdraw
                 </button>
-                <button onClick={()=>{ setStripHidden(true); setShowStripToggle(true); }}
-                  style={{ padding:"8px 12px", background:"#fff", color:"#111", border:"1px solid #111", borderRadius:9, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
-                  Hide
-                </button>
               </div>
             </>
           )}
@@ -1624,10 +1624,10 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           {isMobile && (
             <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:10 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap" }}>
-                <h2 style={{ fontSize:16, fontWeight:900, letterSpacing:"-0.04em", color:"#111", lineHeight:1.1, fontFamily: headingFont, flex:"1 1 140px", minWidth:0 }}>
+                <h2 style={{ fontSize:isTiny?14:16, fontWeight:900, letterSpacing:"-0.04em", color:"#111", lineHeight:1.1, fontFamily: headingFont, flex:"1 1 140px", minWidth:0 }}>
                   {navItems.find(n=>n.id===tab)?.label || "Overview"}
                 </h2>
-                <span style={{ fontSize:10, fontWeight:800, color:t.acc, background:t.lgt, border:`1px solid ${t.mid}`, borderRadius:99, padding:"4px 10px", whiteSpace:"nowrap", flexShrink:0 }}>
+                <span style={{ fontSize:isTiny?9:10, fontWeight:800, color:t.acc, background:t.lgt, border:`1px solid ${t.mid}`, borderRadius:99, padding:"4px 10px", whiteSpace:"nowrap", flexShrink:0 }}>
                   {t.name} Tier
                 </span>
               </div>
@@ -1645,33 +1645,33 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   </button>
                 </div>
               )}
-              <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                <button onClick={()=>{ setStripHidden(true); setShowStripToggle(true); }}
-                  style={{ padding:"6px 10px", background:"#fff", color:"#111", border:"1px solid #111", borderRadius:999, fontSize:10, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
-                  Hide
-                </button>
-              </div>
             </div>
           )}
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onScroll={onBodyScroll} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
-          {showStripToggle && (
+          {isMobile && (
             <div style={{ position:"sticky", top:8, zIndex:30, display:"flex", justifyContent:"flex-end", pointerEvents:"none" }}>
-              <button onClick={()=>{ setStripHidden(false); setShowStripToggle(false); }}
+              <button onClick={()=>{ setStripHidden(s => !s); }}
                 style={{
                   pointerEvents:"auto",
-                  padding:"6px 10px",
-                  borderRadius:999,
-                  border:"1px solid #111",
-                  background:"#fff",
+                  width:36,
+                  height:36,
+                  borderRadius:"50%",
+                  border:"1px solid rgba(0,0,0,0.45)",
+                  background:"rgba(255,255,255,0.55)",
                   color:"#111",
-                  fontSize:11,
-                  fontWeight:800,
                   cursor:"pointer",
-                  boxShadow:"0 6px 16px rgba(0,0,0,0.12)"
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  backdropFilter:"blur(8px)",
+                  boxShadow:"0 8px 20px rgba(0,0,0,0.18)",
+                  transition:"transform .18s ease"
                 }}>
-                Show Summary
+                <div style={{ transform: stripHidden ? "rotate(90deg)" : "rotate(-90deg)", transition:"transform .18s ease" }}>
+                  <I n="chevR" s={12} c="#111"/>
+                </div>
               </button>
             </div>
           )}
