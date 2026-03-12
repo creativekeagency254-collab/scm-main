@@ -36,11 +36,11 @@ const GlobalStyles = () => {
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
-      .ep-card { background:#fff; border-radius:16px; border:1px solid #EBEBEB; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+      .ep-card { background:#fff; border-radius:16px; border:1px solid rgba(17,17,17,0.15); box-shadow:0 1px 4px rgba(0,0,0,0.04); }
       .ep-upgrade-btn { animation: popPulse 1.6s ease-in-out infinite; }
       .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
-      .ep-frame-dark { box-shadow: 0 0 0 2px #111, 0 8px 18px rgba(0,0,0,0.12); }
-      .ep-frame-light { box-shadow: 0 0 0 1.5px #fff, 0 8px 18px rgba(0,0,0,0.08); }
+      .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
+      .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
       * { box-sizing:border-box; margin:0; padding:0; }
       ::-webkit-scrollbar { width:5px; height:5px; }
       ::-webkit-scrollbar-track { background:transparent; }
@@ -68,13 +68,30 @@ const GlobalStyles = () => {
         .ep-overview-chart-grid { grid-template-columns:1fr !important; }
         .ep-admin-grid2 { grid-template-columns:1fr !important; }
         .ep-admin-stats { grid-template-columns:1fr 1fr !important; }
-        .ep-footer-grid { grid-template-columns:1fr 1fr !important; }
+        .ep-footer-cta { flex-direction:column !important; align-items:flex-start !important; }
+        .ep-footer-cta-actions { width:100% !important; flex-wrap:wrap !important; }
+        .ep-footer-grid { grid-template-columns:1fr 1fr !important; gap:24px !important; }
         .ep-footer-brand { grid-column: 1 / -1 !important; }
+        .ep-footer-bottom { flex-direction:column !important; align-items:flex-start !important; gap:10px !important; }
+        .ep-footer-bottom-links { flex-wrap:wrap !important; gap:10px !important; }
       }
       @media (max-width:480px) {
         .ep-grid-4 { grid-template-columns:1fr !important; }
         .ep-admin-stats { grid-template-columns:1fr !important; }
         .ep-footer-grid { grid-template-columns:1fr !important; }
+        .ep-footer-cta-actions button { width:100% !important; }
+      }
+      @media (max-width:420px) {
+        .ep-card { border-radius:14px !important; }
+        .ep-card, .ep-frame-dark, .ep-frame-light { padding:14px 14px !important; }
+        .ep-auth-grid > div { padding:32px !important; }
+        .ep-auth-grid h1 { font-size:24px !important; }
+        .ep-auth-grid h2 { font-size:30px !important; }
+        .ep-auth-grid p { font-size:13px !important; }
+      }
+      @media (max-width:380px) {
+        .ep-card, .ep-frame-dark, .ep-frame-light { padding:12px 12px !important; }
+        .ep-auth-grid > div { padding:26px !important; }
       }
       @media (min-width:769px) {
         .ep-dash-overlay { display:none !important; }
@@ -616,14 +633,14 @@ function Landing({ go }) {
       <footer style={{ background: "#0D0D0D", color: "#fff" }}>
         {/* Top CTA band */}
         <div style={{ borderBottom: "1px solid #1F1F1F", padding: "48px 5vw" }}>
-          <div style={{ maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 24 }}>
+          <div className="ep-footer-cta" style={{ maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 24 }}>
             <div>
               <h3 style={{ fontSize: "clamp(22px,2.5vw,34px)", fontWeight: 900, letterSpacing: "-0.04em", marginBottom: 8 }}>
                 Ready to start earning?
               </h3>
               <p style={{ fontSize: 15, color: "#666", lineHeight: 1.6 }}>Join 1,000+ Kenyans building passive income daily.</p>
             </div>
-            <div style={{ display: "flex", gap: 12 }}>
+            <div className="ep-footer-cta-actions" style={{ display: "flex", gap: 12 }}>
               <button onClick={() => go("signup")} style={{ padding: "13px 28px", background: "#fff", color: "#111", border: "none", borderRadius: 50, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Create Free Account</button>
               <button onClick={() => go("login")} style={{ padding: "13px 28px", background: "transparent", color: "#fff", border: "1.5px solid #333", borderRadius: 50, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Sign In</button>
             </div>
@@ -631,9 +648,9 @@ function Landing({ go }) {
         </div>
 
         {/* Main footer grid */}
-        <div style={{ padding: "56px 5vw 40px", maxWidth: 1300, margin: "0 auto", display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 1fr", gap: 40 }}>
+        <div className="ep-footer-grid" style={{ padding: "56px 5vw 40px", maxWidth: 1300, margin: "0 auto", display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 1fr", gap: 40 }}>
           {/* Brand col */}
-          <div>
+          <div className="ep-footer-brand">
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <I n="bolt" s={15} c="#111" />
@@ -676,9 +693,9 @@ function Landing({ go }) {
         </div>
 
         {/* Bottom bar */}
-        <div style={{ borderTop: "1px solid #1A1A1A", padding: "20px 5vw", maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div className="ep-footer-bottom" style={{ borderTop: "1px solid #1A1A1A", padding: "20px 5vw", maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <span style={{ fontSize: 12, color: "#3A3A3A" }}>© 2025 EdisonPay Ltd. All rights reserved. Nairobi, Kenya.</span>
-          <div style={{ display: "flex", gap: 20, fontSize: 12, color: "#3A3A3A" }}>
+          <div className="ep-footer-bottom-links" style={{ display: "flex", gap: 20, fontSize: 12, color: "#3A3A3A" }}>
             {["Privacy","Terms","Cookies","Sitemap"].map(l => <span key={l} style={{ cursor: "pointer", transition: "color .12s" }} onMouseEnter={e => e.target.style.color = "#777"} onMouseLeave={e => e.target.style.color = "#3A3A3A"}>{l}</span>)}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3A3A3A" }}>
@@ -962,6 +979,10 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
+  const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
+  const [stripHidden, setStripHidden] = useState(false);
+  const [showStripToggle, setShowStripToggle] = useState(false);
+  const lastScrollRef = useRef(0);
   const authId = authUser?.id || null;
   const [profile, setProfile] = useState({
     id: null,
@@ -1007,11 +1028,11 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const canUpgrade = !!nextTier;
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
   const canWithdraw = ["Tuesday","Wednesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
-  const SIDEBAR_W = 260;
+  const SIDEBAR_W = isMobile ? (isTiny ? 220 : 260) : 260;
   const ICON_W = 60;
   const headingFont = "Sora, Geist, sans-serif";
-  const pagePad = isMobile ? "14px 16px 96px" : "26px 34px 48px";
-  const headerPad = isMobile ? "12px 16px 0" : "18px 28px 0";
+  const pagePad = isMobile ? (isTiny ? "10px 12px 96px" : "14px 16px 96px") : "26px 34px 48px";
+  const headerPad = isMobile ? (isTiny ? "10px 12px 0" : "12px 16px 0") : "18px 28px 0";
   const upgradeBtnActive = {
     background:"linear-gradient(180deg,#FDE047 0%, #F59E0B 45%, #F97316 100%)",
     border:"2px solid #111",
@@ -1041,10 +1062,30 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   }, [profileRow?.id]);
 
   useEffect(() => {
-    const fn = () => { const m = window.innerWidth < 769; setIsMobile(m); if (m) setOpen(false); };
+    const fn = () => {
+      const w = window.innerWidth;
+      const m = w < 769;
+      setIsMobile(m);
+      setIsTiny(w < 380);
+      if (m) setOpen(false);
+    };
     window.addEventListener("resize", fn); fn();
     return () => window.removeEventListener("resize", fn);
   }, []);
+
+  const onBodyScroll = (e) => {
+    const y = e.currentTarget.scrollTop;
+    const delta = y - lastScrollRef.current;
+    if (y > 80 && delta > 4) {
+      setStripHidden(true);
+      setShowStripToggle(true);
+    }
+    if (y < 30) {
+      setStripHidden(false);
+      setShowStripToggle(false);
+    }
+    lastScrollRef.current = y;
+  };
 
   useEffect(() => {
     return () => {
@@ -1493,16 +1534,34 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
             </div>
             {profileOpen && (
               <div style={{ position:"absolute", top:46, right:0, width:220, background:"#fff", border:"1px solid #E8E8E8", borderRadius:14, boxShadow:"0 8px 32px rgba(0,0,0,0.12)", zIndex:999, padding:"8px", animation:"scaleIn .18s ease both", transformOrigin:"top right" }}>
-                <div style={{ padding:"10px 12px 10px", borderBottom:"1px solid #F5F5F5", marginBottom:4 }}>
-                  <div style={{ fontSize:13, fontWeight:800 }}>{profileName}</div>
-                  <div style={{ fontSize:11, color:"#888" }}>{profile.email}</div>
-                  <div style={{ marginTop:6, display:"inline-flex", alignItems:"center", gap:5, padding:"3px 8px", background:t.lgt, borderRadius:50 }}>
-                    <div style={{ width:5, height:5, borderRadius:"50%", background:t.acc }}/>
-                    <span style={{ fontSize:9, fontWeight:800, color:t.acc }}>{t.name.toUpperCase()}</span>
+                <div style={{ padding:"10px 12px 12px", borderBottom:"1px solid #F5F5F5", marginBottom:4, display:"flex", gap:10, alignItems:"center" }}>
+                  <div style={{ width:46, height:46, borderRadius:"50%", background:"linear-gradient(135deg,#111,#333)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"2px solid #111", boxShadow:"0 6px 14px rgba(0,0,0,0.18)" }}>
+                    {profile.avatar ? (
+                      <img src={profile.avatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                    ) : (
+                      <span style={{ fontSize:14, fontWeight:900, color:"#fff" }}>{profileInitials}</span>
+                    )}
+                  </div>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:800 }}>{profileName}</div>
+                    <div style={{ fontSize:11, color:"#888", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{profile.email}</div>
+                    <div style={{ marginTop:6, display:"inline-flex", alignItems:"center", gap:5, padding:"3px 8px", background:"#F8FAFC", border:"1px solid #E5E7EB", borderRadius:50 }}>
+                      <div style={{ width:5, height:5, borderRadius:"50%", background:"#111" }}/>
+                      <span style={{ fontSize:9, fontWeight:800, color:"#111" }}>{t.name.toUpperCase()}</span>
+                    </div>
                   </div>
                 </div>
-                {[["user","My Profile"],["settings","Settings"],["shield","Security"]].map(([ic,lbl])=>(
-                  <div key={lbl} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 12px", borderRadius:8, cursor:"pointer", fontSize:13, color:"#555", fontWeight:500 }}
+                {[
+                  ["user","My Profile","settings"],
+                  ["settings","Settings","settings"],
+                  ["shield","Security","settings"],
+                  ["wallet","Wallet","withdraw"],
+                  ["gift","Referrals","referrals"],
+                  ["chart","Activity","analytics"],
+                  ["link","Support","overview"]
+                ].map(([ic,lbl,target])=>(
+                  <div key={lbl} onClick={()=>{ setTab(target); setProfileOpen(false); }}
+                    style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 12px", borderRadius:8, cursor:"pointer", fontSize:13, color:"#555", fontWeight:600 }}
                     onMouseEnter={e=>e.currentTarget.style.background="#F7F7F7"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <I n={ic} s={14} c="#BBB"/>{lbl}
                   </div>
@@ -1519,7 +1578,23 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
         </header>
 
         {/* ── PAGE HEADER STRIP ── */}
-        <div style={{ padding:headerPad, background:"#F2F4F8", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+        <div style={{
+          position:"sticky",
+          top:0,
+          zIndex:20,
+          background:"#F2F4F8",
+          borderBottom:"1px solid rgba(17,17,17,0.12)",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"space-between",
+          flexShrink:0,
+          overflow:"hidden",
+          padding: stripHidden ? "0 0" : headerPad,
+          maxHeight: stripHidden ? 0 : 180,
+          opacity: stripHidden ? 0 : 1,
+          transform: stripHidden ? "translateY(-100%)" : "translateY(0)",
+          transition:"transform .2s ease, opacity .2s ease, max-height .2s ease, padding .2s ease"
+        }}>
           {!isMobile && (
             <>
               <div>
@@ -1538,6 +1613,10 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                 <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 16px", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
                   <I n="wallet" s={12} c="#111"/> Withdraw
                 </button>
+                <button onClick={()=>{ setStripHidden(true); setShowStripToggle(true); }}
+                  style={{ padding:"8px 12px", background:"#fff", color:"#111", border:"1px solid #111", borderRadius:9, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
+                  Hide
+                </button>
               </div>
             </>
           )}
@@ -1553,11 +1632,11 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                 </span>
               </div>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                <span style={{ fontSize:10, fontWeight:700, color:"#555", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>{today}</span>
-                <span style={{ fontSize:10, fontWeight:700, color:"#111", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>KES {earn.toLocaleString()} earned</span>
+                <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#555", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>{today}</span>
+                <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#111", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>KES {earn.toLocaleString()} earned</span>
               </div>
               {tab !== "overview" && (
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                <div style={{ display:"grid", gridTemplateColumns: isTiny ? "1fr" : "1fr 1fr", gap:8 }}>
                   <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
                     Watch Now
                   </button>
@@ -1566,11 +1645,36 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   </button>
                 </div>
               )}
+              <div style={{ display:"flex", justifyContent:"flex-end" }}>
+                <button onClick={()=>{ setStripHidden(true); setShowStripToggle(true); }}
+                  style={{ padding:"6px 10px", background:"#fff", color:"#111", border:"1px solid #111", borderRadius:999, fontSize:10, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+                  Hide
+                </button>
+              </div>
             </div>
           )}
         </div>
 
-        <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
+        <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onScroll={onBodyScroll} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
+          {showStripToggle && (
+            <div style={{ position:"sticky", top:8, zIndex:30, display:"flex", justifyContent:"flex-end", pointerEvents:"none" }}>
+              <button onClick={()=>{ setStripHidden(false); setShowStripToggle(false); }}
+                style={{
+                  pointerEvents:"auto",
+                  padding:"6px 10px",
+                  borderRadius:999,
+                  border:"1px solid #111",
+                  background:"#fff",
+                  color:"#111",
+                  fontSize:11,
+                  fontWeight:800,
+                  cursor:"pointer",
+                  boxShadow:"0 6px 16px rgba(0,0,0,0.12)"
+                }}>
+                Show Summary
+              </button>
+            </div>
+          )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile}/>}
@@ -2338,7 +2442,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
                 const isToday = i === new Date().getDay()-1;
                 return (
                   <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, zIndex:1 }}>
-                    {b.v===maxV && <div style={{ fontSize:10, fontWeight:800, color:"#111", background:"#111", color:"#fff", padding:"2px 6px", borderRadius:5, whiteSpace:"nowrap", fontSize:9 }}>KES {(b.v/1000).toFixed(1)}K</div>}
+                    {b.v===maxV && <div style={{ fontSize:9, fontWeight:800, color:"#fff", background:"#111", padding:"2px 6px", borderRadius:5, whiteSpace:"nowrap" }}>KES {(b.v/1000).toFixed(1)}K</div>}
                     <div style={{ width:"100%", height:h, background: isToday ? t.acc : `${t.acc}40`, borderRadius:"6px 6px 0 0", position:"relative", overflow:"hidden", transition:"height .8s ease" }}>
                       {isToday && <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:"rgba(255,255,255,0.35)", borderRadius:"6px 6px 0 0" }}/>}
                     </div>
@@ -3320,6 +3424,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   const [sideOpen, setSideOpen] = useState(true);
   const [tab, setTab] = useState("overview");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
+  const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
   const [userSearch, setUserSearch] = useState("");
   const [userFilter, setUserFilter] = useState("all");
   const [userCategory, setUserCategory] = useState("all");
@@ -3336,6 +3441,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const adminHeadingFont = "Sora, Geist, sans-serif";
+  const sideW = isMobile ? (isTiny ? 200 : 230) : 230;
   const adminName = profileRow?.name || (authUser?.email ? authUser.email.split("@")[0] : "Admin");
   const adminEmail = profileRow?.email || authUser?.email || "admin@edisonpay.co.ke";
 
@@ -3382,7 +3488,13 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   });
 
   useEffect(() => {
-    const fn = () => { const m = window.innerWidth<769; setIsMobile(m); if(m) setSideOpen(false); };
+    const fn = () => {
+      const w = window.innerWidth;
+      const m = w < 769;
+      setIsMobile(m);
+      setIsTiny(w < 380);
+      if (m) setSideOpen(false);
+    };
     window.addEventListener("resize", fn); fn();
     return () => window.removeEventListener("resize", fn);
   }, []);
@@ -3459,7 +3571,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
     background:"linear-gradient(180deg,#0D1117 0%, #0A0E15 100%)",
     borderRadius:14,
     padding:"20px 22px",
-    border:"1px solid #1A2234",
+    border:"1px solid rgba(255,255,255,0.12)",
     boxShadow:"0 12px 28px rgba(0,0,0,0.35)"
   };
 
@@ -3472,7 +3584,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
       )}
 
       {/* ── SIDEBAR ── */}
-      <aside style={{ width:sideOpen?230:0, minWidth:sideOpen?230:0, background:"#060810", borderRight:"1px solid #131A26", transition:"all .28s cubic-bezier(.4,0,.2,1)", overflow:"hidden", display:"flex", flexDirection:"column", position:isMobile?"fixed":"relative", height:"calc(100vh - 44px)", zIndex:200, boxShadow:isMobile&&sideOpen?"6px 0 32px rgba(0,0,0,0.5)":"none" }}>
+      <aside style={{ width:sideOpen?sideW:0, minWidth:sideOpen?sideW:0, background:"#060810", borderRight:"1px solid #131A26", transition:"all .28s cubic-bezier(.4,0,.2,1)", overflow:"hidden", display:"flex", flexDirection:"column", position:isMobile?"fixed":"relative", height:"calc(100vh - 44px)", zIndex:200, boxShadow:isMobile&&sideOpen?"6px 0 32px rgba(0,0,0,0.5)":"none" }}>
 
         {/* Logo */}
         <div style={{ padding:"20px 18px 16px", borderBottom:"1px solid #131A26", display:"flex", alignItems:"center", gap:10 }}>
