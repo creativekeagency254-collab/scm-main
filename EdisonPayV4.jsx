@@ -878,6 +878,7 @@ function ClientDash({ t, go }) {
     phone: "0712 345 678",
     avatar: "",
     balance: null,
+    joinNumber: null,
   });
   const [draftProfile, setDraftProfile] = useState({
     id: null,
@@ -886,6 +887,7 @@ function ClientDash({ t, go }) {
     phone: "0712 345 678",
     avatar: "",
     balance: null,
+    joinNumber: null,
   });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
@@ -902,6 +904,12 @@ function ClientDash({ t, go }) {
   const profileShort = profileParts.length > 1 ? `${profileParts[0]} ${profileParts[1][0]}.` : profileName;
   const balanceVal = Number(profile.balance);
   const balance = Number.isFinite(balanceVal) ? balanceVal : earn;
+  const joinSeed = (profile.email || profile.name || "EP").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  const joinNumberVal = Number(profile.joinNumber);
+  const joinNumber = Number.isFinite(joinNumberVal)
+    ? joinNumberVal
+    : (Number.isFinite(Number(profile.id)) ? Number(profile.id) : 1000 + (joinSeed % 9000));
+  const joinLabel = Number.isFinite(joinNumber) ? String(joinNumber).padStart(4, "0") : "0000";
   const nextTier = TIERS[t.id];
   const upgradeNeed = nextTier ? Math.max(nextTier.deposit - balance, 0) : 0;
   const canUpgrade = !!nextTier && balance >= nextTier.deposit;
@@ -997,6 +1005,8 @@ function ClientDash({ t, go }) {
         const p = profileRows[0];
         const rawBal = Number(p.balance ?? p.earnings ?? p.wallet_balance ?? p.available_balance);
         const bal = Number.isFinite(rawBal) ? rawBal : null;
+        const rawJoin = Number(p.join_number ?? p.join_no ?? p.joining_number ?? p.join_count);
+        const joinNum = Number.isFinite(rawJoin) ? rawJoin : null;
         setProfile(prev => ({
           ...prev,
           id: p.id ?? p.user_id ?? prev.id,
@@ -1005,6 +1015,7 @@ function ClientDash({ t, go }) {
           phone: p.phone ?? prev.phone,
           avatar: p.avatar_url ?? p.avatar ?? prev.avatar,
           balance: bal ?? prev.balance,
+          joinNumber: joinNum ?? prev.joinNumber,
         }));
       }
     })();
@@ -1048,6 +1059,9 @@ function ClientDash({ t, go }) {
     if (profileSaving) return;
     setProfileSaving(true);
     setProfileMsg("");
+    const draftJoinRaw = draftProfile.joinNumber;
+    const draftJoinVal = draftJoinRaw === null || draftJoinRaw === "" || typeof draftJoinRaw === "undefined" ? null : Number(draftJoinRaw);
+    const joinNumberClean = Number.isFinite(draftJoinVal) ? draftJoinVal : profile.joinNumber;
     const cleaned = {
       id: draftProfile.id ?? profile.id ?? null,
       name: (draftProfile.name || "").trim() || profile.name,
@@ -1055,6 +1069,7 @@ function ClientDash({ t, go }) {
       phone: (draftProfile.phone || "").trim() || profile.phone,
       avatar: (draftProfile.avatar || "").trim(),
       balance: Number.isFinite(draftBalance) ? draftBalance : profile.balance,
+      joinNumber: joinNumberClean,
     };
     setProfile(prev => ({
       ...prev,
@@ -1064,6 +1079,7 @@ function ClientDash({ t, go }) {
       phone: cleaned.phone,
       avatar: cleaned.avatar,
       balance: Number.isFinite(cleaned.balance) ? cleaned.balance : prev.balance,
+      joinNumber: Number.isFinite(Number(cleaned.joinNumber)) ? cleaned.joinNumber : prev.joinNumber,
     }));
     if (supabase) {
       const payload = {
@@ -1073,9 +1089,11 @@ function ClientDash({ t, go }) {
         phone: cleaned.phone,
         avatar_url: cleaned.avatar || null,
         balance: Number.isFinite(cleaned.balance) ? cleaned.balance : null,
+        join_number: Number.isFinite(Number(cleaned.joinNumber)) ? cleaned.joinNumber : null,
         updated_at: new Date().toISOString(),
       };
       if (payload.id == null) delete payload.id;
+      if (!Number.isFinite(Number(payload.join_number))) delete payload.join_number;
       try {
         const { error } = await supabase.from("client_profile").upsert(payload);
         setProfileMsg(error ? "Saved locally - sync failed." : "Profile updated.");
@@ -1455,7 +1473,7 @@ function ClientDash({ t, go }) {
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinLabel={joinLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile}/>}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined}/>}
@@ -1543,6 +1561,10 @@ function ClientDash({ t, go }) {
                       {nextTier ? `Need KES ${upgradeNeed.toLocaleString()}` : "You're at the top"}
                     </div>
                   </div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 10px", borderRadius:10, border:"1px solid #E5E7EB", background:"#F8FAFC" }}>
+                  <span style={{ fontSize:10, fontWeight:800, color:"#94A3B8", letterSpacing:"0.08em" }}>JOINING NO.</span>
+                  <span style={{ fontSize:12, fontWeight:900, color:"#111" }}>{joinLabel}</span>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                   <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Wallet Balance (KES)</label>
@@ -1688,7 +1710,7 @@ function ReferralMiniCard({ t, data, frame }) {
 }
 
 /* ── OVERVIEW ── */
-function OverviewContent({ t, earn, goal, pct, balance, setTab, isMobile, activityData, referralData }) {
+function OverviewContent({ t, earn, goal, pct, balance, joinLabel, setTab, isMobile, activityData, referralData }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const weekData = days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) }));
   const maxV = Math.max(...weekData.map(x=>x.v));
@@ -1815,7 +1837,7 @@ function OverviewContent({ t, earn, goal, pct, balance, setTab, isMobile, activi
   );
   const mobilePlan = (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <div className="ep-frame-light" style={{ background:"#111", borderRadius:16, padding:"16px 18px" }}>
+      <div className="ep-frame-light" style={{ background:"#111", borderRadius:16, padding:"16px 18px", border:"1px solid #1F2937", boxShadow:"0 8px 24px rgba(0,0,0,0.18)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
             <div style={{ fontSize:13, fontWeight:900, color:"#fff" }}>Plan & Actions</div>
@@ -1828,7 +1850,9 @@ function OverviewContent({ t, earn, goal, pct, balance, setTab, isMobile, activi
         <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden" }}>
           <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
           <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.08em", marginBottom:10 }}>**** **** {t.deposit.toString().slice(0,3)} {t.id.toString().padStart(4,"0")}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.08em", marginBottom:10 }}>
+            JOINING NO. {joinLabel}
+          </div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>3× Goal<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {goal.toLocaleString()}</span></div>
@@ -3282,7 +3306,13 @@ function AdminDash({ go }) {
     return <span style={{ fontSize:10,fontWeight:800,color:tc,padding:"2px 7px",background:`${tc}18`,borderRadius:50,border:`1px solid ${tc}33`,display:"inline-block",whiteSpace:"nowrap" }}>{name}</span>;
   };
 
-  const CARD = {background:"#0D1117",borderRadius:14,padding:"20px 22px",border:"1px solid #1A2234"};
+  const CARD = {
+    background:"linear-gradient(180deg,#0D1117 0%, #0A0E15 100%)",
+    borderRadius:14,
+    padding:"20px 22px",
+    border:"1px solid #1A2234",
+    boxShadow:"0 12px 28px rgba(0,0,0,0.35)"
+  };
 
   return (
     <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#080A0F", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#F1F5F9" }}>
