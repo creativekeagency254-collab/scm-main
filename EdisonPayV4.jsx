@@ -94,13 +94,49 @@ const GlobalStyles = () => {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
+const SUPABASE_ENABLED = !!supabase;
 
-async function fetchTable(table) {
+async function fetchTable(table, opts = {}) {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase.from(table).select("*").limit(200);
+    const { userId, limit = 200, orderBy, ascending = false } = opts || {};
+    let q = supabase.from(table).select("*");
+    if (userId) q = q.eq("user_id", userId);
+    if (orderBy) q = q.order(orderBy, { ascending });
+    if (limit) q = q.limit(limit);
+    const { data, error } = await q;
     if (error) return null;
     return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function loadProfileRow(userId) {
+  if (!supabase || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error) return null;
+    return data || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function upsertProfileRow(payload) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .upsert(payload, { onConflict: "id" })
+      .select()
+      .single();
+    if (error) return null;
+    return data || null;
   } catch (e) {
     return null;
   }
@@ -743,15 +779,51 @@ function Auth({ type, go, from }) {
   const [f, setF] = useState({ name: "", email: "", password: "", confirm: "", ref: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
   const set = k => v => { setF(p => ({ ...p, [k]: v })); setErr(""); };
 
-  const submit = () => {
+  const submit = async () => {
     setErr("");
+    setInfo("");
     if (!f.email) { setErr("Email is required."); return; }
     if (!f.password) { setErr("Password is required."); return; }
     if (!isLogin && f.password !== f.confirm) { setErr("Passwords don't match."); return; }
+    if (!supabase) {
+      setLoading(true);
+      setTimeout(() => { setLoading(false); go(from || "dashboard"); }, 1100);
+      return;
+    }
     setLoading(true);
-    setTimeout(() => { setLoading(false); go(from || "dashboard"); }, 1100);
+    if (isLogin) {
+      const { error } = await supabase.auth.signInWithPassword({ email: f.email, password: f.password });
+      if (error) { setErr(error.message); setLoading(false); return; }
+      setLoading(false);
+      go(from || "dashboard");
+      return;
+    }
+    const { data, error } = await supabase.auth.signUp({
+      email: f.email,
+      password: f.password,
+      options: { data: { full_name: f.name || "", ref_code: f.ref || "" } }
+    });
+    if (error) { setErr(error.message); setLoading(false); return; }
+    setLoading(false);
+    if (data?.session) {
+      go(from || "dashboard");
+    } else {
+      setInfo("Check your email to confirm your account, then sign in.");
+    }
+  };
+  const handleGoogle = async () => {
+    setErr("");
+    setInfo("");
+    if (!supabase) { setErr("Supabase is not configured."); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin }
+    });
+    if (error) { setErr(error.message); setLoading(false); }
   };
 
   return (
@@ -815,6 +887,25 @@ function Auth({ type, go, from }) {
               <I n="xmark" s={14} c="#DC2626" /> {err}
             </div>
           )}
+          {info && (
+            <div style={{ padding: "10px 14px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 9, fontSize: 13, color: "#1D4ED8", fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+              <I n="check" s={14} c="#1D4ED8" /> {info}
+            </div>
+          )}
+
+          {SUPABASE_ENABLED && (
+            <>
+              <button onClick={handleGoogle} disabled={loading}
+                style={{ width: "100%", padding: "12px", background: "#fff", color: "#111", border: "1.5px solid #E5E7EB", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                Continue with Google
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <div style={{ height: 1, background: "#EEE", flex: 1 }} />
+                <span style={{ fontSize: 11, color: "#999", fontWeight: 600 }}>OR</span>
+                <div style={{ height: 1, background: "#EEE", flex: 1 }} />
+              </div>
+            </>
+          )}
 
           <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "14px", background: loading ? "#888" : "#111", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 20, letterSpacing: "-0.01em", transition: "all .15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {loading ? (
@@ -864,13 +955,14 @@ const CLIENT_NAV = [
   { id: "withdraw",  label: "Withdraw",  ic: "wallet" },
 ];
 
-function ClientDash({ t, go }) {
+function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState("overview");
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
+  const authId = authUser?.id || null;
   const [profile, setProfile] = useState({
     id: null,
     name: "Alex Johnson",
@@ -910,9 +1002,9 @@ function ClientDash({ t, go }) {
     ? joinNumberVal
     : (Number.isFinite(Number(profile.id)) ? Number(profile.id) : 1000 + (joinSeed % 9000));
   const joinLabel = Number.isFinite(joinNumber) ? String(joinNumber).padStart(4, "0") : "0000";
+  const joinCardLabel = `**** **** 500 ${joinLabel}`;
   const nextTier = TIERS[t.id];
-  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - balance, 0) : 0;
-  const canUpgrade = !!nextTier && balance >= nextTier.deposit;
+  const canUpgrade = !!nextTier;
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
   const canWithdraw = ["Tuesday","Wednesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
   const SIDEBAR_W = 260;
@@ -920,6 +1012,33 @@ function ClientDash({ t, go }) {
   const headingFont = "Sora, Geist, sans-serif";
   const pagePad = isMobile ? "14px 16px 96px" : "26px 34px 48px";
   const headerPad = isMobile ? "12px 16px 0" : "18px 28px 0";
+  const upgradeBtnActive = {
+    background:"linear-gradient(180deg,#FDE047 0%, #F59E0B 45%, #F97316 100%)",
+    border:"2px solid #111",
+    color:"#111",
+    boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.65)"
+  };
+  const upgradeBtnDisabled = {
+    background:"#E5E7EB",
+    border:"2px solid #9CA3AF",
+    color:"#6B7280",
+    boxShadow:"none"
+  };
+
+  useEffect(() => {
+    if (!profileRow) return;
+    const next = {
+      id: profileRow.id ?? profile.id,
+      name: profileRow.name ?? profile.name,
+      email: profileRow.email ?? profile.email,
+      phone: profileRow.phone ?? profile.phone,
+      avatar: profileRow.avatar_url ?? profileRow.avatar ?? profile.avatar,
+      balance: profileRow.balance ?? profile.balance,
+      joinNumber: profileRow.join_number ?? profileRow.joinNumber ?? profile.joinNumber,
+    };
+    setProfile(prev => ({ ...prev, ...next }));
+    setDraftProfile(prev => ({ ...prev, ...next }));
+  }, [profileRow?.id]);
 
   useEffect(() => {
     const fn = () => { const m = window.innerWidth < 769; setIsMobile(m); if (m) setOpen(false); };
@@ -990,10 +1109,10 @@ function ClientDash({ t, go }) {
       earnings: Number(r.earnings || r.total_earnings || 0),
     });
     (async () => {
-      const [txRows, refRows, profileRows] = await Promise.all([
-        fetchTable("client_transactions"),
-        fetchTable("client_referrals"),
-        fetchTable("client_profile"),
+      if (SUPABASE_ENABLED && !authId) return;
+      const [txRows, refRows] = await Promise.all([
+        fetchTable("client_transactions", { userId: authId, orderBy: "created_at" }),
+        fetchTable("client_referrals", { userId: authId, orderBy: "created_at" }),
       ]);
       if (ignore) return;
       if (Array.isArray(txRows) && txRows.length) setClientTx(txRows.map(normalizeTx));
@@ -1001,26 +1120,9 @@ function ClientDash({ t, go }) {
         setClientRefs(refRows.map(normalizeRef));
         setClientRefTable(refRows.map(normalizeRefRow));
       }
-      if (Array.isArray(profileRows) && profileRows.length) {
-        const p = profileRows[0];
-        const rawBal = Number(p.balance ?? p.earnings ?? p.wallet_balance ?? p.available_balance);
-        const bal = Number.isFinite(rawBal) ? rawBal : null;
-        const rawJoin = Number(p.join_number ?? p.join_no ?? p.joining_number ?? p.join_count);
-        const joinNum = Number.isFinite(rawJoin) ? rawJoin : null;
-        setProfile(prev => ({
-          ...prev,
-          id: p.id ?? p.user_id ?? prev.id,
-          name: p.name ?? p.full_name ?? prev.name,
-          email: p.email ?? prev.email,
-          phone: p.phone ?? prev.phone,
-          avatar: p.avatar_url ?? p.avatar ?? prev.avatar,
-          balance: bal ?? prev.balance,
-          joinNumber: joinNum ?? prev.joinNumber,
-        }));
-      }
     })();
     return () => { ignore = true; };
-  }, [t.acc, t.deposit]);
+  }, [t.acc, t.deposit, authId]);
 
   const navItems = [
     { id:"overview",  label:"Overview",  ic:"grid"   },
@@ -1063,7 +1165,7 @@ function ClientDash({ t, go }) {
     const draftJoinVal = draftJoinRaw === null || draftJoinRaw === "" || typeof draftJoinRaw === "undefined" ? null : Number(draftJoinRaw);
     const joinNumberClean = Number.isFinite(draftJoinVal) ? draftJoinVal : profile.joinNumber;
     const cleaned = {
-      id: draftProfile.id ?? profile.id ?? null,
+      id: authId ?? draftProfile.id ?? profile.id ?? null,
       name: (draftProfile.name || "").trim() || profile.name,
       email: (draftProfile.email || "").trim() || profile.email,
       phone: (draftProfile.phone || "").trim() || profile.phone,
@@ -1095,7 +1197,7 @@ function ClientDash({ t, go }) {
       if (payload.id == null) delete payload.id;
       if (!Number.isFinite(Number(payload.join_number))) delete payload.join_number;
       try {
-        const { error } = await supabase.from("client_profile").upsert(payload);
+        const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
         setProfileMsg(error ? "Saved locally - sync failed." : "Profile updated.");
       } catch (e) {
         setProfileMsg("Saved locally - sync failed.");
@@ -1162,23 +1264,21 @@ function ClientDash({ t, go }) {
               style={{
                 margin:"8px 0 0",
                 padding:"10px 12px",
-                borderRadius:9,
-                border:`1.5px dashed ${t.mid}`,
+                borderRadius:10,
                 display:"flex",
                 alignItems:"center",
                 gap:9,
                 cursor: canUpgrade ? "pointer" : "not-allowed",
-                color: canUpgrade ? t.acc : "#A8A8A8",
-                fontWeight:700,
+                fontWeight:800,
                 fontSize:12,
-                background: canUpgrade ? `${t.acc}08` : "#F5F5F5",
-                opacity: canUpgrade ? 1 : 0.7
+                transition:"transform .12s, box-shadow .12s",
+                ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled)
               }}>
-              <I n="star" s={14} c={canUpgrade ? t.acc : "#A8A8A8"}/>
+              <I n="star" s={14} c={canUpgrade ? "#111" : "#6B7280"}/>
               <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2 }}>
                 <span>Upgrade to {nextTier?.name}</span>
-                <span style={{ fontSize:10, fontWeight:700, color: canUpgrade ? t.acc : "#A8A8A8" }}>
-                  {canUpgrade ? "Ready now" : `Top up KES ${upgradeNeed.toLocaleString()}`}
+                <span style={{ fontSize:10, fontWeight:800, color: canUpgrade ? "#111" : "#6B7280" }}>
+                  {nextTier ? "Upgrade anytime" : "Max tier"}
                 </span>
               </div>
             </button>
@@ -1235,7 +1335,7 @@ function ClientDash({ t, go }) {
         {/* Icon-only: logout at bottom */}
         {!open && (
           <div style={{ padding:"10px 0", display:"flex", justifyContent:"center", borderTop:"1px solid #F0F0F0" }}>
-            <button onClick={() => go("landing")} title="Logout" style={{ width:36, height:36, borderRadius:9, border:"none", background:"#FFF0F0", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <button onClick={() => (onSignOut ? onSignOut() : go("landing"))} title="Logout" style={{ width:36, height:36, borderRadius:9, border:"none", background:"#FFF0F0", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
               <I n="logout" s={15} c="#EF4444"/>
             </button>
           </div>
@@ -1273,26 +1373,24 @@ function ClientDash({ t, go }) {
             <button
               onClick={() => { if (canUpgrade) setTab("withdraw"); }}
               disabled={!canUpgrade}
-              title={nextTier ? (canUpgrade ? `Upgrade to ${nextTier.name}` : `Need KES ${upgradeNeed.toLocaleString()} more`) : "Max tier"}
+              title={nextTier ? `Upgrade to ${nextTier.name}` : "Max tier"}
               className="ep-upgrade-btn"
               style={{
                 padding:"7px 12px",
                 borderRadius:12,
-                border:"1px solid #E8E8E8",
-                background: canUpgrade ? "#111" : "#E5E7EB",
                 cursor: canUpgrade ? "pointer" : "not-allowed",
                 display:"flex",
                 alignItems:"center",
                 gap:6,
                 transition:"all .15s",
                 flexShrink:0,
-                boxShadow: canUpgrade ? "0 6px 18px rgba(0,0,0,0.18)" : "none"
+                ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled)
               }}>
               <span className="ep-upgrade-arrow" style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <I n="trendUp" s={14} c={canUpgrade ? "#fff" : "#9CA3AF"}/>
+                <I n="trendUp" s={14} c={canUpgrade ? "#111" : "#6B7280"}/>
               </span>
-              <span style={{ fontSize:11, fontWeight:800, color: canUpgrade ? "#fff" : "#9CA3AF", letterSpacing:"0.02em" }}>
-                {canUpgrade ? "Upgrade" : "Locked"}
+              <span style={{ fontSize:11, fontWeight:900, color: canUpgrade ? "#111" : "#6B7280", letterSpacing:"0.02em" }}>
+                {nextTier ? "Upgrade" : "Max Tier"}
               </span>
             </button>
           )}
@@ -1410,7 +1508,7 @@ function ClientDash({ t, go }) {
                   </div>
                 ))}
                 <div style={{ borderTop:"1px solid #F5F5F5", marginTop:4, paddingTop:4 }}>
-                  <div onClick={()=>go("landing")} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 12px", borderRadius:8, cursor:"pointer", fontSize:13, color:"#EF4444", fontWeight:700 }}
+                  <div onClick={()=> (onSignOut ? onSignOut() : go("landing"))} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 12px", borderRadius:8, cursor:"pointer", fontSize:13, color:"#EF4444", fontWeight:700 }}
                     onMouseEnter={e=>e.currentTarget.style.background="#FFF0F0"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <I n="logout" s={14} c="#EF4444"/> Sign Out
                   </div>
@@ -1473,7 +1571,7 @@ function ClientDash({ t, go }) {
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinLabel={joinLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile}/>}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined}/>}
@@ -1558,13 +1656,30 @@ function ClientDash({ t, go }) {
                     <div style={{ fontSize:10, fontWeight:800, color:"#92400E", letterSpacing:"0.08em" }}>NEXT TIER</div>
                     <div style={{ fontSize:14, fontWeight:900, color:"#111", marginTop:6 }}>{nextTier ? nextTier.name : "Max Tier"}</div>
                     <div style={{ fontSize:11, color:"#92400E", marginTop:4 }}>
-                      {nextTier ? `Need KES ${upgradeNeed.toLocaleString()}` : "You're at the top"}
+                      {nextTier ? "Upgrade anytime" : "You're at the top"}
                     </div>
                   </div>
                 </div>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 10px", borderRadius:10, border:"1px solid #E5E7EB", background:"#F8FAFC" }}>
-                  <span style={{ fontSize:10, fontWeight:800, color:"#94A3B8", letterSpacing:"0.08em" }}>JOINING NO.</span>
-                  <span style={{ fontSize:12, fontWeight:900, color:"#111" }}>{joinLabel}</span>
+                <div style={{
+                  position:"relative",
+                  padding:"12px 14px",
+                  borderRadius:12,
+                  background:"linear-gradient(135deg,#FFFFFF 0%, #F8FAFF 50%, #EEF2FF 100%)",
+                  border:"1px solid rgba(15,23,42,0.08)",
+                  boxShadow:"0 8px 18px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.9), 0 0 0 1px rgba(15,23,42,0.06)",
+                  display:"flex",
+                  flexDirection:"column",
+                  gap:8,
+                  overflow:"hidden"
+                }}>
+                  <div style={{ position:"absolute", top:-26, right:-24, width:120, height:120, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), rgba(255,255,255,0))", opacity:0.75, pointerEvents:"none" }}/>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", position:"relative" }}>
+                    <span style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.18em" }}>JOINING NO.</span>
+                    <div style={{ width:34, height:22, borderRadius:6, background:"linear-gradient(135deg,#FDE68A 0%, #F59E0B 100%)", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(245,158,11,0.35)", border:"1px solid rgba(245,158,11,0.35)" }}/>
+                  </div>
+                  <span style={{ fontSize:15, fontWeight:800, color:"#0F172A", letterSpacing:"0.18em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace", textShadow:"0 1px 0 rgba(255,255,255,0.7)", whiteSpace:"nowrap" }}>
+                    {joinCardLabel}
+                  </span>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                   <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Wallet Balance (KES)</label>
@@ -1572,12 +1687,12 @@ function ClientDash({ t, go }) {
                     style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
                   <div style={{ fontSize:10, color:"#9CA3AF" }}>Used to calculate upgrade eligibility.</div>
                 </div>
-                <div style={{ padding:"10px 12px", borderRadius:10, background: canUpgrade ? "#ECFDF5" : "#FFF7ED", border:`1px solid ${canUpgrade ? "#A7F3D0" : "#F3E2C7"}`, display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:26, height:26, borderRadius:8, background: canUpgrade ? "#059669" : "#F59E0B", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <I n={canUpgrade ? "check" : "lock"} s={12} c="#fff"/>
+                <div style={{ padding:"10px 12px", borderRadius:10, background: nextTier ? "#ECFDF5" : "#F8FAFC", border:`1px solid ${nextTier ? "#A7F3D0" : "#E2E8F0"}`, display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:26, height:26, borderRadius:8, background: nextTier ? "#059669" : "#111", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <I n={nextTier ? "check" : "star"} s={12} c="#fff"/>
                   </div>
-                  <div style={{ fontSize:11, fontWeight:700, color: canUpgrade ? "#065F46" : "#92400E" }}>
-                    {canUpgrade ? "Upgrade ready - you can move to the next tier now." : `Top up KES ${upgradeNeed.toLocaleString()} to unlock the next tier.`}
+                  <div style={{ fontSize:11, fontWeight:700, color: nextTier ? "#065F46" : "#475569" }}>
+                    {nextTier ? "Upgrade available — move to the next tier anytime." : "You're at the top tier."}
                   </div>
                 </div>
               </div>
@@ -1710,7 +1825,7 @@ function ReferralMiniCard({ t, data, frame }) {
 }
 
 /* ── OVERVIEW ── */
-function OverviewContent({ t, earn, goal, pct, balance, joinLabel, setTab, isMobile, activityData, referralData }) {
+function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const weekData = days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) }));
   const maxV = Math.max(...weekData.map(x=>x.v));
@@ -1768,8 +1883,19 @@ function OverviewContent({ t, earn, goal, pct, balance, joinLabel, setTab, isMob
 
   const [actionsOpen, setActionsOpen] = useState(false);
   const nextTier = TIERS[t.id]; // next in list (t.id is 1-based)
-  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - balance, 0) : 0;
-  const canUpgrade = !!nextTier && balance >= nextTier.deposit;
+  const canUpgrade = !!nextTier;
+  const upgradeBtnActive = {
+    background:"linear-gradient(180deg,#FDE047 0%, #F59E0B 45%, #F97316 100%)",
+    border:"2px solid #111",
+    color:"#111",
+    boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.65)"
+  };
+  const upgradeBtnDisabled = {
+    background:"#E5E7EB",
+    border:"2px solid #9CA3AF",
+    color:"#6B7280",
+    boxShadow:"none"
+  };
   const mobileSummary = (
     <div className="ep-frame-dark" style={{ background:"linear-gradient(135deg,#FFF7ED 0%,#FFEBD1 60%,#FFF 100%)", borderRadius:18, padding:"16px 16px 14px", border:"1px solid #F3E2C7" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
@@ -1802,12 +1928,12 @@ function OverviewContent({ t, earn, goal, pct, balance, joinLabel, setTab, isMob
           <div style={{ fontSize:9, color:"rgba(255,255,255,0.55)", fontWeight:800, letterSpacing:"0.12em" }}>NEXT TIER</div>
           <div style={{ fontSize:14, fontWeight:900, color:"#fff", letterSpacing:"-0.02em" }}>{nextTier ? nextTier.name : "Max Tier"}</div>
           <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", marginTop:2 }}>
-            {nextTier ? (canUpgrade ? "Ready to upgrade" : `Top up KES ${upgradeNeed.toLocaleString()} to unlock`) : "You're already at the top"}
+            {nextTier ? "Upgrade available anytime" : "You're already at the top"}
           </div>
         </div>
         <button onClick={()=>{ if (canUpgrade) setTab("withdraw"); }} disabled={!canUpgrade}
-          style={{ padding:"8px 12px", background: canUpgrade ? "linear-gradient(135deg,#F59E0B,#F97316)" : "#374151", color: canUpgrade ? "#111" : "#9CA3AF", border:"none", borderRadius:10, fontSize:11, fontWeight:900, cursor: canUpgrade ? "pointer" : "not-allowed", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
-          {canUpgrade ? "Upgrade" : "Locked"}
+          style={{ padding:"8px 12px", borderRadius:10, fontSize:11, fontWeight:900, cursor: canUpgrade ? "pointer" : "not-allowed", fontFamily:"IBM Plex Sans, Geist, sans-serif", ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled) }}>
+          {nextTier ? "Upgrade" : "Max Tier"}
         </button>
       </div>
 
@@ -1850,8 +1976,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinLabel, setTab, isMob
         <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden" }}>
           <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
           <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.08em", marginBottom:10 }}>
-            JOINING NO. {joinLabel}
+          <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:4 }}>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.18em" }}>JOINING NO.</span>
+            <span style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,0.95)", letterSpacing:"0.16em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+              {joinCardLabel}
+            </span>
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
@@ -3187,12 +3316,13 @@ const ADMIN_TXS = [
   { id:"T012", user:"Alice Mwangi",    type:"Earning",     amount:2400,   method:"Videos",      date:"Feb 26, 2025", status:"Paid" },
 ];
 
-function AdminDash({ go }) {
+function AdminDash({ go, authUser, profileRow, onSignOut }) {
   const [sideOpen, setSideOpen] = useState(true);
   const [tab, setTab] = useState("overview");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [userSearch, setUserSearch] = useState("");
   const [userFilter, setUserFilter] = useState("all");
+  const [userCategory, setUserCategory] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
   const [wdFilter, setWdFilter] = useState("all");
   const [users, setUsers] = useState(ADMIN_USERS);
@@ -3206,6 +3336,8 @@ function AdminDash({ go }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const adminHeadingFont = "Sora, Geist, sans-serif";
+  const adminName = profileRow?.name || (authUser?.email ? authUser.email.split("@")[0] : "Admin");
+  const adminEmail = profileRow?.email || authUser?.email || "admin@edisonpay.co.ke";
 
   const fmtDate = (d) => {
     if (!d) return "—";
@@ -3226,6 +3358,8 @@ function AdminDash({ go }) {
     joined: fmtDate(u.joined || u.created_at || u.date),
     earn: num(u.earn || u.earnings || u.total_earnings),
     phone: u.phone || u.msisdn || "—",
+    role: u.role || u.user_role || "client",
+    category: u.category || u.segment || u.group || "Client",
   });
   const normalizeWithdrawal = (w, i) => ({
     id: w.id || w.withdrawal_id || `W${String(i+1).padStart(3,"0")}`,
@@ -3258,9 +3392,9 @@ function AdminDash({ go }) {
     let ignore = false;
     (async () => {
       const [u, w, t] = await Promise.all([
-        fetchTable("users"),
-        fetchTable("withdrawals"),
-        fetchTable("transactions"),
+        fetchTable("profiles", { orderBy: "created_at" }),
+        fetchTable("withdrawals", { orderBy: "created_at" }),
+        fetchTable("transactions", { orderBy: "created_at" }),
       ]);
       if (ignore) return;
       if (Array.isArray(u) && u.length) setUsers(u.map(normalizeUser));
@@ -3280,15 +3414,26 @@ function AdminDash({ go }) {
 
   const tiers = [{n:"Regular",c:"#0066FF",count:423,pct:34},{n:"Standard",c:"#E8820C",count:287,pct:23},{n:"Deluxe",c:"#059669",count:312,pct:25},{n:"Executive",c:"#7C3AED",count:156,pct:12.5},{n:"Exec Pro",c:"#DC2626",count:69,pct:5.5}];
 
-  const approveWd = (id) => setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status:"Approved"} : w));
-  const rejectWd  = (id) => setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status:"Rejected"} : w));
-  const payWd     = (id) => setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status:"Paid"} : w));
+  const updateWithdrawal = async (id, status) => {
+    setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status} : w));
+    if (!supabase) return;
+    try {
+      await supabase.from("withdrawals").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
+    } catch (e) {
+      /* no-op */
+    }
+  };
+  const approveWd = (id) => updateWithdrawal(id, "Approved");
+  const rejectWd  = (id) => updateWithdrawal(id, "Rejected");
+  const payWd     = (id) => updateWithdrawal(id, "Paid");
 
   const filteredUsers = users.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase());
     const matchFilter = userFilter==="all" || u.status.toLowerCase()===userFilter;
-    return matchSearch && matchFilter;
+    const matchCategory = userCategory==="all" || String(u.category || "").toLowerCase()===userCategory;
+    return matchSearch && matchFilter && matchCategory;
   });
+  const categoryOptions = ["all", ...Array.from(new Set(users.map(u => String(u.category || "Client").toLowerCase())))];
 
   const filteredWd = wdFilter==="all" ? withdrawals : withdrawals.filter(w=>w.status.toLowerCase()===wdFilter);
   const filteredTx = txFilter==="all" ? txs : txs.filter(t=>t.type.toLowerCase()===txFilter||t.status.toLowerCase()===txFilter);
@@ -3304,6 +3449,10 @@ function AdminDash({ go }) {
   const tierDot = (name) => {
     const tc = TIERS.find(t=>name.includes(t.name.split(" ")[0]))?.acc||"#888";
     return <span style={{ fontSize:10,fontWeight:800,color:tc,padding:"2px 7px",background:`${tc}18`,borderRadius:50,border:`1px solid ${tc}33`,display:"inline-block",whiteSpace:"nowrap" }}>{name}</span>;
+  };
+  const categoryTag = (cat) => {
+    const label = cat || "Client";
+    return <span style={{ fontSize:10,fontWeight:800,color:"#94A3B8",padding:"2px 7px",background:"#0F172A",borderRadius:50,border:"1px solid #1F2937",display:"inline-block",whiteSpace:"nowrap",textTransform:"capitalize" }}>{label}</span>;
   };
 
   const CARD = {
@@ -3358,11 +3507,11 @@ function AdminDash({ go }) {
               <I n="user" s={13} c="#fff"/>
             </div>
             <div style={{ flex:1,minWidth:0 }}>
-              <div style={{ fontSize:12,fontWeight:700,color:"#F1F5F9" }}>Admin</div>
-              <div style={{ fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>admin@edisonpay.co.ke</div>
+              <div style={{ fontSize:12,fontWeight:700,color:"#F1F5F9" }}>{adminName}</div>
+              <div style={{ fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{adminEmail}</div>
             </div>
           </div>
-          <div onClick={()=>go("landing")} style={{ display:"flex",alignItems:"center",gap:9,padding:"9px 12px",fontSize:13,color:"#475569",cursor:"pointer",borderRadius:9,transition:"background .12s" }}
+          <div onClick={()=> (onSignOut ? onSignOut() : go("landing"))} style={{ display:"flex",alignItems:"center",gap:9,padding:"9px 12px",fontSize:13,color:"#475569",cursor:"pointer",borderRadius:9,transition:"background .12s" }}
             onMouseEnter={e=>e.currentTarget.style.background="#0D1117"}
             onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
             <I n="logout" s={14} c="#475569"/> Exit Admin
@@ -3539,6 +3688,11 @@ function AdminDash({ go }) {
                     <button key={f} onClick={()=>setUserFilter(f)} style={{ padding:"6px 14px",borderRadius:7,border:"none",background:userFilter===f?"#131A26":"transparent",color:userFilter===f?"#F1F5F9":"#475569",fontSize:12,fontWeight:userFilter===f?700:400,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
                   ))}
                 </div>
+                <div style={{ display:"flex",gap:4,background:"#0D1117",border:"1px solid #1E293B",borderRadius:9,padding:3 }}>
+                  {categoryOptions.map(c=>(
+                    <button key={c} onClick={()=>setUserCategory(c)} style={{ padding:"6px 14px",borderRadius:7,border:"none",background:userCategory===c?"#131A26":"transparent",color:userCategory===c?"#F1F5F9":"#475569",fontSize:12,fontWeight:userCategory===c?700:400,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{c}</button>
+                  ))}
+                </div>
                 <div style={{ fontSize:12,color:"#475569" }}>{filteredUsers.length} users</div>
               </div>
 
@@ -3548,7 +3702,7 @@ function AdminDash({ go }) {
                   <table style={{ width:"100%",borderCollapse:"collapse" }}>
                     <thead>
                       <tr style={{ borderBottom:"1px solid #1A2234" }}>
-                        {["User","Tier","Deposit","Earnings","Status","Joined","Actions"].map(h=>(
+                        {["User","Tier","Category","Deposit","Earnings","Status","Joined","Actions"].map(h=>(
                           <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:800,color:"#334155",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
                         ))}
                       </tr>
@@ -3570,6 +3724,7 @@ function AdminDash({ go }) {
                               </div>
                             </td>
                             <td style={{ padding:"12px 14px" }}>{tierDot(u.tier)}</td>
+                            <td style={{ padding:"12px 14px" }}>{categoryTag(u.category)}</td>
                             <td style={{ padding:"12px 14px",fontSize:12,color:"#64748B",fontWeight:600,whiteSpace:"nowrap" }}>KES {u.deposit.toLocaleString()}</td>
                             <td style={{ padding:"12px 14px",fontSize:12,fontWeight:700,color:"#059669",whiteSpace:"nowrap" }}>KES {u.earn.toLocaleString()}</td>
                             <td style={{ padding:"12px 14px" }}>{statusBadge(u.status)}</td>
@@ -3842,8 +3997,70 @@ export default function App() {
   const [prevPage, setPrevPage] = useState("landing");
   const [tier, setTier] = useState(0);
   const t = TIERS[tier];
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(!SUPABASE_ENABLED);
+  const [profileRow, setProfileRow] = useState(null);
 
   const go = (p) => { setPrevPage(page); setPage(p); };
+  const authUser = session?.user || null;
+  const role = profileRow?.role || "client";
+  const isAdmin = role === "admin";
+  const showDevNav = !SUPABASE_ENABLED || import.meta.env.DEV;
+  const profileReady = !SUPABASE_ENABLED || !authUser || profileRow !== null;
+
+  useEffect(() => {
+    if (!SUPABASE_ENABLED) return;
+    let ignore = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (ignore) return;
+      setSession(data?.session ?? null);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+    });
+    return () => { ignore = true; subscription?.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!SUPABASE_ENABLED) return;
+    if (!authUser?.id) { setProfileRow(null); return; }
+    let ignore = false;
+    (async () => {
+      const existing = await loadProfileRow(authUser.id);
+      if (ignore) return;
+      if (existing) { setProfileRow(existing); return; }
+      const fallbackName =
+        authUser.user_metadata?.full_name ||
+        authUser.user_metadata?.name ||
+        (authUser.email ? authUser.email.split("@")[0] : "Account");
+      const created = await upsertProfileRow({
+        id: authUser.id,
+        name: fallbackName,
+        email: authUser.email || null,
+        phone: null,
+        avatar_url: null,
+        balance: null,
+        join_number: null,
+        role: "client",
+        category: "Client",
+        status: "Active",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (!ignore) setProfileRow(created || null);
+    })();
+    return () => { ignore = true; };
+  }, [authUser?.id]);
+
+  const handleSignOut = async () => {
+    if (supabase) await supabase.auth.signOut();
+    setPage("landing");
+  };
+
+  const route = !SUPABASE_ENABLED
+    ? page
+    : (authUser ? (isAdmin ? "admin" : "dashboard") : (page==="login" || page==="signup" ? page : "landing"));
 
   return (
     <ErrorBoundary>
@@ -3851,31 +4068,42 @@ export default function App() {
       <Fonts />
 
       {/* ── PAGE SWITCHER — sticky top bar ── */}
-      <div style={{ position:"sticky",top:0,zIndex:9999,background:"#0A0A0A",display:"flex",alignItems:"center",padding:"0 12px",height:44,gap:4,borderBottom:"1px solid #1A1A1A",flexShrink:0 }}>
-        <div style={{ display:"flex",alignItems:"center",gap:4,flex:1,flexWrap:"nowrap",overflowX:"auto" }}>
-          {[["landing","Home","home"],["login","Login","lock"],["signup","Sign Up","user"],["dashboard","Dashboard","chart"],["admin","Admin","settings"]].map(([id,lbl,ic])=>(
-            <button key={id} onClick={()=>go(id)} style={{ padding:"5px 13px",borderRadius:50,border:"none",background:page===id?"#fff":"#1A1A1A",color:page===id?"#111":"#888",fontSize:11,fontWeight:page===id?800:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>
-              <I n={ic} s={11} c={page===id?"#111":"#888"}/>{lbl}
-            </button>
-          ))}
-          {page==="dashboard"&&(
-            <>
-              <div style={{ width:1,height:16,background:"#2A2A2A",margin:"0 4px",flexShrink:0 }}/>
-              <span style={{ fontSize:10,color:"#444",fontWeight:700,fontFamily:"Geist,sans-serif",flexShrink:0 }}>TIER:</span>
-              {TIERS.map((tr,i)=>(
-                <button key={i} onClick={()=>setTier(i)} style={{ padding:"4px 10px",borderRadius:50,border:`1px solid ${tier===i?tr.acc:"#2A2A2A"}`,background:tier===i?tr.acc+"22":"transparent",color:tier===i?tr.acc:"#555",fontSize:10,fontWeight:tier===i?800:500,cursor:"pointer",fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>{tr.name}</button>
-              ))}
-            </>
-          )}
+      {showDevNav && (
+        <div style={{ position:"sticky",top:0,zIndex:9999,background:"#0A0A0A",display:"flex",alignItems:"center",padding:"0 12px",height:44,gap:4,borderBottom:"1px solid #1A1A1A",flexShrink:0 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:4,flex:1,flexWrap:"nowrap",overflowX:"auto" }}>
+            {[["landing","Home","home"],["login","Login","lock"],["signup","Sign Up","user"],["dashboard","Dashboard","chart"],["admin","Admin","settings"]].map(([id,lbl,ic])=>(
+              <button key={id} onClick={()=>go(id)} style={{ padding:"5px 13px",borderRadius:50,border:"none",background:page===id?"#fff":"#1A1A1A",color:page===id?"#111":"#888",fontSize:11,fontWeight:page===id?800:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>
+                <I n={ic} s={11} c={page===id?"#111":"#888"}/>{lbl}
+              </button>
+            ))}
+            {page==="dashboard"&&(
+              <>
+                <div style={{ width:1,height:16,background:"#2A2A2A",margin:"0 4px",flexShrink:0 }}/>
+                <span style={{ fontSize:10,color:"#444",fontWeight:700,fontFamily:"Geist,sans-serif",flexShrink:0 }}>TIER:</span>
+                {TIERS.map((tr,i)=>(
+                  <button key={i} onClick={()=>setTier(i)} style={{ padding:"4px 10px",borderRadius:50,border:`1px solid ${tier===i?tr.acc:"#2A2A2A"}`,background:tier===i?tr.acc+"22":"transparent",color:tier===i?tr.acc:"#555",fontSize:10,fontWeight:tier===i?800:500,cursor:"pointer",fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>{tr.name}</button>
+                ))}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ height:"calc(100vh - 44px)",overflow:"hidden" }}>
-        {page==="landing"   && <div style={{ height:"100%",overflowY:"auto" }}><Landing  go={go}/></div>}
-        {page==="login"     && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="login"  go={go} from={prevPage==="landing"?"dashboard":prevPage}/></div>}
-        {page==="signup"    && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="signup" go={go} from={prevPage==="landing"?"dashboard":prevPage}/></div>}
-        {page==="dashboard" && <ClientDash t={t} go={go} key={tier}/>}
-        {page==="admin"     && <AdminDash go={go}/>}
+      <div style={{ height: showDevNav ? "calc(100vh - 44px)" : "100vh", overflow:"hidden" }}>
+        {SUPABASE_ENABLED && (!authReady || !profileReady) && (
+          <div style={{ height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Geist,sans-serif", color:"#666" }}>
+            Loading...
+          </div>
+        )}
+        {(!SUPABASE_ENABLED || (authReady && profileReady)) && (
+          <>
+            {route==="landing"   && <div style={{ height:"100%",overflowY:"auto" }}><Landing  go={go}/></div>}
+            {route==="login"     && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="login"  go={go} from={prevPage==="landing"?"dashboard":prevPage}/></div>}
+            {route==="signup"    && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="signup" go={go} from={prevPage==="landing"?"dashboard":prevPage}/></div>}
+            {route==="dashboard" && <ClientDash t={t} go={go} key={tier} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut}/>}
+            {route==="admin"     && <AdminDash go={go} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut}/>}
+          </>
+        )}
       </div>
     </ErrorBoundary>
   );
