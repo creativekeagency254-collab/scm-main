@@ -24,6 +24,8 @@ create table if not exists profiles (
   avatar_url text,
   balance numeric,
   join_number integer,
+  ref_code text,
+  referred_by text,
   role text default 'client',
   category text default 'Client',
   status text default 'Active',
@@ -31,6 +33,8 @@ create table if not exists profiles (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+create unique index if not exists profiles_ref_code_key on profiles (ref_code);
 
 create table if not exists client_transactions (
   id uuid primary key default gen_random_uuid(),
@@ -146,3 +150,15 @@ where email = 'admin@example.com';
 ## 5. Google OAuth
 Enable Google in Supabase Auth, then add the redirect URLs for your local and production domains.
 Your app uses `window.location.origin` for OAuth redirects.
+
+Steps:
+1. Google Cloud Console: create or select a project.
+2. Configure OAuth consent screen (external), then publish it.
+3. Create OAuth Client ID (Web application).
+4. Add the Supabase redirect URL shown in the Google provider panel as an authorized redirect URI.
+5. Copy the Google Client ID + Client Secret into Supabase Auth -> Providers -> Google.
+6. In Supabase Auth -> URL Configuration, set `Site URL` and add your `http://localhost:5000` (and production) to `Additional Redirect URLs`.
+
+## 6. Referral Codes
+When a user signs up, the optional referral code is stored as `referred_by` on their profile.
+Each user also gets a generated `ref_code` for sharing their own referral link.

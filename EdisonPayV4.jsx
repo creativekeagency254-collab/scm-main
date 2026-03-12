@@ -116,6 +116,20 @@ const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 const SUPABASE_ENABLED = !!supabase;
 
+const normalizeRefCode = (input) => {
+  const raw = String(input || "").trim().toUpperCase();
+  const cleaned = raw.replace(/[^A-Z0-9-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return cleaned.slice(0, 32);
+};
+
+const makeRefCode = (seed) => {
+  const base = String(seed || "EDISONPAY");
+  let h = 0;
+  for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) >>> 0;
+  const tail = (h % 0xFFFFFFF).toString(36).toUpperCase().padStart(6, "0").slice(-6);
+  return `EDP-${tail}`;
+};
+
 async function fetchTable(table, opts = {}) {
   if (!supabase) return null;
   try {
@@ -821,10 +835,11 @@ function Auth({ type, go, from }) {
       go(from || "dashboard");
       return;
     }
+    const refBy = normalizeRefCode(f.ref);
     const { data, error } = await supabase.auth.signUp({
       email: f.email,
       password: f.password,
-      options: { data: { full_name: f.name || "", ref_code: f.ref || "" } }
+      options: { data: { full_name: f.name || "", referred_by: refBy || "" } }
     });
     if (error) { setErr(error.message); setLoading(false); return; }
     setLoading(false);
@@ -897,7 +912,7 @@ function Auth({ type, go, from }) {
           <Field label="Password" type="password" ph="••••••••" val={f.password} set={set("password")} ic="lock" />
           {!isLogin && <>
             <Field label="Confirm Password" type="password" ph="••••••••" val={f.confirm} set={set("confirm")} ic="lock" />
-            <Field label="Referral Code (optional)" ph="edisonpay-reg-XXXX" val={f.ref} set={set("ref")} ic="gift" />
+            <Field label="Referral Code (optional)" ph="EDP-1A2B3C" val={f.ref} set={set("ref")} ic="gift" />
           </>}
 
           {isLogin && <div style={{ textAlign: "right", marginBottom: 20 }}><span style={{ fontSize: 13, color: "#0066FF", fontWeight: 600, cursor: "pointer" }}>Forgot password?</span></div>}
@@ -1000,6 +1015,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     avatar: "",
     balance: null,
     joinNumber: null,
+    refCode: null,
+    referredBy: null,
   });
   const [draftProfile, setDraftProfile] = useState({
     id: null,
@@ -1009,6 +1026,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     avatar: "",
     balance: null,
     joinNumber: null,
+    refCode: null,
+    referredBy: null,
   });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
@@ -1032,6 +1051,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     : (Number.isFinite(Number(profile.id)) ? Number(profile.id) : 1000 + (joinSeed % 9000));
   const joinLabel = Number.isFinite(joinNumber) ? String(joinNumber).padStart(4, "0") : "0000";
   const joinCardLabel = `**** **** 500 ${joinLabel}`;
+  const refCode = normalizeRefCode(profile.refCode) || makeRefCode(profile.email || profile.id || joinLabel);
   const nextTier = TIERS[t.id];
   const canUpgrade = !!nextTier;
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
@@ -1064,6 +1084,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
       avatar: profileRow.avatar_url ?? profileRow.avatar ?? profile.avatar,
       balance: profileRow.balance ?? profile.balance,
       joinNumber: profileRow.join_number ?? profileRow.joinNumber ?? profile.joinNumber,
+      refCode: profileRow.ref_code ?? profileRow.refCode ?? profile.refCode,
+      referredBy: profileRow.referred_by ?? profileRow.referredBy ?? profile.referredBy,
     };
     setProfile(prev => ({ ...prev, ...next }));
     setDraftProfile(prev => ({ ...prev, ...next }));
@@ -1087,9 +1109,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     const delta = y - lastScrollRef.current;
     if (y > 80 && delta < -4) {
       setStripHidden(true);
-    }
-    if (y < 30) {
-      setStripHidden(false);
     }
     lastScrollRef.current = y;
   };
@@ -1673,34 +1692,36 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
         <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onScroll={onBodyScroll} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
           {isMobile && (
-            <div style={{ position:"sticky", top:8, zIndex:30, display:"flex", justifyContent:"flex-end", pointerEvents:"none" }}>
+            <div style={{ position:"sticky", top:8, zIndex:30, display:"flex", justifyContent:"center", pointerEvents:"none" }}>
               <button onClick={()=>{ setStripHidden(s => !s); }}
                 style={{
                   pointerEvents:"auto",
-                  width:36,
-                  height:36,
-                  borderRadius:"50%",
-                  border:"1px solid rgba(0,0,0,0.45)",
-                  background:"rgba(255,255,255,0.55)",
+                  padding:"7px 18px",
+                  borderRadius:8,
+                  border:"1.5px solid #111",
+                  background:"#fff",
                   color:"#111",
                   cursor:"pointer",
                   display:"flex",
                   alignItems:"center",
-                  justifyContent:"center",
-                  backdropFilter:"blur(8px)",
-                  boxShadow:"0 8px 20px rgba(0,0,0,0.18)",
+                  gap:6,
+                  boxShadow:"0 4px 0 #111, 0 10px 18px rgba(0,0,0,0.15)",
+                  fontSize:11,
+                  fontWeight:800,
+                  letterSpacing:"0.02em",
                   transition:"transform .18s ease"
                 }}>
                 <div style={{ transform: stripHidden ? "rotate(90deg)" : "rotate(-90deg)", transition:"transform .18s ease" }}>
                   <I n="chevR" s={12} c="#111"/>
                 </div>
+                {stripHidden ? "Show Summary" : "Hide Summary"}
               </button>
             </div>
           )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
-          {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile}/>}
-          {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined}/>}
+          {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode}/>}
+          {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode}/>}
           {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn}/>}
           {tab==="settings"  && (
             <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
@@ -3069,10 +3090,10 @@ function VideosContent({ t }) {
 }
 
 /* ── REFERRAL LINK CARD (shared) ── */
-function ReferralLinkCard({ t }) {
+function ReferralLinkCard({ t, refCode }) {
   const [copied, setCopied] = useState(false);
-  const code = `edisonpay-${t.tag.toLowerCase()}-AX7K`;
-  const link = `https://edisonpay.co.ke/ref/${code}`;
+  const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
+  const link = `https://edisonpay.co.ke/ref/${safeCode}`;
   const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2e3); };
   const socials = [
     ["WhatsApp","#25D366"],
@@ -3131,7 +3152,7 @@ function ReferralLinkCard({ t }) {
 }
 
 /* ── ANALYTICS CONTENT ── */
-function AnalyticsContent({ t, earn }) {
+function AnalyticsContent({ t, earn, refCode }) {
   const dailyEarn = (t.videos + t.bot) * V_PRICE;
   const refBonus = Math.round(t.deposit * 0.1);
 
@@ -3150,13 +3171,13 @@ function AnalyticsContent({ t, earn }) {
         ))}
       </div>
 
-      <ReferralLinkCard t={t} />
+      <ReferralLinkCard t={t} refCode={refCode} />
     </div>
   );
 }
 
 /* ── REFERRALS CONTENT ── */
-function ReferralsContent({ t, earn, refData }) {
+function ReferralsContent({ t, earn, refData, refCode }) {
   const [filter, setFilter] = useState("all");
 
   const fallbackRefs = [
@@ -3216,7 +3237,7 @@ function ReferralsContent({ t, earn, refData }) {
         ))}
       </div>
 
-      <ReferralLinkCard t={t} />
+      <ReferralLinkCard t={t} refCode={refCode} />
 
       {/* Referral table */}
       <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
@@ -4163,7 +4184,21 @@ export default function App() {
     (async () => {
       const existing = await loadProfileRow(authUser.id);
       if (ignore) return;
-      if (existing) { setProfileRow(existing); return; }
+      const meta = authUser.user_metadata || {};
+      const metaRefBy = normalizeRefCode(meta.referred_by || meta.ref_code || "");
+      if (existing) {
+        setProfileRow(existing);
+        const updates = {};
+        if (!existing.ref_code) updates.ref_code = makeRefCode(authUser.email || authUser.id || existing.email || existing.name);
+        if (!existing.referred_by && metaRefBy) updates.referred_by = metaRefBy;
+        if (Object.keys(updates).length) {
+          updates.id = authUser.id;
+          updates.updated_at = new Date().toISOString();
+          const patched = await upsertProfileRow(updates);
+          if (!ignore && patched) setProfileRow(patched);
+        }
+        return;
+      }
       const fallbackName =
         authUser.user_metadata?.full_name ||
         authUser.user_metadata?.name ||
@@ -4176,6 +4211,8 @@ export default function App() {
         avatar_url: null,
         balance: null,
         join_number: null,
+        ref_code: makeRefCode(authUser.email || authUser.id || fallbackName),
+        referred_by: metaRefBy || null,
         role: "client",
         category: "Client",
         status: "Active",
@@ -4195,6 +4232,13 @@ export default function App() {
   const route = !SUPABASE_ENABLED
     ? page
     : (authUser ? (isAdmin ? "admin" : "dashboard") : (page==="login" || page==="signup" ? page : "landing"));
+  const openHelp = () => {
+    try {
+      const w = window.Tawk_API;
+      if (w?.showWidget) w.showWidget();
+      if (w?.maximize) setTimeout(() => w.maximize(), 60);
+    } catch (e) {}
+  };
 
   return (
     <ErrorBoundary>
@@ -4239,6 +4283,30 @@ export default function App() {
           </>
         )}
       </div>
+      <button onClick={openHelp}
+        style={{
+          position:"fixed",
+          right:18,
+          bottom:18,
+          zIndex:9999,
+          padding:"10px 16px",
+          borderRadius:10,
+          border:"1.5px solid #111",
+          background:"#fff",
+          color:"#111",
+          fontWeight:800,
+          fontSize:12,
+          cursor:"pointer",
+          display:"flex",
+          alignItems:"center",
+          gap:8,
+          boxShadow:"0 5px 0 #111, 0 12px 22px rgba(0,0,0,0.18)",
+          fontFamily:"IBM Plex Sans, Geist, sans-serif",
+          letterSpacing:"0.02em"
+        }}>
+        <div style={{ width:18, height:18, borderRadius:"50%", background:"#111", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:900, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.25)" }}>?</div>
+        Help
+      </button>
     </ErrorBoundary>
   );
 }
