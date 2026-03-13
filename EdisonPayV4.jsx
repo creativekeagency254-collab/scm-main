@@ -36,6 +36,9 @@ const GlobalStyles = () => {
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
+      .ep-skeleton { position:relative; overflow:hidden; background:#F5F5F5; border:1px solid #E5E7EB; box-shadow:inset 0 1px 0 rgba(255,255,255,0.7); }
+      .ep-skeleton::after { content:""; position:absolute; inset:-40%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.75) 45%, transparent 100%); animation:ep-shine 1.4s linear infinite; }
+      @keyframes ep-shine { 0%{ transform:translateX(-60%);} 100%{ transform:translateX(60%);} }
       .ep-card { background:#fff; border-radius:16px; border:1px solid rgba(17,17,17,0.15); box-shadow:0 1px 4px rgba(0,0,0,0.04); }
       .ep-upgrade-btn { animation: popPulse 1.6s ease-in-out infinite; }
       .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
@@ -377,6 +380,40 @@ const TIERS = [
   { id:5, name:"Executive Pro",tag:"PRO", deposit:100000, videos:40, bot:38, acc:"#DC2626", rgb:"220,38,38",  lgt:"#FFF0F0", mid:"#FCA5A5" },
 ];
 const V_PRICE = 50;
+
+const makeAvatarSvg = (bg, hair, skin, shirt, accent) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+      <rect width="120" height="120" rx="24" fill="${bg}"/>
+      <circle cx="60" cy="54" r="28" fill="${skin}"/>
+      <path d="M18 120c10-28 30-36 42-36s32 8 42 36" fill="${shirt}"/>
+      <path d="M30 44c6-18 18-26 30-26s24 8 30 26" fill="${hair}"/>
+      <circle cx="50" cy="54" r="3" fill="#111"/>
+      <circle cx="70" cy="54" r="3" fill="#111"/>
+      <path d="M48 64c6 8 18 8 24 0" stroke="#111" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <circle cx="92" cy="28" r="6" fill="${accent}"/>
+    </svg>
+  `;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+const AVATAR_PRESETS = [
+  makeAvatarSvg("#E0F2FE","#0F172A","#F5CBA7","#2563EB","#38BDF8"),
+  makeAvatarSvg("#FEF9C3","#111827","#F5D0C5","#F97316","#F59E0B"),
+  makeAvatarSvg("#ECFDF5","#064E3B","#EABFA6","#10B981","#34D399"),
+  makeAvatarSvg("#F5F3FF","#3F1D77","#F3C4B0","#8B5CF6","#C4B5FD"),
+  makeAvatarSvg("#FFF1F2","#7F1D1D","#F2C0A2","#EF4444","#FB7185"),
+  makeAvatarSvg("#F1F5F9","#0F172A","#E8C7B3","#0EA5E9","#7DD3FC"),
+  makeAvatarSvg("#FFF7ED","#7C2D12","#F5CBA7","#F97316","#FDBA74"),
+  makeAvatarSvg("#ECFEFF","#164E63","#EEC4A6","#06B6D4","#67E8F9"),
+];
+
+const pickAvatarForSeed = (seed) => {
+  const s = String(seed || "0");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_PRESETS[h % AVATAR_PRESETS.length];
+};
 
 const resolveTierIndex = (value) => {
   if (!value) return null;
@@ -1823,6 +1860,17 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                         Remove
                       </button>
                     )}
+                    <div style={{ width:"100%", marginTop:6 }}>
+                      <div style={{ fontSize:10, fontWeight:800, color:"#666", marginBottom:6, textAlign:"center" }}>Choose Avatar</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+                        {AVATAR_PRESETS.map((src,i)=>(
+                          <button key={i} onClick={()=>setProfileField("avatar", src)}
+                            style={{ padding:2, borderRadius:"50%", border: draftProfile.avatar===src ? "2px solid #111" : "1px solid #E5E7EB", background:"#fff", cursor:"pointer" }}>
+                            <img src={src} alt={`Avatar ${i+1}`} style={{ width:36, height:36, borderRadius:"50%" }} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12 }}>
@@ -1916,6 +1964,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           {navItems.filter(n=>["overview","videos","referrals","withdraw","settings"].includes(n.id)).map(({id,ic,label}) => {
             const active = tab===id;
             const isRef = id === "referrals";
+            const pop = active && !isRef;
             return (
               <button key={id} onClick={()=>{setTab(id); setOpen(false);}}
                 style={{
@@ -1925,17 +1974,17 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   alignItems:"center",
                   justifyContent:"center",
                   gap:3,
-                  background:isRef?"linear-gradient(180deg,#FFF7E6 0%,#FFE4B3 100%)":"transparent",
-                  border:isRef?"2px solid #111":"none",
+                  background:isRef?"linear-gradient(180deg,#FFF7E6 0%,#FFE4B3 100%)":(pop?"#fff":"transparent"),
+                  border:isRef?"2px solid #111":(pop?"1.5px solid #111":"none"),
                   cursor:"pointer",
                   color: isRef ? "#111" : (active?t.acc:"#BBB"),
                   transition:"all .15s",
                   fontFamily:"IBM Plex Sans, Geist, sans-serif",
                   position:"relative",
                   margin:isRef?"6px 8px 10px":0,
-                  borderRadius:isRef?16:0,
-                  transform:isRef?"translateY(-6px)":"none",
-                  boxShadow:isRef?"0 8px 18px rgba(0,0,0,0.18)":"none"
+                  borderRadius:isRef?16:(pop?14:0),
+                  transform:isRef?"translateY(-6px)":(pop?"translateY(-4px)":"none"),
+                  boxShadow:isRef?"0 8px 18px rgba(0,0,0,0.18)":(pop?"0 6px 14px rgba(0,0,0,0.18)":"none")
                 }}>
                 <I n={ic} s={active?18:16} c={isRef? "#111" : (active?t.acc:"#BBBBBB")}/>
                 <span style={{ fontSize:9, fontWeight:800, whiteSpace:"nowrap", letterSpacing:"0.04em", color:isRef? "#111" : (active?t.acc:"#888") }}>{label}</span>
@@ -2174,7 +2223,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   );
   const mobilePlan = (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <div className="ep-frame-light" style={{ background:"linear-gradient(180deg,#FFF2CC 0%, #F59E0B 55%, #F97316 100%)", borderRadius:16, padding:"16px 18px", border:"2px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.18)" }}>
+      <div className="ep-frame-light" style={{ background:"linear-gradient(180deg,#FFF2CC 0%, #F59E0B 55%, #F97316 100%)", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.18)", minHeight:230 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -4344,12 +4393,14 @@ export default function App() {
       const existing = await loadProfileRow(authUser.id);
       if (ignore) return;
       const meta = authUser.user_metadata || {};
+      const metaAvatar = meta.avatar_url || meta.picture || meta.avatar || "";
       const metaRefBy = normalizeRefCode(meta.referred_by || meta.ref_code || "");
       if (existing) {
         setProfileRow(existing);
         const updates = {};
         if (!existing.ref_code) updates.ref_code = makeRefCode(authUser.email || authUser.id || existing.email || existing.name);
         if (!existing.referred_by && metaRefBy) updates.referred_by = metaRefBy;
+        if (!existing.avatar_url) updates.avatar_url = metaAvatar || pickAvatarForSeed(authUser.id || authUser.email);
         if (Object.keys(updates).length) {
           updates.id = authUser.id;
           updates.updated_at = new Date().toISOString();
@@ -4367,7 +4418,7 @@ export default function App() {
         name: fallbackName,
         email: authUser.email || null,
         phone: null,
-        avatar_url: null,
+        avatar_url: metaAvatar || pickAvatarForSeed(authUser.id || authUser.email),
         balance: null,
         join_number: null,
         ref_code: makeRefCode(authUser.email || authUser.id || fallbackName),
@@ -4428,8 +4479,17 @@ export default function App() {
 
       <div style={{ height: showDevNav ? "calc(100vh - 44px)" : "100vh", overflow:"hidden" }}>
         {SUPABASE_ENABLED && (!authReady || !profileReady) && (
-          <div style={{ height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Geist,sans-serif", color:"#666" }}>
-            Loading...
+          <div style={{ height:"100%", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+            <div style={{ width:"min(520px, 92vw)", display:"grid", gap:12 }}>
+              <div className="ep-skeleton" style={{ height:18, width:"60%", borderRadius:8 }} />
+              <div className="ep-skeleton" style={{ height:14, width:"40%", borderRadius:8 }} />
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10, marginTop:10 }}>
+                {Array.from({ length: 4 }).map((_,i)=>(
+                  <div key={i} className="ep-skeleton" style={{ height:64, borderRadius:12 }} />
+                ))}
+              </div>
+              <div className="ep-skeleton" style={{ height:120, borderRadius:14, marginTop:6 }} />
+            </div>
           </div>
         )}
         {(!SUPABASE_ENABLED || (authReady && profileReady)) && (
