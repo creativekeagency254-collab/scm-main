@@ -38,20 +38,18 @@ const GlobalStyles = () => {
       @keyframes ep-ambient-alt { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-10px,0) scale(1.04);} }
       @keyframes ep-upgrade-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.9;} 25%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
       @keyframes ep-tier-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.85;} 28%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
-      @keyframes ep-coin-rotate { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
       .ep-skeleton { position:relative; overflow:hidden; background:#F5F5F5; border:1px solid #E5E7EB; box-shadow:inset 0 1px 0 rgba(255,255,255,0.7); }
       .ep-skeleton::after { content:""; position:absolute; inset:-40%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.75) 45%, transparent 100%); animation:ep-shine 1.4s linear infinite; }
       @keyframes ep-shine { 0%{ transform:translateX(-60%);} 100%{ transform:translateX(60%);} }
-      .ep-card { background:#fff; border-radius:16px; border:1px solid rgba(17,17,17,0.15); box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+      .ep-card { background:#fff; border-radius:16px; border:1px solid #111; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
       .ep-upgrade-btn { position:relative; overflow:hidden; animation: popPulse 1.6s ease-in-out infinite; }
       .ep-upgrade-btn::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.9) 48%, transparent 100%); transform:translateX(-120%); animation:ep-upgrade-glare 2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
       .ep-upgrade-btn:disabled::after { animation:none; opacity:0; }
       .ep-tier-glare { position:relative; overflow:hidden; }
       .ep-tier-glare::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, var(--glare, rgba(255,255,255,0.85)) 48%, transparent 100%); transform:translateX(-120%); animation:ep-tier-glare 2.2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
-      .ep-brand-coin { animation: ep-coin-rotate 2s linear infinite; }
       .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
       .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
       .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
@@ -382,49 +380,20 @@ function PaymentLogo({ name }) {
   }
 }
 
-const BrandMark = ({ size = 34 }) => {
-  const border = Math.max(2, Math.round(size * 0.06));
-  const shadow = Math.max(3, Math.round(size * 0.12));
-  const inner = Math.max(1, Math.round(size * 0.04));
-  const fontSize = Math.round(size * 0.55);
-  return (
-    <div
-      className="ep-brand-coin"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: "linear-gradient(135deg,#F8FAFC 0%, #C7CDD4 45%, #F8FAFC 100%)",
-        border: `${border}px solid #111`,
-        boxShadow: `0 ${shadow}px 0 #111, 0 ${shadow * 2}px ${shadow * 3}px rgba(0,0,0,0.25), inset 0 ${inner}px ${inner * 2}px rgba(255,255,255,0.85), inset 0 -${inner * 2}px ${inner * 3}px rgba(0,0,0,0.35)`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-        flexShrink: 0
-      }}>
-      <div
-        style={{
-          position: "absolute",
-          inset: border + 2,
-          borderRadius: "50%",
-          border: "1px solid rgba(0,0,0,0.35)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.55)"
-        }}
-      />
-      <span
-        style={{
-          fontSize,
-          fontWeight: 900,
-          color: "#111",
-          letterSpacing: "-0.03em",
-          textShadow: "0 1px 0 #fff, 0 2px 0 rgba(0,0,0,0.25), 0 4px 6px rgba(0,0,0,0.35)"
-        }}>
-        $
-      </span>
-    </div>
-  );
-};
+const BRAND_LOGO_SRC = "/brand/logo.png";
+const BrandMark = ({ size = 34 }) => (
+  <img
+    src={BRAND_LOGO_SRC}
+    alt="Dollar App"
+    style={{
+      width: size,
+      height: size,
+      objectFit: "contain",
+      display: "block",
+      flexShrink: 0
+    }}
+  />
+);
 
 /* ── TIERS ── */
 const TIERS = [
@@ -1737,7 +1706,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
           {/* Search */}
           {!isMobile && (
-            <div className="ep-topbar-search" style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", background:"#FAFAFA", border:"1.5px solid #EBEBEB", borderRadius:10, flex:1, maxWidth:280 }}>
+            <div className="ep-topbar-search" style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", background:"#FAFAFA", border:"1.5px solid #111", borderRadius:10, flex:1, maxWidth:280 }}>
               <I n="search" s={13} c="#CCC"/>
               <input placeholder="Search transactions, videos…" style={{ border:"none", background:"transparent", outline:"none", fontSize:13, color:"#111", width:"100%", fontFamily:"Geist,sans-serif" }}/>
             </div>
@@ -1748,7 +1717,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           {!isMobile && (
             <>
               {/* Date */}
-              <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#FAFAFA", border:"1px solid #EBEBEB", borderRadius:9, flexShrink:0 }}>
+              <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#FAFAFA", border:"1px solid #111", borderRadius:9, flexShrink:0 }}>
                 <I n="calendar" s={13} c="#BBB"/>
                 <span style={{ fontSize:12, color:"#888", fontWeight:500, whiteSpace:"nowrap" }}>{today}</span>
               </div>
@@ -1966,8 +1935,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
-          {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode}/>}
-          {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode}/>}
+          {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
+          {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} />}
           {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx}/>}
           {tab==="settings"  && (
             <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
@@ -3507,7 +3476,9 @@ function VideosContent({ t }) {
 }
 
 /* ── REFERRAL LINK CARD (shared) ── */
-function ReferralLinkCard({ t, refCode }) {
+function ReferralLinkCard({ t, refCode, isMobile }) {
+  const cardBorder = isMobile ? "1px solid #111" : "1.5px solid #111";
+  const chipBorder = isMobile ? "1px solid #111" : "1px solid #EBEBEB";
   const [copied, setCopied] = useState(false);
   const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
   const link = `https://edisonpay.co.ke/ref/${safeCode}`;
@@ -3522,7 +3493,7 @@ function ReferralLinkCard({ t, refCode }) {
   ];
 
   return (
-    <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+    <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:cardBorder,boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
       <div className="ep-grid-2" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24 }}>
         <div>
           <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em",marginBottom:6 }}>Your Referral Link</h3>
@@ -3540,7 +3511,7 @@ function ReferralLinkCard({ t, refCode }) {
           </div>
           <div style={{ display:"flex",gap:7,marginTop:10,flexWrap:"wrap" }}>
             {socials.map(([b,c])=>(
-              <button key={b} style={{ padding:"6px 12px",background:"#FAFAFA",border:"1px solid #EBEBEB",borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
+              <button key={b} style={{ padding:"6px 12px",background:"#FAFAFA",border:chipBorder,borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
                 <div style={{ width:7,height:7,borderRadius:"50%",background:c }}/>{b}
               </button>
             ))}
@@ -3548,7 +3519,7 @@ function ReferralLinkCard({ t, refCode }) {
         </div>
 
         {/* How it works */}
-        <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:"1px solid #F0F0F0" }}>
+        <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:cardBorder }}>
           <div style={{ fontSize:11,fontWeight:700,color:"#BBB",letterSpacing:"0.08em",marginBottom:14 }}>HOW REFERRALS WORK</div>
           {[
             ["1","Friend clicks your link and signs up",t.acc],
@@ -3569,9 +3540,10 @@ function ReferralLinkCard({ t, refCode }) {
 }
 
 /* ── ANALYTICS CONTENT ── */
-function AnalyticsContent({ t, earn, refCode }) {
+function AnalyticsContent({ t, earn, refCode, isMobile }) {
   const dailyEarn = (t.videos + t.bot) * V_PRICE;
   const refBonus = Math.round(t.deposit * 0.1);
+  const cardBorder = isMobile ? "1px solid #111" : "1.5px solid #111";
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
@@ -3581,21 +3553,22 @@ function AnalyticsContent({ t, earn, refCode }) {
           [`KES ${dailyEarn.toLocaleString()}`,"Daily Potential","#111"],
           [`KES ${refBonus.toLocaleString()}`,"Referral Bonus","#059669"],
         ].map(([v,l,c],i)=>(
-          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:cardBorder,boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
             <div style={{ fontSize:10,color:"#BBB",fontWeight:700,letterSpacing:"0.08em",marginBottom:8 }}>{l.toUpperCase()}</div>
             <div style={{ fontSize:20,fontWeight:900,letterSpacing:"-0.04em",color:c }}>{v}</div>
           </div>
         ))}
       </div>
 
-      <ReferralLinkCard t={t} refCode={refCode} />
+      <ReferralLinkCard t={t} refCode={refCode} isMobile={isMobile} />
     </div>
   );
 }
 
 /* ── REFERRALS CONTENT ── */
-function ReferralsContent({ t, earn, refData, refCode }) {
+function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
   const [filter, setFilter] = useState("all");
+  const cardBorder = isMobile ? "1px solid #111" : "1.5px solid #111";
 
   const fallbackRefs = [
     { name:"John Mwangi",    email:"j.mwangi@gmail.com",  tier:"Standard",     date:"Mar 8, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 3.2) },
@@ -3648,17 +3621,17 @@ function ReferralsContent({ t, earn, refData, refCode }) {
           ["10%","Your Bonus",t.acc],
           [`KES ${totalBonus.toLocaleString()}`,"Total Earned","#059669"],
         ].map(([v,l,c],i) => (
-          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:cardBorder,boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
             <div style={{ fontSize:10,color:"#BBB",fontWeight:700,letterSpacing:"0.08em",marginBottom:8 }}>{l.toUpperCase()}</div>
             <div style={{ fontSize:20,fontWeight:900,letterSpacing:"-0.04em",color:c }}>{v}</div>
           </div>
         ))}
       </div>
 
-      <ReferralLinkCard t={t} refCode={refCode} />
+      <ReferralLinkCard t={t} refCode={refCode} isMobile={isMobile} />
 
       {/* Referral table */}
-      <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+      <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:cardBorder,boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10 }}>
           <div>
             <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em" }}>Referral Records</h3>
@@ -3711,7 +3684,7 @@ function ReferralsContent({ t, earn, refData, refCode }) {
         )}
 
         {/* Totals footer */}
-        <div style={{ marginTop:12,padding:"12px 14px",background:"#F7F9FC",borderRadius:10,border:"1px solid #EBEBEB",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12 }}>
+        <div style={{ marginTop:12,padding:"12px 14px",background:"#F7F9FC",borderRadius:10,border:cardBorder,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12 }}>
           <div style={{ display:"flex",gap:24 }}>
             <div><span style={{ fontSize:11,color:"#BBB" }}>Total bonus earned  </span><span style={{ fontSize:14,fontWeight:900,color:"#059669" }}>KES {totalBonus.toLocaleString()}</span></div>
             <div><span style={{ fontSize:11,color:"#BBB" }}>Avg per referral  </span><span style={{ fontSize:14,fontWeight:900,color:"#111" }}>KES {activeCount > 0 ? Math.round(totalBonus/activeCount).toLocaleString() : 0}</span></div>
@@ -4749,6 +4722,11 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(!SUPABASE_ENABLED);
   const [profileRow, setProfileRow] = useState(null);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showInstall, setShowInstall] = useState(false);
+  const [isMobileInstall, setIsMobileInstall] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [installHint, setInstallHint] = useState("");
 
   useEffect(() => {
     try {
@@ -4756,6 +4734,55 @@ export default function App() {
       const idx = Number(saved);
       if (Number.isFinite(idx) && idx >= 0 && idx < TIERS.length) setTier(idx);
     } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => {
+      const ua = navigator.userAgent || "";
+      const mobileUA = /Android|iPhone|iPad|iPod/i.test(ua);
+      setIsMobileInstall(mq.matches || mobileUA);
+    };
+    update();
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
+  }, []);
+
+  useEffect(() => {
+    const checkStandalone = () => {
+      const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+      setIsStandalone(standalone);
+    };
+    checkStandalone();
+    const mq = window.matchMedia("(display-mode: standalone)");
+    if (mq.addEventListener) mq.addEventListener("change", checkStandalone);
+    else mq.addListener(checkStandalone);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", checkStandalone);
+      else mq.removeListener(checkStandalone);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onBeforeInstall = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstall(true);
+    };
+    const onInstalled = () => {
+      setInstallPrompt(null);
+      setShowInstall(false);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
 
   useEffect(() => {
@@ -4853,6 +4880,36 @@ export default function App() {
     } catch (e) {}
   };
 
+  const handleInstall = async () => {
+    if (!installPrompt) {
+      const ua = navigator.userAgent || "";
+      const isIOS = /iPad|iPhone|iPod/i.test(ua);
+      const msg = isIOS
+        ? "On iPhone/iPad: tap Share, then 'Add to Home Screen'."
+        : "Install prompt is getting ready. Please try again in a moment.";
+      setInstallHint(msg);
+      setTimeout(() => setInstallHint(""), 3500);
+      return;
+    }
+    try {
+      installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice?.outcome !== "accepted") {
+        setInstallHint("Install dismissed. You can try again anytime.");
+        setTimeout(() => setInstallHint(""), 2500);
+      }
+    } catch (e) {
+      setInstallHint("Install prompt failed. Please try again.");
+      setTimeout(() => setInstallHint(""), 2500);
+    } finally {
+      setInstallPrompt(null);
+      setShowInstall(false);
+    }
+  };
+
+  const showInstallButton = isMobileInstall && !isStandalone;
+  const installReady = !!installPrompt && showInstall;
+
   return (
     <ErrorBoundary>
       <GlobalStyles />
@@ -4905,6 +4962,61 @@ export default function App() {
           </>
         )}
       </div>
+      {showInstallButton && (
+        <div
+          style={{
+            position:"fixed",
+            left:"50%",
+            transform:"translateX(-50%)",
+            bottom:"calc(18px + env(safe-area-inset-bottom, 0px))",
+            zIndex:9998,
+            display:"grid",
+            gap:6,
+            justifyItems:"center",
+            pointerEvents:"auto"
+          }}
+          aria-live="polite"
+        >
+          {installHint && (
+            <div
+              style={{
+                background:"#111",
+                color:"#fff",
+                fontSize:11,
+                fontWeight:700,
+                padding:"6px 10px",
+                borderRadius:999,
+                border:"1px solid #000",
+                boxShadow:"0 6px 14px rgba(0,0,0,0.2)",
+                maxWidth:"min(92vw, 340px)",
+                textAlign:"center"
+              }}
+            >
+              {installHint}
+            </div>
+          )}
+          <button
+            onClick={handleInstall}
+            style={{
+              padding:"10px 22px",
+              borderRadius:999,
+              border:"1.5px solid #000",
+              background: installReady ? "#000" : "#222",
+              color:"#fff",
+              fontWeight:900,
+              letterSpacing:"0.02em",
+              fontSize:12,
+              textTransform:"uppercase",
+              cursor:"pointer",
+              boxShadow:"0 8px 0 #000",
+              fontFamily:"IBM Plex Sans, Geist, sans-serif",
+              opacity: installReady ? 1 : 0.85
+            }}
+          >
+            Download App
+          </button>
+        </div>
+      )}
       <button onClick={openHelp}
         style={{
           position:"fixed",
