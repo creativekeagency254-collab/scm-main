@@ -565,13 +565,22 @@ function Landing({ go }) {
         {/* RIGHT — visual panel */}
         <div style={{ ...anim(120), position: "relative", display: "flex", alignItems: "stretch", paddingTop: 28, paddingBottom: 28 }}>
           {/* Main panel — dark gradient background simulating image */}
-          <div style={{ flex: 1, borderRadius: 24, background: "linear-gradient(160deg,#0D1B36 0%,#0D2A3F 40%,#0A3D2E 100%)", position: "relative", overflow: "hidden", minHeight: 480 }}>
-
-            {/* Grid lines texture */}
-            <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none" }} />
+          <div style={{ flex: 1, borderRadius: 24, background: "#0B1320", position: "relative", overflow: "hidden", minHeight: 480 }}>
+            {HOME_BALANCE_VIDEO && (
+              <video
+                src={HOME_BALANCE_VIDEO}
+                autoPlay
+                muted
+                loop
+                playsInline
+                style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.05) contrast(1.05)", zIndex:0 }}
+              />
+            )}
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(13,27,54,0.75) 0%, rgba(13,42,63,0.68) 40%, rgba(10,61,46,0.72) 100%)", zIndex:1 }} />
+            <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none", zIndex:1 }} />
 
             {/* Central graphic — big earnings number */}
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-55%)", textAlign: "center" }}>
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-55%)", textAlign: "center", zIndex: 2 }}>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", marginBottom: 12, fontWeight: 500 }}>YOUR BALANCE TODAY</div>
               <div style={{ fontSize: 64, fontWeight: 900, color: "#fff", letterSpacing: "-0.04em", lineHeight: 1, animation: "fadeIn .8s ease .4s both" }}>
                 KES 47,200
@@ -589,7 +598,7 @@ function Landing({ go }) {
             </div>
 
             {/* Floating card 1 — earnings stat (top right) */}
-            <div style={{ position: "absolute", top: 28, right: 24, background: "#fff", borderRadius: 14, padding: "14px 16px", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", animation: "floatA 4s ease-in-out infinite", minWidth: 190 }}>
+            <div style={{ position: "absolute", top: 28, right: 24, background: "#fff", borderRadius: 14, padding: "14px 16px", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", animation: "floatA 4s ease-in-out infinite", minWidth: 190, zIndex:2 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#111", letterSpacing: "0.03em" }}>Daily Earnings</span>
                 <span style={{ fontSize: 9, color: "#999", fontWeight: 500 }}>Live</span>
@@ -615,7 +624,7 @@ function Landing({ go }) {
             </div>
 
             {/* Floating card 2 — chat bubble (bottom left) */}
-            <div style={{ position: "absolute", bottom: 60, left: 24, background: "#fff", borderRadius: 50, padding: "12px 18px 12px 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.16)", display: "flex", alignItems: "center", gap: 10, animation: "floatB 5s ease-in-out infinite" }}>
+            <div style={{ position: "absolute", bottom: 60, left: 24, background: "#fff", borderRadius: 50, padding: "12px 18px 12px 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.16)", display: "flex", alignItems: "center", gap: 10, animation: "floatB 5s ease-in-out infinite", zIndex:2 }}>
               <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#0066FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <I n="check" s={14} c="#fff" />
               </div>
@@ -623,7 +632,7 @@ function Landing({ go }) {
             </div>
 
             {/* Floating card 3 — tier badge (bottom right) */}
-            <div style={{ position: "absolute", bottom: 28, right: 24, background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, animation: "floatA 6s ease-in-out infinite .5s" }}>
+            <div style={{ position: "absolute", bottom: 28, right: 24, background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, animation: "floatA 6s ease-in-out infinite .5s", zIndex:2 }}>
               <I n="bolt" s={14} c="#0066FF" />
               <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", letterSpacing: "0.04em" }}>Unlock 5 Earning Tiers</span>
               <I n="chevR" s={14} c="rgba(255,255,255,0.5)" />
@@ -1071,6 +1080,7 @@ const LIVE_SYMBOLS = [
 ];
 // Set this to a local video path (e.g. "/plan-actions.mp4") or a direct MP4 URL.
 const PLAN_BG_VIDEO = "/plan-actions.mp4";
+const HOME_BALANCE_VIDEO = "/home-balance.mp4";
 const LIVE_COLORS_LIGHT = [
   "rgba(59,130,246,0.16)",
   "rgba(99,102,241,0.14)",
@@ -2356,13 +2366,16 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           <I n="chevR" s={12} c="#94A3B8"/>
         </div>
       </button>
-      <div style={{ maxHeight: actionsOpen ? 120 : 0, overflow:"hidden", transition:"max-height .25s ease" }}>
-        <div style={{ padding:"12px 14px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-          <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
-            Watch Now
+      <div style={{ maxHeight: actionsOpen ? 140 : 0, overflow:"hidden", transition:"max-height .25s ease" }}>
+        <div style={{ padding:"12px 14px", display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+          <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+            Watch
           </button>
-          <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1px solid #E8E8E8", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+          <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1px solid #E8E8E8", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
             Withdraw
+          </button>
+          <button onClick={()=>setTab("overview")} style={{ padding:"10px 0", background:"linear-gradient(180deg,#FDE68A 0%, #F59E0B 100%)", color:"#111", border:"1px solid #111", borderRadius:10, fontSize:11, fontWeight:900, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+            Deposit
           </button>
         </div>
       </div>
