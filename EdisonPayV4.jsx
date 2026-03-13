@@ -5076,7 +5076,7 @@ export default function App() {
     }
   };
 
-  const showInstallButton = isMobileInstall && !isStandalone;
+  const showInstallButton = isMobileInstall && !isStandalone && route === "landing";
   const installReady = !!installPrompt && showInstall;
   const showInstallPanelReady = showInstallButton && !installPanelSeen;
 
