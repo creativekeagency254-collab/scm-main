@@ -38,6 +38,7 @@ const GlobalStyles = () => {
       @keyframes ep-ambient-alt { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-10px,0) scale(1.04);} }
       @keyframes ep-upgrade-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.9;} 25%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
       @keyframes ep-tier-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.85;} 28%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
+      @keyframes ep-coin-rotate { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
@@ -50,6 +51,7 @@ const GlobalStyles = () => {
       .ep-upgrade-btn:disabled::after { animation:none; opacity:0; }
       .ep-tier-glare { position:relative; overflow:hidden; }
       .ep-tier-glare::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, var(--glare, rgba(255,255,255,0.85)) 48%, transparent 100%); transform:translateX(-120%); animation:ep-tier-glare 2.2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
+      .ep-brand-coin { animation: ep-coin-rotate 2s linear infinite; }
       .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
       .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
       .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
@@ -380,6 +382,50 @@ function PaymentLogo({ name }) {
   }
 }
 
+const BrandMark = ({ size = 34 }) => {
+  const border = Math.max(2, Math.round(size * 0.06));
+  const shadow = Math.max(3, Math.round(size * 0.12));
+  const inner = Math.max(1, Math.round(size * 0.04));
+  const fontSize = Math.round(size * 0.55);
+  return (
+    <div
+      className="ep-brand-coin"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: "linear-gradient(135deg,#F8FAFC 0%, #C7CDD4 45%, #F8FAFC 100%)",
+        border: `${border}px solid #111`,
+        boxShadow: `0 ${shadow}px 0 #111, 0 ${shadow * 2}px ${shadow * 3}px rgba(0,0,0,0.25), inset 0 ${inner}px ${inner * 2}px rgba(255,255,255,0.85), inset 0 -${inner * 2}px ${inner * 3}px rgba(0,0,0,0.35)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        position: "relative",
+        flexShrink: 0
+      }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: border + 2,
+          borderRadius: "50%",
+          border: "1px solid rgba(0,0,0,0.35)",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.55)"
+        }}
+      />
+      <span
+        style={{
+          fontSize,
+          fontWeight: 900,
+          color: "#111",
+          letterSpacing: "-0.03em",
+          textShadow: "0 1px 0 #fff, 0 2px 0 rgba(0,0,0,0.25), 0 4px 6px rgba(0,0,0,0.35)"
+        }}>
+        $
+      </span>
+    </div>
+  );
+};
+
 /* ── TIERS ── */
 const TIERS = [
   { id:1, name:"Regular",      tag:"REG", deposit:5000,   videos:2,  bot:2,  acc:"#0066FF", rgb:"0,102,255",  lgt:"#EBF2FF", mid:"#99C2FF" },
@@ -494,9 +540,7 @@ function Landing({ go }) {
       <nav style={{ position: "sticky", top: 0, zIndex: 90, background: "rgba(255,255,255,0.96)", backdropFilter: "blur(16px)", borderBottom: "1px solid #E8E8E8", padding: "0 5vw", display: "flex", alignItems: "center", height: 60, gap: 32 }}>
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", flexShrink: 0 }} onClick={() => go("landing")}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: "#111", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <I n="bolt" s={15} c="#fff" />
-          </div>
+          <BrandMark size={32} />
           <span style={{ fontWeight: 900, fontSize: 16, letterSpacing: "-0.04em", color: "#111" }}>EdisonPay</span>
         </div>
         {/* Divider */}
@@ -737,9 +781,7 @@ function Landing({ go }) {
           {/* Brand col */}
           <div className="ep-footer-brand">
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <I n="bolt" s={15} c="#111" />
-              </div>
+              <BrandMark size={34} />
               <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.04em" }}>EdisonPay</span>
             </div>
             <p style={{ fontSize: 13, color: "#555", lineHeight: 1.8, maxWidth: 260, marginBottom: 24 }}>
@@ -951,9 +993,7 @@ function Auth({ type, go, from }) {
 
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 64, zIndex: 1 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <I n="bolt" s={16} c="#111" />
-          </div>
+          <BrandMark size={34} />
           <span style={{ fontWeight: 800, fontSize: 17, color: "#fff", letterSpacing: "-0.03em" }}>EdisonPay</span>
         </div>
 
@@ -1503,9 +1543,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
         {/* ── Brand row ── */}
         <div style={{ height:62, display:"flex", alignItems:"center", padding: open?"0 18px":"0", justifyContent: open?"flex-start":"center", borderBottom:"1px solid #F0F0F0", flexShrink:0, gap:10 }}>
-          <div style={{ width:34, height:34, borderRadius:10, background:"#111", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <I n="bolt" s={15} c="#fff"/>
-          </div>
+          <BrandMark size={34} />
           {open && <div style={{ overflow:"hidden", whiteSpace:"nowrap" }}>
             <div style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.04em", color:"#111" }}>EdisonPay</div>
             <div style={{ fontSize:10, color:t.acc, fontWeight:800, letterSpacing:"0.06em", marginTop:1 }}>{t.name.toUpperCase()}</div>
@@ -2321,9 +2359,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </div>
             <div style={{ fontSize:11, color:"rgba(17,17,17,0.6)", marginTop:4, fontWeight:700 }}>{t.id} of 5 Tiers · Secured</div>
           </div>
-          <div style={{ width:28, height:28, borderRadius:8, background:"#111", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.2)" }}>
-            <I n="bolt" s={13} c="#fff"/>
-          </div>
+          <BrandMark size={26} />
         </div>
         <div
           className={hasTierGlare ? "ep-tier-glare" : undefined}
@@ -2600,9 +2636,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
         {/* Top row: logo + grid button */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28, position:"relative", zIndex:1 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ width:32, height:32, borderRadius:9, background:"#111", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <I n="bolt" s={14} c="#fff"/>
-            </div>
+            <BrandMark size={32} />
             <span style={{ fontSize:14, fontWeight:900, color:"#111", letterSpacing:"-0.03em" }}>EdisonPay</span>
           </div>
           <div style={{ width:36, height:36, borderRadius:10, background:"rgba(255,255,255,0.7)", display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(8px)" }}>
@@ -2853,9 +2887,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
                 <div style={{ fontSize:13, fontWeight:900, color:"#fff" }}>My Plan</div>
                 <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{t.id} of 5 Tiers</div>
               </div>
-              <div style={{ width:30, height:30, borderRadius:8, background:t.acc, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <I n="bolt" s={14} c="#fff"/>
-              </div>
+              <BrandMark size={28} />
             </div>
 
             {/* Plan card */}
@@ -4005,6 +4037,18 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const adminHeadingFont = "Sora, Geist, sans-serif";
+  const ADMIN = {
+    bg:"#F7F7F7",
+    panel:"#FFFFFF",
+    border:"#111111",
+    text:"#111111",
+    muted:"#6B7280",
+    blue:"#2563EB",
+    blueAlt:"#0EA5E9",
+    green:"#16A34A",
+    red:"#DC2626",
+    redAlt:"#B91C1C"
+  };
   const sideW = isMobile ? (isTiny ? 200 : 230) : 230;
   const adminName = profileRow?.name || (authUser?.email ? authUser.email.split("@")[0] : "Admin");
   const adminEmail = profileRow?.email || authUser?.email || "admin@edisonpay.co.ke";
@@ -4094,7 +4138,13 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
     {id:"settings",     label:"Settings",     ic:"settings", badge:null},
   ];
 
-  const tiers = [{n:"Regular",c:"#0066FF",count:423,pct:34},{n:"Standard",c:"#E8820C",count:287,pct:23},{n:"Deluxe",c:"#059669",count:312,pct:25},{n:"Executive",c:"#7C3AED",count:156,pct:12.5},{n:"Exec Pro",c:"#DC2626",count:69,pct:5.5}];
+  const tiers = [
+    {n:"Regular",c:ADMIN.blue,count:423,pct:34},
+    {n:"Standard",c:ADMIN.blueAlt,count:287,pct:23},
+    {n:"Deluxe",c:ADMIN.green,count:312,pct:25},
+    {n:"Executive",c:ADMIN.red,count:156,pct:12.5},
+    {n:"Exec Pro",c:ADMIN.redAlt,count:69,pct:5.5}
+  ];
 
   const updateWithdrawal = async (id, status) => {
     setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status} : w));
@@ -4120,34 +4170,52 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   const filteredWd = wdFilter==="all" ? withdrawals : withdrawals.filter(w=>w.status.toLowerCase()===wdFilter);
   const filteredTx = txFilter==="all" ? txs : txs.filter(t=>t.type.toLowerCase()===txFilter||t.status.toLowerCase()===txFilter);
 
-  const S = (label, txt) => ({ fontSize:11, color:"#475569", fontWeight:600, label, txt });
+  const S = (label, txt) => ({ fontSize:11, color:ADMIN.muted, fontWeight:600, label, txt });
 
   const statusBadge = (s) => {
-    const map = { Active:["#059669","#ECFDF5"], Paid:["#059669","#ECFDF5"], Approved:["#0066FF","#EFF6FF"], Pending:["#E8820C","#FEF3E2"], Suspended:["#DC2626","#FFF0F0"], Rejected:["#DC2626","#FFF0F0"], Earning:["#7C3AED","#F5F0FF"], Deposit:["#059669","#ECFDF5"], Withdrawal:["#E8820C","#FEF3E2"] };
+    const map = {
+      Active:[ADMIN.green,"#ECFDF5"],
+      Paid:[ADMIN.green,"#ECFDF5"],
+      Approved:[ADMIN.green,"#ECFDF5"],
+      Pending:[ADMIN.blue,"#EFF6FF"],
+      Suspended:[ADMIN.red,"#FFF0F0"],
+      Rejected:[ADMIN.red,"#FFF0F0"],
+      Earning:[ADMIN.blue,"#EFF6FF"],
+      Deposit:[ADMIN.green,"#ECFDF5"],
+      Withdrawal:[ADMIN.blue,"#EFF6FF"]
+    };
     const [c,bg] = map[s]||["#888","#F5F5F5"];
-    return <span style={{ fontSize:9,fontWeight:800,padding:"3px 8px",borderRadius:50,background:bg,color:c,display:"inline-block",whiteSpace:"nowrap",letterSpacing:"0.05em" }}>{s}</span>;
+    return <span style={{ fontSize:9,fontWeight:800,padding:"3px 8px",borderRadius:50,background:bg,color:c,display:"inline-block",whiteSpace:"nowrap",letterSpacing:"0.05em",border:"1px solid #111" }}>{s}</span>;
   };
 
+  const adminTierColor = (name) => {
+    const key = String(name || "").toLowerCase();
+    if (key.includes("exec") || key.includes("executive pro")) return ADMIN.redAlt;
+    if (key.includes("executive")) return ADMIN.red;
+    if (key.includes("deluxe")) return ADMIN.green;
+    if (key.includes("standard")) return ADMIN.blueAlt;
+    if (key.includes("regular")) return ADMIN.blue;
+    return ADMIN.text;
+  };
   const tierDot = (name) => {
-    const tc = TIERS.find(t=>name.includes(t.name.split(" ")[0]))?.acc||"#888";
-    return <span style={{ fontSize:10,fontWeight:800,color:tc,padding:"2px 7px",background:`${tc}18`,borderRadius:50,border:`1px solid ${tc}33`,display:"inline-block",whiteSpace:"nowrap" }}>{name}</span>;
+    const tc = adminTierColor(name);
+    return <span style={{ fontSize:10,fontWeight:800,color:tc,padding:"2px 7px",background:`${tc}18`,borderRadius:50,border:"1px solid #111",display:"inline-block",whiteSpace:"nowrap" }}>{name}</span>;
   };
   const categoryTag = (cat) => {
     const label = cat || "Client";
-    return <span style={{ fontSize:10,fontWeight:800,color:"#94A3B8",padding:"2px 7px",background:"#0F172A",borderRadius:50,border:"1px solid #1F2937",display:"inline-block",whiteSpace:"nowrap",textTransform:"capitalize" }}>{label}</span>;
+    return <span style={{ fontSize:10,fontWeight:800,color:"#111",padding:"2px 7px",background:"#fff",borderRadius:50,border:"1px solid #111",display:"inline-block",whiteSpace:"nowrap",textTransform:"capitalize" }}>{label}</span>;
   };
 
   const CARD = {
-    background:"linear-gradient(180deg,#0D1117 0%, #0A0E15 100%)",
+    background:"#fff",
     borderRadius:14,
     padding:"20px 22px",
-    border:"1px solid rgba(255,255,255,0.12)",
-    boxShadow:"0 12px 28px rgba(0,0,0,0.35)"
+    border:"1.5px solid #111",
+    boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.12)"
   };
 
   return (
-    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"linear-gradient(180deg,#0B0F18 0%, #0B1220 55%, #0A0E15 100%)", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#F1F5F9", position:"relative" }}>
-      <LiveMathBackground tone="dark" symbols={liveSymbols} />
+    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:ADMIN.bg, fontFamily:"IBM Plex Sans, Geist, sans-serif", color:ADMIN.text, position:"relative" }}>
 
       {/* Mobile overlay */}
       {isMobile && sideOpen && (
@@ -4155,15 +4223,13 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
       )}
 
       {/* ── SIDEBAR ── */}
-      <aside style={{ width:sideOpen?sideW:0, minWidth:sideOpen?sideW:0, background:"#060810", borderRight:"1px solid #131A26", transition:"all .28s cubic-bezier(.4,0,.2,1)", overflow:"hidden", display:"flex", flexDirection:"column", position:isMobile?"fixed":"relative", height:"calc(100vh - 44px)", zIndex:200, boxShadow:isMobile&&sideOpen?"6px 0 32px rgba(0,0,0,0.5)":"none" }}>
+      <aside style={{ width:sideOpen?sideW:0, minWidth:sideOpen?sideW:0, background:ADMIN.panel, borderRight:"2px solid #111", transition:"all .28s cubic-bezier(.4,0,.2,1)", overflow:"hidden", display:"flex", flexDirection:"column", position:isMobile?"fixed":"relative", height:"calc(100vh - 44px)", zIndex:200, boxShadow:isMobile&&sideOpen?"8px 0 0 #111, 18px 0 28px rgba(0,0,0,0.14)":"4px 0 0 #111, 10px 0 18px rgba(0,0,0,0.08)" }}>
 
         {/* Logo */}
-        <div style={{ padding:"20px 18px 16px", borderBottom:"1px solid #131A26", display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:34,height:34,borderRadius:10,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <I n="bolt" s={15} c="#111"/>
-          </div>
+        <div style={{ padding:"20px 18px 16px", borderBottom:"2px solid #111", display:"flex", alignItems:"center", gap:10 }}>
+          <BrandMark size={34} />
           <div>
-            <div style={{ fontWeight:900,fontSize:15,color:"#F1F5F9",letterSpacing:"-0.03em" }}>EdisonPay</div>
+            <div style={{ fontWeight:900,fontSize:15,color:"#111",letterSpacing:"-0.03em" }}>EdisonPay</div>
             <div style={{ display:"inline-flex",alignItems:"center",gap:4,marginTop:2 }}>
               <div style={{ width:5,height:5,borderRadius:"50%",background:"#DC2626" }}/>
               <span style={{ fontSize:9,color:"#DC2626",fontWeight:800,letterSpacing:"0.12em" }}>ADMIN</span>
@@ -4175,29 +4241,29 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
         <nav style={{ padding:"10px 10px",flex:1,overflowY:"auto" }}>
           {adminNav.map(({id,label,ic,badge})=>(
             <div key={id} onClick={()=>{setTab(id); if(isMobile) setSideOpen(false);}}
-              style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:9,cursor:"pointer",marginBottom:2,background:tab===id?"#111B2E":"transparent",borderLeft:tab===id?"2.5px solid #0066FF":"2.5px solid transparent",transition:"all .12s" }}>
-              <I n={ic} s={15} c={tab===id?"#4A9EFF":"#334155"}/>
-              <span style={{ fontSize:13,fontWeight:tab===id?700:400,color:tab===id?"#F1F5F9":"#475569",flex:1 }}>{label}</span>
-              {badge && <span style={{ fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:50,background:tab===id?"#0066FF22":"#1A2234",color:tab===id?"#4A9EFF":"#475569" }}>{badge}</span>}
+              style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,cursor:"pointer",marginBottom:4,background:tab===id?"#111":"transparent",border:"1.5px solid #111",transition:"all .12s" }}>
+              <I n={ic} s={15} c={tab===id?"#fff":"#111"}/>
+              <span style={{ fontSize:13,fontWeight:tab===id?800:600,color:tab===id?"#fff":"#111",flex:1 }}>{label}</span>
+              {badge && <span style={{ fontSize:9,fontWeight:900,padding:"2px 7px",borderRadius:50,background:"#fff",color:ADMIN.red,border:"1px solid #111" }}>{badge}</span>}
             </div>
           ))}
         </nav>
 
         {/* Bottom */}
-        <div style={{ padding:"12px 14px 18px", borderTop:"1px solid #131A26" }}>
-          <div style={{ display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:9,background:"#0D1117",border:"1px solid #1A2234",marginBottom:6 }}>
-            <div style={{ width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,#DC2626,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+        <div style={{ padding:"12px 14px 18px", borderTop:"2px solid #111" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:10,background:"#fff",border:"1.5px solid #111",marginBottom:6,boxShadow:"0 4px 0 #111" }}>
+            <div style={{ width:28,height:28,borderRadius:"50%",background:"#111",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
               <I n="user" s={13} c="#fff"/>
             </div>
             <div style={{ flex:1,minWidth:0 }}>
-              <div style={{ fontSize:12,fontWeight:700,color:"#F1F5F9" }}>{adminName}</div>
-              <div style={{ fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{adminEmail}</div>
+              <div style={{ fontSize:12,fontWeight:800,color:"#111" }}>{adminName}</div>
+              <div style={{ fontSize:10,color:ADMIN.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{adminEmail}</div>
             </div>
           </div>
-          <div onClick={()=> (onSignOut ? onSignOut() : go("landing"))} style={{ display:"flex",alignItems:"center",gap:9,padding:"9px 12px",fontSize:13,color:"#475569",cursor:"pointer",borderRadius:9,transition:"background .12s" }}
-            onMouseEnter={e=>e.currentTarget.style.background="#0D1117"}
-            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-            <I n="logout" s={14} c="#475569"/> Exit Admin
+          <div onClick={()=> (onSignOut ? onSignOut() : go("landing"))} style={{ display:"flex",alignItems:"center",gap:9,padding:"9px 12px",fontSize:13,color:"#111",cursor:"pointer",borderRadius:9,transition:"background .12s",border:"1.5px solid #111" }}
+            onMouseEnter={e=>e.currentTarget.style.background="#F3F4F6"}
+            onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+            <I n="logout" s={14} c={ADMIN.red}/> Exit Admin
           </div>
         </div>
       </aside>
@@ -4206,38 +4272,38 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
       <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden" }}>
 
         {/* Topbar */}
-        <header style={{ height:58,background:"#0A0C10",borderBottom:"1px solid #131A26",display:"flex",alignItems:"center",padding:"0 20px",gap:10,flexShrink:0 }}>
-          <button onClick={()=>setSideOpen(o=>!o)} style={{ width:34,height:34,borderRadius:8,border:"1px solid #1E293B",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <I n="menu" s={15} c="#475569"/>
+        <header style={{ height:58,background:"#fff",borderBottom:"2px solid #111",display:"flex",alignItems:"center",padding:"0 20px",gap:10,flexShrink:0 }}>
+          <button onClick={()=>setSideOpen(o=>!o)} style={{ width:34,height:34,borderRadius:8,border:"1.5px solid #111",background:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 3px 0 #111" }}>
+            <I n="menu" s={15} c="#111"/>
           </button>
-          <div style={{ display:"flex",alignItems:"center",gap:7,padding:"6px 13px",background:"#0D1117",border:"1px solid #1E293B",borderRadius:9,flex:1,maxWidth:280 }}>
-            <I n="search" s={13} c="#334155"/>
-            <input placeholder="Search users, transactions…" style={{ border:"none",background:"transparent",outline:"none",fontSize:12,color:"#F1F5F9",width:"100%",fontFamily:"Geist,sans-serif" }}/>
-            <span style={{ fontSize:9,color:"#334155",border:"1px solid #1E293B",borderRadius:4,padding:"1px 5px",flexShrink:0 }}>⌘K</span>
+          <div style={{ display:"flex",alignItems:"center",gap:7,padding:"6px 13px",background:"#fff",border:"1.5px solid #111",borderRadius:9,flex:1,maxWidth:280,boxShadow:"0 3px 0 #111" }}>
+            <I n="search" s={13} c="#111"/>
+            <input placeholder="Search users, transactions…" style={{ border:"none",background:"transparent",outline:"none",fontSize:12,color:"#111",width:"100%",fontFamily:"Geist,sans-serif" }}/>
+            <span style={{ fontSize:9,color:"#111",border:"1px solid #111",borderRadius:4,padding:"1px 5px",flexShrink:0 }}>⌘K</span>
           </div>
           <div style={{ flex:1 }}/>
-          <div style={{ display:"flex",alignItems:"center",gap:7,padding:"6px 12px",background:"#0D1117",border:"1px solid #131A26",borderRadius:8,flexShrink:0 }}>
-            <div style={{ width:6,height:6,borderRadius:"50%",background:"#059669",animation:"pulse 2s infinite" }}/>
-            <span style={{ fontSize:11,color:"#64748B",fontWeight:600,whiteSpace:"nowrap" }}>Platform Live</span>
+          <div style={{ display:"flex",alignItems:"center",gap:7,padding:"6px 12px",background:"#fff",border:"1.5px solid #111",borderRadius:8,flexShrink:0,boxShadow:"0 3px 0 #111" }}>
+            <div style={{ width:6,height:6,borderRadius:"50%",background:ADMIN.green,animation:"pulse 2s infinite" }}/>
+            <span style={{ fontSize:11,color:"#111",fontWeight:700,whiteSpace:"nowrap" }}>Platform Live</span>
           </div>
-          <button onClick={()=>setNotifOpen(o=>!o)} style={{ width:34,height:34,borderRadius:8,border:"1px solid #1E293B",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",flexShrink:0 }}>
-            <I n="bell" s={15} c="#475569"/>
-            {withdrawals.filter(w=>w.status==="Pending").length>0&&<div style={{ position:"absolute",top:6,right:6,width:8,height:8,borderRadius:"50%",background:"#DC2626",border:"1.5px solid #0A0C10" }}/>}
+          <button onClick={()=>setNotifOpen(o=>!o)} style={{ width:34,height:34,borderRadius:8,border:"1.5px solid #111",background:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",flexShrink:0,boxShadow:"0 3px 0 #111" }}>
+            <I n="bell" s={15} c="#111"/>
+            {withdrawals.filter(w=>w.status==="Pending").length>0&&<div style={{ position:"absolute",top:6,right:6,width:8,height:8,borderRadius:"50%",background:"#DC2626",border:"1.5px solid #111" }}/>}
           </button>
           {notifOpen&&(
-            <div style={{ position:"absolute",top:62,right:60,width:300,background:"#0D1117",border:"1px solid #1E293B",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.4)",zIndex:999,padding:"14px 0",animation:"scaleIn .18s ease" }} onClick={e=>e.stopPropagation()}>
-              <div style={{ padding:"0 16px 10px",borderBottom:"1px solid #131A26",fontSize:13,fontWeight:800,color:"#F1F5F9" }}>Notifications</div>
-              {[{t:"New withdrawal request",s:"Alice M. — KES 2,400",c:"#E8820C"},{t:"New user registered",s:"David O. joined — Regular tier",c:"#0066FF"},{t:"Bot completed",s:"1,247 bot sessions done",c:"#059669"}].map((n,i)=>(
+            <div style={{ position:"absolute",top:62,right:60,width:300,background:"#fff",border:"2px solid #111",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.4)",zIndex:999,padding:"14px 0",animation:"scaleIn .18s ease" }} onClick={e=>e.stopPropagation()}>
+              <div style={{ padding:"0 16px 10px",borderBottom:"2px solid #111",fontSize:13,fontWeight:900,color:"#111" }}>Notifications</div>
+              {[{t:"New withdrawal request",s:"Alice M. — KES 2,400",c:ADMIN.red},{t:"New user registered",s:"David O. joined — Regular tier",c:ADMIN.blue},{t:"Bot completed",s:"1,247 bot sessions done",c:ADMIN.green}].map((n,i)=>(
                 <div key={i} style={{ padding:"10px 16px",display:"flex",gap:10 }}>
-                  <div style={{ width:28,height:28,borderRadius:8,background:`${n.c}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                  <div style={{ width:28,height:28,borderRadius:8,background:`${n.c}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"1px solid #111" }}>
                     <I n="bell" s={12} c={n.c}/>
                   </div>
-                  <div><div style={{ fontSize:12,fontWeight:700,color:"#F1F5F9" }}>{n.t}</div><div style={{ fontSize:11,color:"#475569",marginTop:2 }}>{n.s}</div></div>
+                  <div><div style={{ fontSize:12,fontWeight:700,color:"#111" }}>{n.t}</div><div style={{ fontSize:11,color:ADMIN.muted,marginTop:2 }}>{n.s}</div></div>
                 </div>
               ))}
             </div>
           )}
-          <div style={{ width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,#DC2626,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+          <div style={{ width:34,height:34,borderRadius:"50%",background:"#111",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
             <I n="user" s={14} c="#fff"/>
           </div>
         </header>
@@ -4248,13 +4314,13 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
           {/* Page title */}
           <div style={{ marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12 }}>
             <div>
-              <h2 style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:"#F1F5F9",fontFamily:adminHeadingFont }}>
+              <h2 style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:"#111",fontFamily:adminHeadingFont }}>
                 {adminNav.find(n=>n.id===tab)?.label}
               </h2>
-              <p style={{ fontSize:12,color:"#475569",marginTop:3 }}>{new Date().toDateString()} · EdisonPay Admin</p>
+              <p style={{ fontSize:12,color:ADMIN.muted,marginTop:3 }}>{new Date().toDateString()} · EdisonPay Admin</p>
             </div>
             {tab==="users"&&(
-              <button style={{ padding:"8px 18px",background:"#0066FF",color:"#fff",border:"none",borderRadius:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:6 }}>
+              <button style={{ padding:"8px 18px",background:"#111",color:"#fff",border:"1.5px solid #111",boxShadow:"0 4px 0 #111",borderRadius:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:6 }}>
                 <I n="user" s={12} c="#fff"/> Add User
               </button>
             )}
@@ -4266,20 +4332,20 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
               {/* Stat cards */}
               <div className="ep-admin-stats" style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
                 {[
-                  [1247,"Total Users","users","#0066FF","+12% this month",true],
-                  [342,"Active Today","activity","#059669","+24 today",true],
-                  ["KES 8.9M","Total Paid Out","wallet","#E8820C","Since launch",true],
-                  [withdrawals.filter(w=>w.status==="Pending").length,"Pending Withdrawals","up","#DC2626","Needs attention",false],
+                  [1247,"Total Users","users",ADMIN.blue,"+12% this month",true],
+                  [342,"Active Today","activity",ADMIN.green,"+24 today",true],
+                  ["KES 8.9M","Total Paid Out","wallet",ADMIN.blueAlt,"Since launch",true],
+                  [withdrawals.filter(w=>w.status==="Pending").length,"Pending Withdrawals","up",ADMIN.red,"Needs attention",false],
                 ].map(([v,l,ic,c,sub,_],i)=>(
                   <div key={i} className="ep-hover-lift" style={{ ...CARD }}>
                     <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
-                      <div style={{ width:32,height:32,borderRadius:9,background:`${c}18`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      <div style={{ width:32,height:32,borderRadius:9,background:`${c}18`,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #111" }}>
                         <I n={ic} s={14} c={c}/>
                       </div>
                       <div style={{ fontSize:10,color:c,fontWeight:800 }}>{sub}</div>
                     </div>
-                    <div style={{ fontSize:24,fontWeight:900,letterSpacing:"-0.04em",color:"#F1F5F9",marginBottom:4 }}>{typeof v==="number"?v.toLocaleString():v}</div>
-                    <div style={{ fontSize:11,color:"#64748B",fontWeight:600 }}>{l}</div>
+                    <div style={{ fontSize:24,fontWeight:900,letterSpacing:"-0.04em",color:"#111",marginBottom:4 }}>{typeof v==="number"?v.toLocaleString():v}</div>
+                    <div style={{ fontSize:11,color:ADMIN.muted,fontWeight:700 }}>{l}</div>
                   </div>
                 ))}
               </div>
@@ -4288,18 +4354,18 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
                 {/* Recent users */}
                 <div style={CARD}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
-                    <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9" }}>Recent Users</h3>
-                    <span onClick={()=>setTab("users")} style={{ fontSize:11,color:"#4A9EFF",cursor:"pointer",fontWeight:700 }}>View All</span>
+                    <h3 style={{ fontSize:14,fontWeight:900,color:"#111" }}>Recent Users</h3>
+                    <span onClick={()=>setTab("users")} style={{ fontSize:11,color:ADMIN.blue,cursor:"pointer",fontWeight:800 }}>View All</span>
                   </div>
                   {users.slice(0,5).map((u,i)=>(
-                    <div key={i} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:i>0?"1px solid #131A26":"none" }}>
-                      <div style={{ width:30,height:30,borderRadius:"50%",background:`${TIERS.find(t=>u.tier.includes(t.name.split(" ")[0]))?.acc||"#888"}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:TIERS.find(t=>u.tier.includes(t.name.split(" ")[0]))?.acc||"#888",flexShrink:0 }}>{u.name[0]}</div>
+                    <div key={i} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:i>0?"1px solid #111":"none" }}>
+                      <div style={{ width:30,height:30,borderRadius:"50%",background:`${adminTierColor(u.tier)}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:adminTierColor(u.tier),flexShrink:0,border:"1px solid #111" }}>{u.name[0]}</div>
                       <div style={{ flex:1,minWidth:0 }}>
-                        <div style={{ fontSize:12,fontWeight:700,color:"#F1F5F9",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{u.name}</div>
-                        <div style={{ fontSize:10,color:"#475569" }}>{u.tier}</div>
+                        <div style={{ fontSize:12,fontWeight:800,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{u.name}</div>
+                        <div style={{ fontSize:10,color:ADMIN.muted }}>{u.tier}</div>
                       </div>
                       <div style={{ textAlign:"right" }}>
-                        <div style={{ fontSize:11,color:"#64748B" }}>KES {(u.deposit/1000).toFixed(0)}K</div>
+                        <div style={{ fontSize:11,color:ADMIN.muted }}>KES {(u.deposit/1000).toFixed(0)}K</div>
                         {statusBadge(u.status)}
                       </div>
                     </div>
@@ -4309,22 +4375,22 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
                 {/* Tier distribution */}
                 <div style={CARD}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18 }}>
-                    <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9" }}>Tier Distribution</h3>
-                    <span style={{ fontSize:13,fontWeight:900,color:"#F1F5F9" }}>1,247 users</span>
+                    <h3 style={{ fontSize:14,fontWeight:900,color:"#111" }}>Tier Distribution</h3>
+                    <span style={{ fontSize:13,fontWeight:900,color:"#111" }}>1,247 users</span>
                   </div>
                   {tiers.map((tr,i)=>(
                     <div key={i} style={{ marginBottom:12 }}>
                       <div style={{ display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5 }}>
                         <div style={{ display:"flex",alignItems:"center",gap:7 }}>
                           <div style={{ width:7,height:7,borderRadius:2,background:tr.c }}/>
-                          <span style={{ color:"#64748B",fontWeight:600 }}>{tr.n}</span>
+                          <span style={{ color:ADMIN.muted,fontWeight:700 }}>{tr.n}</span>
                         </div>
                         <div style={{ display:"flex",gap:10 }}>
-                          <span style={{ fontWeight:800,color:"#F1F5F9" }}>{tr.count}</span>
-                          <span style={{ color:"#334155" }}>{tr.pct}%</span>
+                          <span style={{ fontWeight:900,color:"#111" }}>{tr.count}</span>
+                          <span style={{ color:ADMIN.muted }}>{tr.pct}%</span>
                         </div>
                       </div>
-                      <div style={{ height:6,background:"#0A0C10",borderRadius:99,overflow:"hidden" }}>
+                      <div style={{ height:6,background:"#E5E7EB",borderRadius:99,overflow:"hidden",border:"1px solid #111" }}>
                         <div style={{ height:"100%",width:`${tr.pct*2.5}%`,background:tr.c,borderRadius:99,transition:"width 1s ease" }}/>
                       </div>
                     </div>
@@ -4335,21 +4401,21 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
               {/* Pending withdrawals preview */}
               <div style={CARD}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
-                  <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9" }}>Pending Withdrawals</h3>
-                  <span onClick={()=>setTab("withdrawals")} style={{ fontSize:11,color:"#4A9EFF",cursor:"pointer",fontWeight:700 }}>Manage All</span>
+                  <h3 style={{ fontSize:14,fontWeight:900,color:"#111" }}>Pending Withdrawals</h3>
+                  <span onClick={()=>setTab("withdrawals")} style={{ fontSize:11,color:ADMIN.blue,cursor:"pointer",fontWeight:800 }}>Manage All</span>
                 </div>
                 {withdrawals.filter(w=>w.status==="Pending").length===0?(
-                  <div style={{ padding:"20px",textAlign:"center",color:"#334155",fontSize:13 }}>No pending withdrawals ✓</div>
+                  <div style={{ padding:"20px",textAlign:"center",color:ADMIN.muted,fontSize:13 }}>No pending withdrawals ✓</div>
                 ):withdrawals.filter(w=>w.status==="Pending").slice(0,3).map((w,i)=>(
-                  <div key={w.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:i>0?"1px solid #131A26":"none" }}>
+                  <div key={w.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:i>0?"1px solid #111":"none" }}>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13,fontWeight:700,color:"#F1F5F9" }}>{w.user}</div>
-                      <div style={{ fontSize:11,color:"#475569" }}>{w.method} · {w.date}</div>
+                      <div style={{ fontSize:13,fontWeight:700,color:"#111" }}>{w.user}</div>
+                      <div style={{ fontSize:11,color:ADMIN.muted }}>{w.method} · {w.date}</div>
                     </div>
-                    <div style={{ fontSize:14,fontWeight:900,color:"#F1F5F9" }}>KES {w.amount.toLocaleString()}</div>
+                    <div style={{ fontSize:14,fontWeight:900,color:"#111" }}>KES {w.amount.toLocaleString()}</div>
                     <div style={{ display:"flex",gap:6 }}>
-                      <button onClick={()=>approveWd(w.id)} style={{ padding:"5px 12px",background:"#05966918",color:"#059669",border:"1px solid #059669",borderRadius:7,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Approve</button>
-                      <button onClick={()=>rejectWd(w.id)} style={{ padding:"5px 12px",background:"#DC262618",color:"#DC2626",border:"1px solid #DC2626",borderRadius:7,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Reject</button>
+                      <button onClick={()=>approveWd(w.id)} style={{ padding:"5px 12px",background:"#ECFDF5",color:ADMIN.green,border:"1.5px solid #111",borderRadius:7,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Approve</button>
+                      <button onClick={()=>rejectWd(w.id)} style={{ padding:"5px 12px",background:"#FFF0F0",color:ADMIN.red,border:"1.5px solid #111",borderRadius:7,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Reject</button>
                     </div>
                   </div>
                 ))}
@@ -4362,21 +4428,21 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
             <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
               {/* Filters */}
               <div style={{ display:"flex",gap:10,flexWrap:"wrap",alignItems:"center" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:7,padding:"8px 14px",background:"#0D1117",border:"1px solid #1E293B",borderRadius:9,flex:1,maxWidth:300 }}>
-                  <I n="search" s={13} c="#334155"/>
-                  <input value={userSearch} onChange={e=>setUserSearch(e.target.value)} placeholder="Search name or email…" style={{ border:"none",background:"transparent",outline:"none",fontSize:13,color:"#F1F5F9",width:"100%",fontFamily:"Geist,sans-serif" }}/>
+                <div style={{ display:"flex",alignItems:"center",gap:7,padding:"8px 14px",background:"#fff",border:"2px solid #111",borderRadius:9,flex:1,maxWidth:300 }}>
+                  <I n="search" s={13} c="#111"/>
+                  <input value={userSearch} onChange={e=>setUserSearch(e.target.value)} placeholder="Search name or email…" style={{ border:"none",background:"transparent",outline:"none",fontSize:13,color:"#111",width:"100%",fontFamily:"Geist,sans-serif" }}/>
                 </div>
-                <div style={{ display:"flex",gap:4,background:"#0D1117",border:"1px solid #1E293B",borderRadius:9,padding:3 }}>
+                <div style={{ display:"flex",gap:4,background:"#fff",border:"2px solid #111",borderRadius:9,padding:3 }}>
                   {["all","active","pending","suspended"].map(f=>(
-                    <button key={f} onClick={()=>setUserFilter(f)} style={{ padding:"6px 14px",borderRadius:7,border:"none",background:userFilter===f?"#131A26":"transparent",color:userFilter===f?"#F1F5F9":"#475569",fontSize:12,fontWeight:userFilter===f?700:400,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
+                    <button key={f} onClick={()=>setUserFilter(f)} style={{ padding:"6px 14px",borderRadius:7,border:"1px solid #111",background:userFilter===f?"#111":"transparent",color:userFilter===f?"#fff":"#111",fontSize:12,fontWeight:userFilter===f?800:600,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
                   ))}
                 </div>
-                <div style={{ display:"flex",gap:4,background:"#0D1117",border:"1px solid #1E293B",borderRadius:9,padding:3 }}>
+                <div style={{ display:"flex",gap:4,background:"#fff",border:"2px solid #111",borderRadius:9,padding:3 }}>
                   {categoryOptions.map(c=>(
-                    <button key={c} onClick={()=>setUserCategory(c)} style={{ padding:"6px 14px",borderRadius:7,border:"none",background:userCategory===c?"#131A26":"transparent",color:userCategory===c?"#F1F5F9":"#475569",fontSize:12,fontWeight:userCategory===c?700:400,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{c}</button>
+                    <button key={c} onClick={()=>setUserCategory(c)} style={{ padding:"6px 14px",borderRadius:7,border:"1px solid #111",background:userCategory===c?"#111":"transparent",color:userCategory===c?"#fff":"#111",fontSize:12,fontWeight:userCategory===c?800:600,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{c}</button>
                   ))}
                 </div>
-                <div style={{ fontSize:12,color:"#475569" }}>{filteredUsers.length} users</div>
+                <div style={{ fontSize:12,color:ADMIN.muted }}>{filteredUsers.length} users</div>
               </div>
 
               {/* Table */}
@@ -4384,38 +4450,38 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
                 <div style={{ overflowX:"auto" }}>
                   <table style={{ width:"100%",borderCollapse:"collapse" }}>
                     <thead>
-                      <tr style={{ borderBottom:"1px solid #1A2234" }}>
+                      <tr style={{ borderBottom:"1px solid #111" }}>
                         {["User","Tier","Category","Deposit","Earnings","Status","Joined","Actions"].map(h=>(
-                          <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:800,color:"#334155",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
+                          <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:900,color:"#111",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {filteredUsers.map((u,i)=>{
-                        const tc = TIERS.find(t=>u.tier.includes(t.name.split(" ")[0]))?.acc||"#888";
+                        const tc = adminTierColor(u.tier);
                         return (
-                          <tr key={u.id} style={{ borderBottom:"1px solid #0D1117",transition:"background .1s" }}
-                            onMouseEnter={e=>e.currentTarget.style.background="#0D1117"}
+                          <tr key={u.id} style={{ borderBottom:"1px solid #111",transition:"background .1s" }}
+                            onMouseEnter={e=>e.currentTarget.style.background="#F3F4F6"}
                             onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                             <td style={{ padding:"12px 14px" }}>
                               <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                                <div style={{ width:32,height:32,borderRadius:"50%",background:`${tc}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:tc,flexShrink:0 }}>{u.name[0]}</div>
+                                <div style={{ width:32,height:32,borderRadius:"50%",background:`${tc}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:tc,flexShrink:0,border:"1px solid #111" }}>{u.name[0]}</div>
                                 <div>
-                                  <div style={{ fontSize:13,fontWeight:700,color:"#F1F5F9" }}>{u.name}</div>
-                                  <div style={{ fontSize:11,color:"#475569" }}>{u.email}</div>
+                                  <div style={{ fontSize:13,fontWeight:700,color:"#111" }}>{u.name}</div>
+                                  <div style={{ fontSize:11,color:ADMIN.muted }}>{u.email}</div>
                                 </div>
                               </div>
                             </td>
                             <td style={{ padding:"12px 14px" }}>{tierDot(u.tier)}</td>
                             <td style={{ padding:"12px 14px" }}>{categoryTag(u.category)}</td>
-                            <td style={{ padding:"12px 14px",fontSize:12,color:"#64748B",fontWeight:600,whiteSpace:"nowrap" }}>KES {u.deposit.toLocaleString()}</td>
-                            <td style={{ padding:"12px 14px",fontSize:12,fontWeight:700,color:"#059669",whiteSpace:"nowrap" }}>KES {u.earn.toLocaleString()}</td>
+                            <td style={{ padding:"12px 14px",fontSize:12,color:ADMIN.muted,fontWeight:700,whiteSpace:"nowrap" }}>KES {u.deposit.toLocaleString()}</td>
+                            <td style={{ padding:"12px 14px",fontSize:12,fontWeight:800,color:ADMIN.green,whiteSpace:"nowrap" }}>KES {u.earn.toLocaleString()}</td>
                             <td style={{ padding:"12px 14px" }}>{statusBadge(u.status)}</td>
-                            <td style={{ padding:"12px 14px",fontSize:11,color:"#475569",whiteSpace:"nowrap" }}>{u.joined}</td>
+                            <td style={{ padding:"12px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>{u.joined}</td>
                             <td style={{ padding:"12px 14px" }}>
                               <div style={{ display:"flex",gap:5 }}>
-                                <button onClick={()=>setSelectedUser(u)} style={{ padding:"4px 10px",background:"#0066FF18",color:"#4A9EFF",border:"1px solid #0066FF33",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>View</button>
-                                <button style={{ padding:"4px 10px",background:"#E8820C18",color:"#E8820C",border:"1px solid #E8820C33",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>Edit</button>
+                                <button onClick={()=>setSelectedUser(u)} style={{ padding:"4px 10px",background:"#EFF6FF",color:ADMIN.blue,border:"1px solid #111",borderRadius:6,fontSize:10,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>View</button>
+                                <button style={{ padding:"4px 10px",background:"#ECFDF5",color:ADMIN.green,border:"1px solid #111",borderRadius:6,fontSize:10,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>Edit</button>
                               </div>
                             </td>
                           </tr>
@@ -4429,31 +4495,31 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
               {/* User detail modal */}
               {selectedUser && (
                 <div onClick={()=>setSelectedUser(null)} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)" }}>
-                  <div onClick={e=>e.stopPropagation()} style={{ background:"#0D1117",border:"1px solid #1E293B",borderRadius:20,padding:"28px",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto",animation:"scaleIn .2s ease" }}>
+                  <div onClick={e=>e.stopPropagation()} style={{ background:"#fff",border:"2px solid #111",borderRadius:20,padding:"28px",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto",animation:"scaleIn .2s ease" }}>
                     <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24 }}>
                       <div style={{ display:"flex",gap:14,alignItems:"center" }}>
-                        <div style={{ width:48,height:48,borderRadius:"50%",background:`${TIERS.find(t=>selectedUser.tier.includes(t.name.split(" ")[0]))?.acc||"#888"}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:800,color:TIERS.find(t=>selectedUser.tier.includes(t.name.split(" ")[0]))?.acc||"#888" }}>{selectedUser.name[0]}</div>
+                        <div style={{ width:48,height:48,borderRadius:"50%",background:`${adminTierColor(selectedUser.tier)}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,color:adminTierColor(selectedUser.tier),border:"1px solid #111" }}>{selectedUser.name[0]}</div>
                         <div>
-                          <div style={{ fontSize:18,fontWeight:900,color:"#F1F5F9",letterSpacing:"-0.03em" }}>{selectedUser.name}</div>
-                          <div style={{ fontSize:12,color:"#475569",marginTop:3 }}>{selectedUser.email}</div>
+                          <div style={{ fontSize:18,fontWeight:900,color:"#111",letterSpacing:"-0.03em" }}>{selectedUser.name}</div>
+                          <div style={{ fontSize:12,color:ADMIN.muted,marginTop:3 }}>{selectedUser.email}</div>
                         </div>
                       </div>
-                      <button onClick={()=>setSelectedUser(null)} style={{ width:32,height:32,borderRadius:8,border:"1px solid #1E293B",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                        <I n="xmark" s={14} c="#475569"/>
+                      <button onClick={()=>setSelectedUser(null)} style={{ width:32,height:32,borderRadius:8,border:"1.5px solid #111",background:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 3px 0 #111" }}>
+                        <I n="xmark" s={14} c="#111"/>
                       </button>
                     </div>
                     <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20 }}>
                       {[["User ID",selectedUser.id],["Tier",selectedUser.tier],["Deposit",`KES ${selectedUser.deposit.toLocaleString()}`],["Earnings",`KES ${selectedUser.earn.toLocaleString()}`],["Status",selectedUser.status],["Joined",selectedUser.joined],["Phone",selectedUser.phone],["Referred By",selectedUser.referredBy || "—"],["Referrals","3 active"]].map(([l,v],i)=>(
-                        <div key={i} style={{ padding:"12px 14px",background:"#080A0F",borderRadius:10,border:"1px solid #131A26" }}>
-                          <div style={{ fontSize:10,color:"#334155",fontWeight:700,letterSpacing:"0.08em",marginBottom:5 }}>{l.toUpperCase()}</div>
-                          <div style={{ fontSize:13,fontWeight:700,color:"#F1F5F9" }}>{v}</div>
+                        <div key={i} style={{ padding:"12px 14px",background:"#fff",borderRadius:10,border:"1.5px solid #111",boxShadow:"0 3px 0 #111" }}>
+                          <div style={{ fontSize:10,color:ADMIN.muted,fontWeight:800,letterSpacing:"0.08em",marginBottom:5 }}>{l.toUpperCase()}</div>
+                          <div style={{ fontSize:13,fontWeight:700,color:"#111" }}>{v}</div>
                         </div>
                       ))}
                     </div>
                     <div style={{ display:"flex",gap:8 }}>
-                      <button style={{ flex:1,padding:"10px",background:"#059669",color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Activate</button>
-                      <button style={{ flex:1,padding:"10px",background:"#E8820C18",color:"#E8820C",border:"1px solid #E8820C44",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Suspend</button>
-                      <button style={{ flex:1,padding:"10px",background:"#DC262618",color:"#DC2626",border:"1px solid #DC262644",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Delete</button>
+                      <button style={{ flex:1,padding:"10px",background:"#111",color:"#fff",border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",boxShadow:"0 4px 0 #111" }}>Activate</button>
+                      <button style={{ flex:1,padding:"10px",background:"#EFF6FF",color:ADMIN.blue,border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Suspend</button>
+                      <button style={{ flex:1,padding:"10px",background:"#FFF0F0",color:ADMIN.red,border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Delete</button>
                     </div>
                   </div>
                 </div>
@@ -4466,33 +4532,33 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
             <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
               <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
                 {["all","deposit","withdrawal","earning"].map(f=>(
-                  <button key={f} onClick={()=>setTxFilter(f)} style={{ padding:"6px 16px",borderRadius:50,border:`1px solid ${txFilter===f?"#0066FF":"#1E293B"}`,background:txFilter===f?"#0066FF18":"transparent",color:txFilter===f?"#4A9EFF":"#475569",fontSize:12,fontWeight:txFilter===f?700:400,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
+                  <button key={f} onClick={()=>setTxFilter(f)} style={{ padding:"6px 16px",borderRadius:50,border:"1.5px solid #111",background:txFilter===f?"#111":"transparent",color:txFilter===f?"#fff":"#111",fontSize:12,fontWeight:txFilter===f?800:600,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
                 ))}
-                <div style={{ marginLeft:"auto",fontSize:12,color:"#475569",display:"flex",alignItems:"center" }}>{filteredTx.length} transactions</div>
+                <div style={{ marginLeft:"auto",fontSize:12,color:ADMIN.muted,display:"flex",alignItems:"center" }}>{filteredTx.length} transactions</div>
               </div>
               <div style={CARD}>
                 <div style={{ overflowX:"auto" }}>
                   <table style={{ width:"100%",borderCollapse:"collapse" }}>
                     <thead>
-                      <tr style={{ borderBottom:"1px solid #1A2234" }}>
+                      <tr style={{ borderBottom:"1px solid #111" }}>
                         {["ID","User","Type","Amount","Method","Date","Status"].map(h=>(
-                          <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:800,color:"#334155",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
+                          <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:900,color:"#111",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {filteredTx.map((tx,i)=>(
-                        <tr key={tx.id} style={{ borderBottom:"1px solid #0D1117",transition:"background .1s" }}
-                          onMouseEnter={e=>e.currentTarget.style.background="#0D1117"}
+                        <tr key={tx.id} style={{ borderBottom:"1px solid #111",transition:"background .1s" }}
+                          onMouseEnter={e=>e.currentTarget.style.background="#F3F4F6"}
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          <td style={{ padding:"11px 14px",fontSize:11,color:"#334155",fontWeight:700 }}>{tx.id}</td>
-                          <td style={{ padding:"11px 14px",fontSize:13,fontWeight:700,color:"#F1F5F9",whiteSpace:"nowrap" }}>{tx.user}</td>
+                          <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,fontWeight:700 }}>{tx.id}</td>
+                          <td style={{ padding:"11px 14px",fontSize:13,fontWeight:700,color:"#111",whiteSpace:"nowrap" }}>{tx.user}</td>
                           <td style={{ padding:"11px 14px" }}>{statusBadge(tx.type)}</td>
-                          <td style={{ padding:"11px 14px",fontSize:13,fontWeight:800,color:tx.type==="Withdrawal"?"#E8820C":tx.type==="Earning"?"#7C3AED":"#059669",whiteSpace:"nowrap" }}>
+                          <td style={{ padding:"11px 14px",fontSize:13,fontWeight:800,color:tx.type==="Withdrawal"?ADMIN.red:tx.type==="Earning"?ADMIN.green:ADMIN.blue,whiteSpace:"nowrap" }}>
                             {tx.type==="Withdrawal"?"-":"+"} KES {tx.amount.toLocaleString()}
                           </td>
-                          <td style={{ padding:"11px 14px",fontSize:12,color:"#64748B",whiteSpace:"nowrap" }}>{tx.method}</td>
-                          <td style={{ padding:"11px 14px",fontSize:11,color:"#475569",whiteSpace:"nowrap" }}>{tx.date}</td>
+                          <td style={{ padding:"11px 14px",fontSize:12,color:ADMIN.muted,whiteSpace:"nowrap" }}>{tx.method}</td>
+                          <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>{tx.date}</td>
                           <td style={{ padding:"11px 14px" }}>{statusBadge(tx.status)}</td>
                         </tr>
                       ))}
@@ -4508,16 +4574,16 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
             <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
               {/* Stat pills */}
               <div style={{ display:"flex",gap:10,flexWrap:"wrap" }}>
-                {[["Pending",withdrawals.filter(w=>w.status==="Pending").length,"#E8820C"],["Approved",withdrawals.filter(w=>w.status==="Approved").length,"#0066FF"],["Paid",withdrawals.filter(w=>w.status==="Paid").length,"#059669"],["Rejected",withdrawals.filter(w=>w.status==="Rejected").length,"#DC2626"]].map(([l,n,c])=>(
-                  <div key={l} style={{ padding:"8px 18px",background:`${c}14`,border:`1px solid ${c}33`,borderRadius:50,display:"flex",alignItems:"center",gap:8 }}>
+                {[["Pending",withdrawals.filter(w=>w.status==="Pending").length,ADMIN.blue],["Approved",withdrawals.filter(w=>w.status==="Approved").length,ADMIN.green],["Paid",withdrawals.filter(w=>w.status==="Paid").length,ADMIN.green],["Rejected",withdrawals.filter(w=>w.status==="Rejected").length,ADMIN.red]].map(([l,n,c])=>(
+                  <div key={l} style={{ padding:"8px 18px",background:`${c}14`,border:"1.5px solid #111",borderRadius:50,display:"flex",alignItems:"center",gap:8 }}>
                     <div style={{ width:7,height:7,borderRadius:"50%",background:c }}/>
                     <span style={{ fontSize:12,fontWeight:700,color:c }}>{l}</span>
-                    <span style={{ fontSize:14,fontWeight:900,color:"#F1F5F9" }}>{n}</span>
+                    <span style={{ fontSize:14,fontWeight:900,color:"#111" }}>{n}</span>
                   </div>
                 ))}
-                <div style={{ display:"flex",gap:4,background:"#0D1117",border:"1px solid #1E293B",borderRadius:9,padding:3,marginLeft:"auto" }}>
+                <div style={{ display:"flex",gap:4,background:"#fff",border:"2px solid #111",borderRadius:9,padding:3,marginLeft:"auto" }}>
                   {["all","pending","approved","paid","rejected"].map(f=>(
-                    <button key={f} onClick={()=>setWdFilter(f)} style={{ padding:"5px 12px",borderRadius:7,border:"none",background:wdFilter===f?"#131A26":"transparent",color:wdFilter===f?"#F1F5F9":"#475569",fontSize:11,fontWeight:wdFilter===f?700:400,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
+                    <button key={f} onClick={()=>setWdFilter(f)} style={{ padding:"5px 12px",borderRadius:7,border:"1px solid #111",background:wdFilter===f?"#111":"transparent",color:wdFilter===f?"#fff":"#111",fontSize:11,fontWeight:wdFilter===f?800:600,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
                   ))}
                 </div>
               </div>
@@ -4527,38 +4593,38 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
                 <div style={{ overflowX:"auto" }}>
                   <table style={{ width:"100%",borderCollapse:"collapse" }}>
                     <thead>
-                      <tr style={{ borderBottom:"1px solid #1A2234" }}>
+                      <tr style={{ borderBottom:"1px solid #111" }}>
                         {["User","Tier","Amount","Method","Date","Status","Actions"].map(h=>(
-                          <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:800,color:"#334155",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
+                          <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:900,color:"#111",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {filteredWd.map((w,i)=>(
-                        <tr key={w.id} style={{ borderBottom:"1px solid #0D1117",transition:"background .1s" }}
-                          onMouseEnter={e=>e.currentTarget.style.background="#0D1117"}
+                        <tr key={w.id} style={{ borderBottom:"1px solid #111",transition:"background .1s" }}
+                          onMouseEnter={e=>e.currentTarget.style.background="#F3F4F6"}
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                           <td style={{ padding:"12px 14px" }}>
-                            <div style={{ fontSize:13,fontWeight:700,color:"#F1F5F9",whiteSpace:"nowrap" }}>{w.user}</div>
-                            <div style={{ fontSize:10,color:"#475569" }}>{w.phone}</div>
+                            <div style={{ fontSize:13,fontWeight:700,color:"#111",whiteSpace:"nowrap" }}>{w.user}</div>
+                            <div style={{ fontSize:10,color:ADMIN.muted }}>{w.phone}</div>
                           </td>
                           <td style={{ padding:"12px 14px" }}>{tierDot(w.tier)}</td>
-                          <td style={{ padding:"12px 14px",fontSize:14,fontWeight:900,color:"#F1F5F9",whiteSpace:"nowrap" }}>KES {w.amount.toLocaleString()}</td>
-                          <td style={{ padding:"12px 14px",fontSize:12,color:"#64748B",whiteSpace:"nowrap" }}>{w.method}</td>
-                          <td style={{ padding:"12px 14px",fontSize:11,color:"#475569",whiteSpace:"nowrap" }}>{w.date}</td>
+                          <td style={{ padding:"12px 14px",fontSize:14,fontWeight:900,color:"#111",whiteSpace:"nowrap" }}>KES {w.amount.toLocaleString()}</td>
+                          <td style={{ padding:"12px 14px",fontSize:12,color:ADMIN.muted,whiteSpace:"nowrap" }}>{w.method}</td>
+                          <td style={{ padding:"12px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>{w.date}</td>
                           <td style={{ padding:"12px 14px" }}>{statusBadge(w.status)}</td>
                           <td style={{ padding:"12px 14px" }}>
                             {w.status==="Pending" && (
                               <div style={{ display:"flex",gap:5 }}>
-                                <button onClick={()=>approveWd(w.id)} style={{ padding:"5px 11px",background:"#05966918",color:"#059669",border:"1px solid #059669",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>✓ Approve</button>
-                                <button onClick={()=>rejectWd(w.id)} style={{ padding:"5px 11px",background:"#DC262618",color:"#DC2626",border:"1px solid #DC2626",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>✗ Reject</button>
+                                <button onClick={()=>approveWd(w.id)} style={{ padding:"5px 11px",background:"#ECFDF5",color:ADMIN.green,border:"1.5px solid #111",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>✓ Approve</button>
+                                <button onClick={()=>rejectWd(w.id)} style={{ padding:"5px 11px",background:"#FFF0F0",color:ADMIN.red,border:"1.5px solid #111",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>✗ Reject</button>
                               </div>
                             )}
                             {w.status==="Approved" && (
-                              <button onClick={()=>payWd(w.id)} style={{ padding:"5px 14px",background:"#0066FF",color:"#fff",border:"none",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>Mark Paid</button>
+                              <button onClick={()=>payWd(w.id)} style={{ padding:"5px 14px",background:"#111",color:"#fff",border:"1.5px solid #111",borderRadius:6,fontSize:10,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap",boxShadow:"0 3px 0 #111" }}>Mark Paid</button>
                             )}
                             {(w.status==="Paid"||w.status==="Rejected") && (
-                              <span style={{ fontSize:11,color:"#334155" }}>Completed</span>
+                              <span style={{ fontSize:11,color:ADMIN.muted }}>Completed</span>
                             )}
                           </td>
                         </tr>
@@ -4576,15 +4642,15 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
 
               {/* Withdrawal days */}
               <div style={CARD}>
-                <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9",marginBottom:4 }}>Withdrawal Days</h3>
-                <p style={{ fontSize:12,color:"#475569",marginBottom:18 }}>Control which days users can withdraw funds.</p>
+                <h3 style={{ fontSize:14,fontWeight:900,color:"#111",marginBottom:4 }}>Withdrawal Days</h3>
+                <p style={{ fontSize:12,color:ADMIN.muted,marginBottom:18 }}>Control which days users can withdraw funds.</p>
                 <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10 }}>
                   {[["tue","Tuesday"],["wed","Wednesday"],["fri","Friday"]].map(([key,label])=>(
-                    <div key={key} style={{ padding:"16px",background:"#080A0F",borderRadius:10,border:`1px solid ${wdDays[key]?"#059669":"#1A2234"}` }}>
-                      <div style={{ fontSize:13,fontWeight:800,color:"#F1F5F9",marginBottom:4 }}>{label}</div>
-                      <div style={{ fontSize:11,color:wdDays[key]?"#059669":"#475569",fontWeight:700,marginBottom:12 }}>{wdDays[key]?"Open":"Closed"}</div>
+                    <div key={key} style={{ padding:"16px",background:"#fff",borderRadius:10,border:"1.5px solid #111",boxShadow:"0 3px 0 #111" }}>
+                      <div style={{ fontSize:13,fontWeight:900,color:"#111",marginBottom:4 }}>{label}</div>
+                      <div style={{ fontSize:11,color:wdDays[key]?ADMIN.green:ADMIN.red,fontWeight:700,marginBottom:12 }}>{wdDays[key]?"Open":"Closed"}</div>
                       <button onClick={()=>setWdDays(d=>({...d,[key]:!d[key]}))}
-                        style={{ padding:"6px 14px",background:wdDays[key]?"#DC262618":"#05966918",color:wdDays[key]?"#DC2626":"#059669",border:`1px solid ${wdDays[key]?"#DC2626":"#059669"}`,borderRadius:7,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>
+                        style={{ padding:"6px 14px",background:wdDays[key]?"#FFF0F0":"#ECFDF5",color:wdDays[key]?ADMIN.red:ADMIN.green,border:"1.5px solid #111",borderRadius:7,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>
                         {wdDays[key]?"Close Day":"Open Day"}
                       </button>
                     </div>
@@ -4594,57 +4660,57 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
 
               {/* Video earnings */}
               <div style={CARD}>
-                <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9",marginBottom:4 }}>Video Earnings Price</h3>
-                <p style={{ fontSize:12,color:"#475569",marginBottom:18 }}>KES earned per video watched by users.</p>
+                <h3 style={{ fontSize:14,fontWeight:900,color:"#111",marginBottom:4 }}>Video Earnings Price</h3>
+                <p style={{ fontSize:12,color:ADMIN.muted,marginBottom:18 }}>KES earned per video watched by users.</p>
                 <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-                  <div style={{ flex:1,display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#080A0F",border:"1px solid #1A2234",borderRadius:10 }}>
-                    <span style={{ fontSize:14,color:"#475569",fontWeight:700 }}>KES</span>
-                    <input type="number" value={videoPrice} onChange={e=>setVideoPrice(Number(e.target.value))} style={{ background:"transparent",border:"none",outline:"none",fontSize:18,fontWeight:900,color:"#F1F5F9",width:"80px",fontFamily:"Geist,sans-serif" }}/>
-                    <span style={{ fontSize:12,color:"#334155" }}>per video</span>
+                  <div style={{ flex:1,display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#fff",border:"1.5px solid #111",borderRadius:10,boxShadow:"0 3px 0 #111" }}>
+                    <span style={{ fontSize:14,color:ADMIN.muted,fontWeight:700 }}>KES</span>
+                    <input type="number" value={videoPrice} onChange={e=>setVideoPrice(Number(e.target.value))} style={{ background:"transparent",border:"none",outline:"none",fontSize:18,fontWeight:900,color:"#111",width:"80px",fontFamily:"Geist,sans-serif" }}/>
+                    <span style={{ fontSize:12,color:ADMIN.muted }}>per video</span>
                   </div>
-                  <button style={{ padding:"12px 22px",background:"#0066FF",color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>Update Price</button>
+                  <button style={{ padding:"12px 22px",background:"#111",color:"#fff",border:"1.5px solid #111",boxShadow:"0 4px 0 #111",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>Update Price</button>
                 </div>
               </div>
 
               {/* Payout mode */}
               <div style={CARD}>
-                <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9",marginBottom:4 }}>Payout Mode</h3>
-                <p style={{ fontSize:12,color:"#475569",marginBottom:18 }}>How withdrawals are processed.</p>
+                <h3 style={{ fontSize:14,fontWeight:900,color:"#111",marginBottom:4 }}>Payout Mode</h3>
+                <p style={{ fontSize:12,color:ADMIN.muted,marginBottom:18 }}>How withdrawals are processed.</p>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
                   {[["manual","Manual Review","Admin approves each withdrawal before payment."],["auto","Auto-Approve","All withdrawals are automatically approved and paid."]].map(([val,label,desc])=>(
                     <div key={val} onClick={()=>setPayoutMode(val)}
-                      style={{ padding:"16px",background:"#080A0F",borderRadius:10,border:`1.5px solid ${payoutMode===val?"#0066FF":"#1A2234"}`,cursor:"pointer",transition:"border-color .15s" }}>
+                      style={{ padding:"16px",background:"#fff",borderRadius:10,border:"1.5px solid #111",cursor:"pointer",transition:"border-color .15s",boxShadow:payoutMode===val?"0 4px 0 #111":"none" }}>
                       <div style={{ display:"flex",alignItems:"center",gap:9,marginBottom:6 }}>
-                        <div style={{ width:16,height:16,borderRadius:"50%",border:`2px solid ${payoutMode===val?"#0066FF":"#334155"}`,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                          {payoutMode===val&&<div style={{ width:8,height:8,borderRadius:"50%",background:"#0066FF" }}/>}
+                        <div style={{ width:16,height:16,borderRadius:"50%",border:"2px solid #111",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                          {payoutMode===val&&<div style={{ width:8,height:8,borderRadius:"50%",background:ADMIN.blue }}/>}
                         </div>
-                        <span style={{ fontSize:13,fontWeight:800,color:"#F1F5F9" }}>{label}</span>
+                        <span style={{ fontSize:13,fontWeight:900,color:"#111" }}>{label}</span>
                       </div>
-                      <div style={{ fontSize:12,color:"#475569",lineHeight:1.5 }}>{desc}</div>
+                      <div style={{ fontSize:12,color:ADMIN.muted,lineHeight:1.5 }}>{desc}</div>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Maintenance mode */}
-              <div style={{ ...CARD,border:`1px solid ${maintenance?"#DC2626":"#1A2234"}` }}>
+              <div style={{ ...CARD,border:`1.5px solid ${maintenance?ADMIN.red:"#111"}` }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
                   <div>
-                    <h3 style={{ fontSize:14,fontWeight:800,color:"#F1F5F9",marginBottom:4 }}>Maintenance Mode</h3>
-                    <p style={{ fontSize:12,color:"#475569",maxWidth:380 }}>When enabled, users will see a maintenance page. Only admins can access the platform.</p>
+                    <h3 style={{ fontSize:14,fontWeight:900,color:"#111",marginBottom:4 }}>Maintenance Mode</h3>
+                    <p style={{ fontSize:12,color:ADMIN.muted,maxWidth:380 }}>When enabled, users will see a maintenance page. Only admins can access the platform.</p>
                   </div>
                   <button onClick={()=>setMaintenance(m=>!m)}
-                    style={{ padding:"8px 20px",background:maintenance?"#DC262618":"#05966918",color:maintenance?"#DC2626":"#059669",border:`1px solid ${maintenance?"#DC2626":"#059669"}`,borderRadius:9,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap",flexShrink:0,marginLeft:16 }}>
+                    style={{ padding:"8px 20px",background:maintenance?"#FFF0F0":"#ECFDF5",color:maintenance?ADMIN.red:ADMIN.green,border:"1.5px solid #111",borderRadius:9,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap",flexShrink:0,marginLeft:16 }}>
                     {maintenance?"Disable":"Enable"}
                   </button>
                 </div>
-                {maintenance&&<div style={{ marginTop:14,padding:"10px 14px",background:"#DC262614",borderRadius:8,border:"1px solid #DC262633",fontSize:12,color:"#DC2626",fontWeight:700,display:"flex",alignItems:"center",gap:8 }}>
+                {maintenance&&<div style={{ marginTop:14,padding:"10px 14px",background:"#FFF0F0",borderRadius:8,border:"1.5px solid #111",fontSize:12,color:ADMIN.red,fontWeight:800,display:"flex",alignItems:"center",gap:8 }}>
                   <I n="shield" s={13} c="#DC2626"/> Platform is in maintenance mode — users cannot log in
                 </div>}
               </div>
 
               <button onClick={()=>{setSaved(true);setTimeout(()=>setSaved(false),2500);}}
-                style={{ padding:"13px",background:saved?"#059669":"#0066FF",color:"#fff",border:"none",borderRadius:11,fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",transition:"background .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                style={{ padding:"13px",background:saved?ADMIN.green:"#111",color:"#fff",border:"1.5px solid #111",borderRadius:11,fontSize:14,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",transition:"background .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 5px 0 #111" }}>
                 {saved?<><I n="check" s={14} c="#fff"/> Settings Saved!</>:<>Save Settings</>}
               </button>
             </div>
@@ -4865,5 +4931,13 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
+
+
+
+
+
+
+
 
 
