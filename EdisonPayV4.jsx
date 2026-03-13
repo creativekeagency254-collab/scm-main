@@ -512,9 +512,10 @@ function AnimNum({ target, prefix = "", suffix = "" }) {
   return <>{prefix}{val.toLocaleString()}{suffix}</>;
 }
 
-function LazyVideo({ src, eager = false, ...props }) {
+function LazyVideo({ src, fallbackSrc = "", eager = false, ...props }) {
   const ref = useRef(null);
   const [shouldLoad, setShouldLoad] = useState(!!eager);
+  const [activeSrc, setActiveSrc] = useState(!!eager ? src : "");
   useEffect(() => {
     if (eager) return;
     const el = ref.current;
@@ -529,11 +530,22 @@ function LazyVideo({ src, eager = false, ...props }) {
     io.observe(el);
     return () => io.disconnect();
   }, [eager]);
+  useEffect(() => {
+    if (shouldLoad) setActiveSrc(src);
+  }, [shouldLoad, src]);
+
+  const handleError = () => {
+    if (fallbackSrc && activeSrc !== fallbackSrc) {
+      setActiveSrc(fallbackSrc);
+    }
+  };
+
   return (
     <video
       ref={ref}
-      src={shouldLoad ? src : undefined}
+      src={shouldLoad ? activeSrc || src : undefined}
       preload={shouldLoad ? "auto" : "metadata"}
+      onError={handleError}
       {...props}
     />
   );
@@ -666,6 +678,7 @@ function Landing({ go }) {
             {HOME_BALANCE_VIDEO && (
               <LazyVideo
                 src={HOME_BALANCE_VIDEO}
+                fallbackSrc={HOME_BALANCE_VIDEO_FALLBACK}
                 eager
                 autoPlay
                 muted
@@ -1267,10 +1280,16 @@ const LIVE_SYMBOLS = [
   { ch:"+", x:"60%", y:"70%", size:26, dur:30, delay:-14 },
   { ch:"=", x:"78%", y:"80%", size:20, dur:22, delay:-4 },
 ];
-// Set this to a local video path (e.g. "/plan-actions.mp4") or a direct MP4 URL.
-const PLAN_BG_VIDEO = "/plan-actions.mp4";
-const HOME_BALANCE_VIDEO = "/home-balance.mp4";
-const ACCOUNT_GOAL_VIDEO = "/account-goal.mp4";
+// Video sources: use CDN in production (override with VITE_CDN_BASE).
+const DEFAULT_CDN_BASE = "https://cdn.jsdelivr.net/gh/creativekeagency254-collab/scm-main@main/public";
+const CDN_BASE = import.meta.env.VITE_CDN_BASE || (import.meta.env.PROD ? DEFAULT_CDN_BASE : "");
+const cdnUrl = (path) => (CDN_BASE ? `${CDN_BASE}${path.startsWith("/") ? path : `/${path}`}` : path);
+const PLAN_BG_VIDEO = cdnUrl("/plan-actions.mp4");
+const HOME_BALANCE_VIDEO = cdnUrl("/home-balance.mp4");
+const ACCOUNT_GOAL_VIDEO = cdnUrl("/account-goal.mp4");
+const PLAN_BG_VIDEO_FALLBACK = CDN_BASE ? "/plan-actions.mp4" : "";
+const HOME_BALANCE_VIDEO_FALLBACK = CDN_BASE ? "/home-balance.mp4" : "";
+const ACCOUNT_GOAL_VIDEO_FALLBACK = CDN_BASE ? "/account-goal.mp4" : "";
 const LIVE_COLORS_LIGHT = [
   "rgba(59,130,246,0.16)",
   "rgba(99,102,241,0.14)",
@@ -2483,6 +2502,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       {PLAN_BG_VIDEO && (
         <LazyVideo
           src={PLAN_BG_VIDEO}
+          fallbackSrc={PLAN_BG_VIDEO_FALLBACK}
           autoPlay
           muted
           loop
@@ -2528,6 +2548,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       {ACCOUNT_GOAL_VIDEO && (
         <LazyVideo
           src={ACCOUNT_GOAL_VIDEO}
+          fallbackSrc={ACCOUNT_GOAL_VIDEO_FALLBACK}
           autoPlay
           muted
           loop
