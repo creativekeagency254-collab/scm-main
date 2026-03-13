@@ -1,14 +1,22 @@
-{
+﻿{
   "name": "Dollar App",
   "short_name": "Dollar",
-  "description": "Dollar App � earn, track, and manage your balance.",
+  "description": "Dollar App — earn, track, and manage your balance.",
   "start_url": "/",
+  "id": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui", "browser"],
   "orientation": "portrait",
   "theme_color": "#000000",
   "background_color": "#000000",
+  "prefer_related_applications": false,
   "icons": [
+    {
+      "src": "/icons/icon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",

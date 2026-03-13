@@ -3,6 +3,7 @@ const CORE_ASSETS = [
   "/",
   "/index.html",
   "/manifest.json",
+  "/icons/icon-32.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png"
 ];

@@ -829,7 +829,7 @@ function TierCard({ t, go, featured }) {
   const [hov, setHov] = useState(false);
   const daily = (t.videos + t.bot) * V_PRICE;
   const days = Math.ceil((t.deposit * 3) / daily);
-  const hasGlare = t.name === "Standard" || t.name === "Deluxe";
+  const hasGlare = t.name === "Regular" || t.name === "Standard" || t.name === "Deluxe";
   const glareTone = t.name === "Deluxe" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
   const cardStyle = {
     borderRadius: 16,
@@ -2290,7 +2290,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const [actionsOpen, setActionsOpen] = useState(false);
   const nextTier = TIERS[t.id]; // next in list (t.id is 1-based)
   const canUpgrade = !!nextTier;
-  const hasTierGlare = t.name === "Standard" || t.name === "Deluxe";
+  const hasTierGlare = t.name === "Regular" || t.name === "Standard" || t.name === "Deluxe";
   const tierGlareTone = t.name === "Deluxe" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
   const upgradeBtnActive = {
     background:"linear-gradient(180deg,#FDE047 0%, #F59E0B 45%, #F97316 100%)",
