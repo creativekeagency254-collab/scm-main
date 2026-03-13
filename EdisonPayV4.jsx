@@ -113,7 +113,13 @@ const GlobalStyles = () => {
 /* ── SUPABASE (optional) ── */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
+const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+}) : null;
 const SUPABASE_ENABLED = !!supabase;
 
 const normalizeRefCode = (input) => {
@@ -371,6 +377,13 @@ const TIERS = [
   { id:5, name:"Executive Pro",tag:"PRO", deposit:100000, videos:40, bot:38, acc:"#DC2626", rgb:"220,38,38",  lgt:"#FFF0F0", mid:"#FCA5A5" },
 ];
 const V_PRICE = 50;
+
+const resolveTierIndex = (value) => {
+  if (!value) return null;
+  const raw = String(value).toLowerCase().trim();
+  const idx = TIERS.findIndex(t => t.name.toLowerCase() === raw || t.tag.toLowerCase() === raw);
+  return idx >= 0 ? idx : null;
+};
 
 /* ── ANIMATED NUMBER ── */
 function AnimNum({ target, prefix = "", suffix = "" }) {
@@ -937,7 +950,10 @@ function Auth({ type, go, from }) {
 
           <>
             <button onClick={handleGoogle} disabled={loading || !SUPABASE_ENABLED}
-              style={{ width: "100%", padding: "12px", background: "#fff", color: "#111", border: "1.5px solid #E5E7EB", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !SUPABASE_ENABLED) ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: !SUPABASE_ENABLED ? 0.7 : 1 }}>
+              style={{ width: "100%", padding: "12px 16px", background: "#fff", color: "#111", border: "1.5px solid #111", borderRadius: 999, fontWeight: 700, fontSize: 14, cursor: (loading || !SUPABASE_ENABLED) ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, opacity: !SUPABASE_ENABLED ? 0.7 : 1, boxShadow: "0 3px 0 #111" }}>
+              <span style={{ width: 18, height: 18, borderRadius: "50%", background: "conic-gradient(#4285F4 0 90deg, #34A853 90deg 180deg, #FBBC05 180deg 270deg, #EA4335 270deg 360deg)", display: "grid", placeItems: "center" }}>
+                <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", display: "grid", placeItems: "center", fontSize: 9, fontWeight: 800, color: "#4285F4", fontFamily: "Geist,sans-serif" }}>G</span>
+              </span>
               Continue with Google
             </button>
             {!SUPABASE_ENABLED && (
@@ -1015,6 +1031,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
   const [recentOpen, setRecentOpen] = useState(false);
   const [stripHidden, setStripHidden] = useState(false);
+  const [stripToggleHidden, setStripToggleHidden] = useState(false);
   const lastScrollRef = useRef(0);
   const authId = authUser?.id || null;
   const [profile, setProfile] = useState({
@@ -1119,6 +1136,12 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     const delta = y - lastScrollRef.current;
     if (y > 80 && delta < -4) {
       setStripHidden(true);
+    }
+    if (delta > 6) {
+      setStripToggleHidden(true);
+    }
+    if (delta < -6 || y < 12) {
+      setStripToggleHidden(false);
     }
     lastScrollRef.current = y;
   };
@@ -1728,10 +1751,10 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
         <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onScroll={onBodyScroll} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
           {isMobile && (
-            <div style={{ position:"sticky", top:8, zIndex:30, display:"flex", justifyContent:"center", pointerEvents:"none" }}>
+            <div style={{ position:"sticky", top:4, zIndex:30, display:"flex", justifyContent:"center", pointerEvents:"none", opacity: stripToggleHidden ? 0 : 1, transform: stripToggleHidden ? "translateY(-6px)" : "translateY(0)", transition:"opacity .2s ease, transform .2s ease" }}>
               <button onClick={()=>{ setStripHidden(s => !s); }}
                 style={{
-                  pointerEvents:"auto",
+                  pointerEvents: stripToggleHidden ? "none" : "auto",
                   minWidth:180,
                   height:32,
                   padding:"0 18px",
@@ -1757,7 +1780,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
               </button>
             </div>
           )}
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined}/>}
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined} refCode={refCode}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode}/>}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode}/>}
@@ -1860,7 +1883,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                 }}>
                   <div style={{ position:"absolute", top:-26, right:-24, width:120, height:120, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), rgba(255,255,255,0))", opacity:0.75, pointerEvents:"none" }}/>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", position:"relative" }}>
-                    <span style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.18em" }}>JOINING NO.</span>
+                    <span style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.18em" }}>ACCOUNT NO.</span>
                     <div style={{ width:34, height:22, borderRadius:6, background:"linear-gradient(135deg,#FDE68A 0%, #F59E0B 100%)", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(245,158,11,0.35)", border:"1px solid rgba(245,158,11,0.35)" }}/>
                   </div>
                   <span style={{ fontSize:15, fontWeight:800, color:"#0F172A", letterSpacing:"0.18em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace", textShadow:"0 1px 0 rgba(255,255,255,0.7)", whiteSpace:"nowrap" }}>
@@ -1933,10 +1956,11 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 }
 
 /* ── REFERRAL MINI CARD (shown in overview) ── */
-function ReferralMiniCard({ t, data, frame }) {
+function ReferralMiniCard({ t, data, frame, refCode }) {
   const [copied, setCopied] = useState(false);
-  const code = `edisonpay.co.ke/ref/edisonpay-${t.tag.toLowerCase()}-AX7K`;
-  const short = `edisonpay-${t.tag.toLowerCase()}-AX7K`;
+  const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
+  const code = `edisonpay.co.ke/ref/${safeCode}`;
+  const short = safeCode;
   const copy = () => { try { navigator.clipboard?.writeText(`https://${code}`); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
   const baseRefs = [
@@ -1946,15 +1970,16 @@ function ReferralMiniCard({ t, data, frame }) {
   ];
   const mapRef = (r, i) => {
     const name = r.name || r.full_name || r.user || `User ${i+1}`;
+    const first = name.split(" ").filter(Boolean)[0] || name;
     const init = (r.init || name.split(" ").map(n=>n[0]).join("").slice(0,2)).toUpperCase();
     const rawStatus = String(r.status || "Pending");
     const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
     const rawBonus = Number(r.bonus ?? r.ref_bonus);
     const bonus = Number.isFinite(rawBonus) ? rawBonus : t.deposit * 0.1;
-    return { name, init, status, bonus, when: r.when || r.date || r.created_at || "" };
+    return { name, first, init, status, bonus, when: r.when || r.date || r.created_at || "" };
   };
   const refList = Array.isArray(data) && data.length ? data.map(mapRef) : baseRefs.map(mapRef);
-  const referrals = refList.slice(0,3);
+  const referrals = refList.slice(0,4);
   const earned = refList.filter(r=>r.status==="Active").reduce((sum,r)=>sum + (Number.isFinite(r.bonus)?r.bonus:0),0);
 
   return (
@@ -1992,11 +2017,11 @@ function ReferralMiniCard({ t, data, frame }) {
         </div>
 
         {/* Recent 3 referrals inline */}
-        <div style={{ padding:"14px 20px", display:"flex", gap:12, alignItems:"center" }}>
+        <div style={{ padding:"14px 20px", display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
           {referrals.map((r,i) => (
             <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
               <div style={{ width:30, height:30, borderRadius:"50%", background:r.status==="Active"?t.lgt:"#F5F5F5", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900, color:r.status==="Active"?t.acc:"#BBB", border:`1.5px solid ${r.status==="Active"?t.mid:"#E8E8E8"}` }}>{r.name[0]}</div>
-              <div style={{ fontSize:9, fontWeight:700, color:r.status==="Active"?"#059669":"#BBB", whiteSpace:"nowrap" }}>{r.status==="Active"?`+KES ${(r.bonus/1000).toFixed(0)}K`:"Pending"}</div>
+              <div style={{ fontSize:9, fontWeight:700, color:"#555", whiteSpace:"nowrap" }}>{r.first}</div>
             </div>
           ))}
           <div style={{ paddingLeft:8, borderLeft:"1px solid #F0F0F0" }}>
@@ -2011,7 +2036,7 @@ function ReferralMiniCard({ t, data, frame }) {
 }
 
 /* ── OVERVIEW ── */
-function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData }) {
+function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const weekData = days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) }));
   const maxV = Math.max(...weekData.map(x=>x.v));
@@ -2149,21 +2174,26 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   );
   const mobilePlan = (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <div className="ep-frame-light" style={{ background:"#111", borderRadius:16, padding:"16px 18px", border:"1px solid #1F2937", boxShadow:"0 8px 24px rgba(0,0,0,0.18)" }}>
+      <div className="ep-frame-light" style={{ background:"linear-gradient(180deg,#FFF2CC 0%, #F59E0B 55%, #F97316 100%)", borderRadius:16, padding:"16px 18px", border:"2px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.18)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
-            <div style={{ fontSize:13, fontWeight:900, color:"#fff" }}>Plan & Actions</div>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{t.id} of 5 Tiers</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ width:22, height:22, borderRadius:6, background:"#111", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <I n="lock" s={12} c="#fff"/>
+              </div>
+              <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Plan & Actions</div>
+            </div>
+            <div style={{ fontSize:11, color:"rgba(17,17,17,0.6)", marginTop:4, fontWeight:700 }}>{t.id} of 5 Tiers Â· Secured</div>
           </div>
-          <div style={{ width:28, height:28, borderRadius:8, background:t.acc, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ width:28, height:28, borderRadius:8, background:"#111", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.2)" }}>
             <I n="bolt" s={13} c="#fff"/>
           </div>
         </div>
-        <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden" }}>
+        <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)" }}>
           <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
           <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
           <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:4 }}>
-            <span style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.18em" }}>JOINING NO.</span>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.18em" }}>ACCOUNT NO.</span>
             <span style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,0.95)", letterSpacing:"0.16em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace" }}>
               {joinCardLabel}
             </span>
@@ -2280,7 +2310,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               {referrals.length === 0 && (
                 <div style={{ fontSize:11, color:"#AAA" }}>No referrals yet.</div>
               )}
-              {referrals.map((r,i)=>(
+              {referrals.slice(0,4).map((r,i)=>(
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
                   <div style={{ width:40, height:40, borderRadius:"50%", background:r.status==="Active"?t.lgt:"#F5F5F5", border:`2px solid ${r.status==="Active"?t.mid:"#E8E8E8"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:900, color:r.status==="Active"?t.acc:"#BBB" }}>{r.init}</div>
                   <div style={{ fontSize:10, fontWeight:700, color:"#555", textAlign:"center", maxWidth:50, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name.split(" ")[0]}</div>
@@ -2289,7 +2319,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </div>
           </div>
 
-          <ReferralMiniCard t={t} data={referralData} frame/>
+          <ReferralMiniCard t={t} data={referralData} frame refCode={refCode}/>
         </MobileSection>
 
         <MobileSection id="mix" title="Earning Mix">
@@ -2642,7 +2672,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               {referrals.length === 0 && (
                 <div style={{ fontSize:11, color:"#AAA" }}>No referrals yet.</div>
               )}
-              {referrals.map((r,i)=>(
+              {referrals.slice(0,4).map((r,i)=>(
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
                   <div style={{ width:44, height:44, borderRadius:"50%", background:r.status==="Active"?t.lgt:"#F5F5F5", border:`2px solid ${r.status==="Active"?t.mid:"#E8E8E8"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:900, color:r.status==="Active"?t.acc:"#BBB" }}>{r.init}</div>
                   <div style={{ fontSize:10, fontWeight:700, color:"#555", textAlign:"center", maxWidth:50, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name.split(" ")[0]}</div>
@@ -2693,7 +2723,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       </div>
 
       {/* ── Referral mini card ── */}
-      <ReferralMiniCard t={t} data={referralData}/>
+      <ReferralMiniCard t={t} data={referralData} refCode={refCode}/>
 
       {/* ── Account Summary ── */}
       <div className="ep-card" style={{ padding:"22px 26px", borderRadius:18 }}>
@@ -2751,20 +2781,30 @@ const YT_VIDEOS = [
 function VideosContent({ t }) {
   const MANUAL_COUNT = 2;
   const BOT_COUNT = 14; // 16 total - 2 manual
-  const todayKey = new Date().toISOString().slice(0,10);
+  const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0,10));
   const initialActivatedOn = (() => {
     try { return localStorage?.getItem("ep-bot-activated-on") || ""; } catch (e) { return ""; }
   })();
+  const initialWatched = (() => {
+    try {
+      const d = localStorage?.getItem("ep-manual-date") || "";
+      const w = Number(localStorage?.getItem("ep-manual-watched") || 0);
+      return d === dayKey ? Math.min(w, MANUAL_COUNT) : 0;
+    } catch (e) {
+      return 0;
+    }
+  })();
   // watched: 0 = none done, 1 = first done, 2 = both done
-  const [watched, setWatched] = useState(0);
+  const [watched, setWatched] = useState(initialWatched);
   // playing: null | 0 | 1 (which manual video index)
   const [playing, setPlaying] = useState(null);
+  const [showPlayer, setShowPlayer] = useState(null);
   const [timer, setTimer] = useState(30);
   const [timerRunning, setTimerRunning] = useState(false);
   const [errMsg, setErrMsg] = useState("");
   const [botActivatedOn, setBotActivatedOn] = useState(initialActivatedOn);
-  const [botPct, setBotPct] = useState(initialActivatedOn === todayKey ? 100 : 0);
-  const [botDone, setBotDone] = useState(initialActivatedOn === todayKey ? BOT_COUNT : 0);
+  const [botPct, setBotPct] = useState(initialActivatedOn === dayKey ? 100 : 0);
+  const [botDone, setBotDone] = useState(initialActivatedOn === dayKey ? BOT_COUNT : 0);
   const [activeTab, setActiveTab] = useState("manual");
   const [imgErrors, setImgErrors] = useState({});
   const [imgLoaded, setImgLoaded] = useState({});
@@ -2775,6 +2815,7 @@ function VideosContent({ t }) {
     if (timer <= 0) {
       setTimerRunning(false);
       setPlaying(null);
+      setShowPlayer(null);
       setWatched(w => {
         const next = Math.min(w + 1, MANUAL_COUNT);
         return next;
@@ -2785,13 +2826,42 @@ function VideosContent({ t }) {
     return () => clearTimeout(id);
   }, [timerRunning, timer]);
 
-  const botActive = botActivatedOn === todayKey;
+  useEffect(() => {
+    try {
+      localStorage?.setItem("ep-manual-date", dayKey);
+      localStorage?.setItem("ep-manual-watched", String(watched));
+    } catch (e) {}
+  }, [watched, dayKey]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const key = new Date().toISOString().slice(0,10);
+      if (key !== dayKey) {
+        setDayKey(key);
+        setWatched(0);
+        setPlaying(null);
+        setTimerRunning(false);
+        setTimer(30);
+        setShowPlayer(null);
+        setBotActivatedOn("");
+        setBotPct(0);
+        setBotDone(0);
+        try {
+          localStorage?.setItem("ep-manual-date", key);
+          localStorage?.setItem("ep-manual-watched", "0");
+          localStorage?.setItem("ep-bot-activated-on", "");
+        } catch (e) {}
+      }
+    }, 60000);
+    return () => clearInterval(id);
+  }, [dayKey]);
+
+  const botActive = botActivatedOn === dayKey;
   const canActivateBot = !botActive;
 
   const activateBot = () => {
-    const key = new Date().toISOString().slice(0,10);
-    setBotActivatedOn(key);
-    try { localStorage?.setItem("ep-bot-activated-on", key); } catch (e) {}
+    setBotActivatedOn(dayKey);
+    try { localStorage?.setItem("ep-bot-activated-on", dayKey); } catch (e) {}
     setBotPct(0);
     setBotDone(0);
   };
@@ -2820,8 +2890,15 @@ function VideosContent({ t }) {
     if (watched > idx) { setErrMsg("You've already earned from this video today."); return; }
     if (timerRunning) { setErrMsg("A video is already playing. Wait for it to finish."); return; }
     setPlaying(idx);
+    setShowPlayer(idx);
     setTimer(30);
     setTimerRunning(true);
+  };
+  const closePlayer = () => {
+    setTimerRunning(false);
+    setPlaying(null);
+    setShowPlayer(null);
+    setTimer(30);
   };
 
   const todayEarn = watched * V_PRICE + Math.floor(botDone * V_PRICE * 0.4);
@@ -2835,6 +2912,29 @@ function VideosContent({ t }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
+
+      {showPlayer !== null && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div style={{ width:"100%", maxWidth:820, background:"#fff", borderRadius:16, overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 20px 50px rgba(0,0,0,0.35)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:"#0F172A", color:"#fff" }}>
+              <div style={{ fontSize:13, fontWeight:800 }}>Watching Video {showPlayer + 1}</div>
+              <button onClick={closePlayer} style={{ border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", padding:"6px 10px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700 }}>Close</button>
+            </div>
+            <div style={{ position:"relative", paddingTop:"56.25%", background:"#000" }}>
+              <iframe
+                title="EdisonPay Video"
+                src={`https://www.youtube.com/embed/${YT_VIDEOS[showPlayer]?.id}?autoplay=1&controls=1&rel=0`}
+                style={{ position:"absolute", inset:0, width:"100%", height:"100%", border:"0" }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+            <div style={{ padding:"10px 16px", fontSize:11, color:"#64748B", fontWeight:700 }}>
+              Keep this open for 30 seconds to earn your reward today.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Error toast ── */}
       {errMsg && (
@@ -2853,7 +2953,7 @@ function VideosContent({ t }) {
           [`KES ${(watched*V_PRICE).toLocaleString()}`,"Manual Earned",t.acc],
           [`KES ${todayEarn.toLocaleString()}`,"Total Today","#059669"],
         ].map(([v,l,c],i) => (
-          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:"1px solid #111",boxShadow:"0 4px 12px rgba(0,0,0,0.08)" }}>
             <div style={{ fontSize:10,color:"#BBB",fontWeight:700,letterSpacing:"0.08em",marginBottom:8 }}>{l.toUpperCase()}</div>
             <div style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:c }}>{v}</div>
           </div>
@@ -2872,7 +2972,7 @@ function VideosContent({ t }) {
 
       {/* ══ MANUAL TAB ══ */}
       {activeTab === "manual" && (
-        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #111",boxShadow:"0 8px 20px rgba(0,0,0,0.08)" }}>
           {/* Header */}
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
             <div>
@@ -2938,7 +3038,7 @@ function VideosContent({ t }) {
               const pct      = isActive ? ((30 - timer) / 30) * 100 : isDone ? 100 : 0;
 
               return (
-                <div key={i} style={{ borderRadius:16,border:`1.5px solid ${isDone?t.acc:isActive?"#111":isLocked?"#E0E0E0":"#E8E8E8"}`,overflow:"hidden",background:"#fff",transition:"all .25s" }}>
+                <div key={i} style={{ borderRadius:16,border:"1px solid #111",boxShadow:"0 6px 16px rgba(0,0,0,0.08)",overflow:"hidden",background:"#fff",transition:"all .25s",outline:isActive?`2px solid ${t.acc}`:"none" }}>
 
                   {/* Thumbnail */}
                   <div style={{ position:"relative",paddingTop:"56.25%",background:"#0D1117",overflow:"hidden",cursor:isReady?"pointer":"default" }}
@@ -3049,7 +3149,7 @@ function VideosContent({ t }) {
 
       {/* ══ BOT TAB ══ */}
       {activeTab === "bot" && (
-        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #111",boxShadow:"0 8px 20px rgba(0,0,0,0.08)" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
             <div>
               <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em" }}>Bot Auto-Watch — 14 Videos</h3>
@@ -3080,7 +3180,7 @@ function VideosContent({ t }) {
               const done = botActive && i < botDone;
               const isActive = botActive && i === botDone;
               return (
-                <div key={i} style={{ borderRadius:12,border:`1px solid ${done?"#A7F3D0":isActive?"#FCD34D":"#F0F0F0"}`,overflow:"hidden",background:done?"#F0FDF4":isActive?"#FFFBEB":"#FAFAFA",transition:"all .3s" }}>
+                <div key={i} style={{ borderRadius:12,border:"1px solid #111",boxShadow:"0 4px 12px rgba(0,0,0,0.08)",overflow:"hidden",background:done?"#F0FDF4":isActive?"#FFFBEB":"#FAFAFA",transition:"all .3s" }}>
                   <div style={{ position:"relative",paddingTop:"52%",background:"#0D1117",overflow:"hidden" }}>
                     {!imgErrors[`bot-${vid.id}`] ? (
                       <>
@@ -3150,7 +3250,7 @@ function ReferralLinkCard({ t, refCode }) {
           <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em",marginBottom:6 }}>Your Referral Link</h3>
           <p style={{ fontSize:12,color:"#888",marginBottom:14,lineHeight:1.6 }}>Share this link — when they deposit their tier balance, you earn <strong style={{ color:t.acc }}>10% of their deposit</strong> and they get a bonus too.</p>
           <div style={{ display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
-            <div style={{ flex:1,display:"flex",alignItems:"center",gap:9,padding:"10px 12px",background:"#FAFAFA",border:`1.5px dashed ${t.mid}`,borderRadius:9,minWidth:180 }}>
+            <div style={{ flex:1,display:"flex",alignItems:"center",gap:9,padding:"10px 12px",background:"#EFF6FF",border:`1.5px dashed ${t.mid}`,borderRadius:9,minWidth:180,backgroundImage:"linear-gradient(rgba(59,130,246,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.12) 1px, transparent 1px)",backgroundSize:"12px 12px" }}>
               <button onClick={copy} style={{ width:28,height:28,borderRadius:8,background:t.lgt,border:`1px solid ${t.mid}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
                 <I n="link" s={12} c={t.acc}/>
               </button>
@@ -3240,7 +3340,8 @@ function ReferralsContent({ t, earn, refData, refCode }) {
     const earnings = Number.isFinite(rawEarn) ? rawEarn : 0;
     const rawStatus = String(r.status || "Pending");
     const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
-    return { name, email, tier, date, bonus, status, earnings };
+    const level = Number(r.level || r.ref_level || 1);
+    return { name, email, tier, date, bonus, status, earnings, level };
   };
   const ALL_REFS = Array.isArray(refData) ? refData.map(normalizeRefRow) : fallbackRefs.map(normalizeRefRow);
 
@@ -3294,8 +3395,8 @@ function ReferralsContent({ t, earn, refData, refCode }) {
         </div>
 
         {/* Table header */}
-        <div style={{ display:"grid",gridTemplateColumns:"2fr 1.2fr 1fr 1fr 1fr 1fr",gap:8,padding:"8px 12px",marginBottom:4 }}>
-          {["PERSON","TIER","JOINED","YOUR BONUS","THEIR EARNINGS","STATUS"].map(h => (
+        <div style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"8px 12px",marginBottom:4 }}>
+          {["PERSON","LEVEL","TIER","JOINED","YOUR BONUS","THEIR EARNINGS","STATUS"].map(h => (
             <span key={h} style={{ fontSize:9,color:"#BBB",fontWeight:800,letterSpacing:"0.1em" }}>{h}</span>
           ))}
         </div>
@@ -3305,7 +3406,7 @@ function ReferralsContent({ t, earn, refData, refCode }) {
           const sc = statusColor(r.status);
           const tc = tierColor(r.tier);
           return (
-            <div key={i} style={{ display:"grid",gridTemplateColumns:"2fr 1.2fr 1fr 1fr 1fr 1fr",gap:8,padding:"12px",borderRadius:10,background:i%2===0?"#FAFAFA":"#fff",alignItems:"center",marginBottom:2,transition:"background .15s" }}
+            <div key={i} style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"12px",borderRadius:10,background:i%2===0?"#FAFAFA":"#fff",alignItems:"center",marginBottom:2,transition:"background .15s" }}
               onMouseEnter={e=>e.currentTarget.style.background="#F0F4FF"} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#FAFAFA":"#fff"}>
               <div style={{ display:"flex",alignItems:"center",gap:10 }}>
                 <div style={{ width:34,height:34,borderRadius:"50%",background:t.lgt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:t.acc,flexShrink:0 }}>{r.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
@@ -3314,6 +3415,7 @@ function ReferralsContent({ t, earn, refData, refCode }) {
                   <div style={{ fontSize:10,color:"#BBB" }}>{r.email}</div>
                 </div>
               </div>
+              <span style={{ fontSize:11,fontWeight:800,color:"#111" }}>L{r.level || 1}</span>
               <div style={{ display:"flex",alignItems:"center",gap:6 }}>
                 <div style={{ width:7,height:7,borderRadius:2,background:tc }}/>
                 <span style={{ fontSize:12,fontWeight:600,color:"#555" }}>{r.tier}</span>
@@ -3548,6 +3650,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
     phone: u.phone || u.msisdn || "—",
     role: u.role || u.user_role || "client",
     category: u.category || u.segment || u.group || "Client",
+    referredBy: u.referred_by || u.referrer || "—",
   });
   const normalizeWithdrawal = (w, i) => ({
     id: w.id || w.withdrawal_id || `W${String(i+1).padStart(3,"0")}`,
@@ -3954,7 +4057,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
                       </button>
                     </div>
                     <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20 }}>
-                      {[["User ID",selectedUser.id],["Tier",selectedUser.tier],["Deposit",`KES ${selectedUser.deposit.toLocaleString()}`],["Earnings",`KES ${selectedUser.earn.toLocaleString()}`],["Status",selectedUser.status],["Joined",selectedUser.joined],["Phone",selectedUser.phone],["Referrals","3 active"]].map(([l,v],i)=>(
+                      {[["User ID",selectedUser.id],["Tier",selectedUser.tier],["Deposit",`KES ${selectedUser.deposit.toLocaleString()}`],["Earnings",`KES ${selectedUser.earn.toLocaleString()}`],["Status",selectedUser.status],["Joined",selectedUser.joined],["Phone",selectedUser.phone],["Referred By",selectedUser.referredBy || "—"],["Referrals","3 active"]].map(([l,v],i)=>(
                         <div key={i} style={{ padding:"12px 14px",background:"#080A0F",borderRadius:10,border:"1px solid #131A26" }}>
                           <div style={{ fontSize:10,color:"#334155",fontWeight:700,letterSpacing:"0.08em",marginBottom:5 }}>{l.toUpperCase()}</div>
                           <div style={{ fontSize:13,fontWeight:700,color:"#F1F5F9" }}>{v}</div>
@@ -4195,6 +4298,18 @@ export default function App() {
   const [authReady, setAuthReady] = useState(!SUPABASE_ENABLED);
   const [profileRow, setProfileRow] = useState(null);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ep:tier");
+      const idx = Number(saved);
+      if (Number.isFinite(idx) && idx >= 0 && idx < TIERS.length) setTier(idx);
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("ep:tier", String(tier)); } catch (e) {}
+  }, [tier]);
+
   const go = (p) => { setPrevPage(page); setPage(p); };
   const authUser = session?.user || null;
   const role = profileRow?.role || "client";
@@ -4215,6 +4330,11 @@ export default function App() {
     });
     return () => { ignore = true; subscription?.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    const idx = resolveTierIndex(profileRow?.tier);
+    if (idx !== null && idx !== tier) setTier(idx);
+  }, [profileRow?.tier]);
 
   useEffect(() => {
     if (!SUPABASE_ENABLED) return;
@@ -4328,23 +4448,22 @@ export default function App() {
           right:18,
           bottom:18,
           zIndex:9999,
-          padding:"9px 14px",
-          borderRadius:999,
-          border:"1px solid #0F172A",
-          background:"linear-gradient(180deg,#FFFFFF 0%, #F1F5F9 100%)",
+          width:42,
+          height:42,
+          borderRadius:"50%",
+          border:"1.5px solid #111",
+          background:"#fff",
           color:"#111",
-          fontWeight:700,
+          fontWeight:800,
           fontSize:12,
           cursor:"pointer",
           display:"flex",
           alignItems:"center",
-          gap:8,
-          boxShadow:"0 8px 18px rgba(15,23,42,0.16)",
-          fontFamily:"IBM Plex Sans, Geist, sans-serif",
-          letterSpacing:"0.01em"
+          justifyContent:"center",
+          boxShadow:"0 6px 14px rgba(15,23,42,0.18)",
+          fontFamily:"IBM Plex Sans, Geist, sans-serif"
         }}>
-        <div style={{ width:18, height:18, borderRadius:"50%", background:"#0F172A", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800 }}>?</div>
-        Help Center
+        <I n="shield" s={18} c="#111" />
       </button>
     </ErrorBoundary>
   );

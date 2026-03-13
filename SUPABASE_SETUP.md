@@ -50,6 +50,8 @@ create table if not exists client_transactions (
 create table if not exists client_referrals (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade,
+  source_user_id uuid references auth.users(id) on delete cascade,
+  level integer,
   name text,
   email text,
   tier text,
@@ -131,6 +133,67 @@ create policy "client_refs_select" on client_referrals
 for select using (auth.uid() = user_id or public.is_admin());
 create policy "client_refs_insert" on client_referrals
 for insert with check (auth.uid() = user_id or public.is_admin());
+
+-- Referral rewards (3 levels: 10% / 2% / 1%)
+create or replace function public.apply_referral_rewards(p_user_id uuid, p_amount numeric)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_level int := 1;
+  v_ref_code text;
+  v_ref_id uuid;
+  v_next_code text;
+  v_bonus numeric;
+begin
+  select referred_by into v_ref_code from profiles where id = p_user_id;
+
+  while v_level <= 3 and v_ref_code is not null and v_ref_code <> '' loop
+    select id, referred_by into v_ref_id, v_next_code from profiles where ref_code = v_ref_code;
+    exit when v_ref_id is null;
+
+    if v_level = 1 then
+      v_bonus := p_amount * 0.10;
+    elsif v_level = 2 then
+      v_bonus := p_amount * 0.02;
+    else
+      v_bonus := p_amount * 0.01;
+    end if;
+
+    insert into client_referrals (user_id, source_user_id, level, name, email, tier, bonus, status, earnings, created_at)
+    select v_ref_id, p_user_id, v_level, p.name, p.email, p.tier, v_bonus, 'Pending', 0, now()
+    from profiles p
+    where p.id = p_user_id;
+
+    insert into transactions (user_id, type, amount, method, status, created_at)
+    values (v_ref_id, concat('Referral Bonus L', v_level), v_bonus, 'Referral', 'Pending', now());
+
+    v_ref_code := v_next_code;
+    v_level := v_level + 1;
+  end loop;
+end;
+$$;
+
+create or replace function public.handle_deposit_referrals()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (new.type ilike 'deposit%' and new.status ilike 'paid%') then
+    perform public.apply_referral_rewards(new.user_id, new.amount);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_deposit_referrals on transactions;
+create trigger trg_deposit_referrals
+after insert on transactions
+for each row execute function public.handle_deposit_referrals();
 
 -- Admin tables
 create policy "withdrawals_select" on withdrawals
