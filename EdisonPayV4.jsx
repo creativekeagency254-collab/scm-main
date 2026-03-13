@@ -405,31 +405,56 @@ const TIERS = [
 ];
 const V_PRICE = 50;
 
-const makeAvatarSvg = (bg, hair, skin, shirt, accent) => {
+const makeAvatarSvg = ({ bg1, bg2, hair, skin, shirt, accent, icon }) => {
+  const iconPaths = {
+    bolt: "M13 2L3 14h7l-1 8 10-12h-7l1-8z",
+    heart: "M20.8 5.6a4.6 4.6 0 00-6.5 0L12 7.9 9.7 5.6a4.6 4.6 0 00-6.5 6.5L12 21l8.8-8.8a4.6 4.6 0 000-6.6z",
+    shield: "M12 2l7 3v6c0 5.2-3.2 9-7 11-3.8-2-7-5.8-7-11V5l7-3z",
+    star: "M12 2l2.8 6 6.6.9-4.8 4.6 1.2 6.5L12 17.8 6.2 20l1.2-6.5-4.8-4.6 6.6-.9L12 2z",
+    crown: "M3 9l4 4 5-7 5 7 4-4v9H3V9z",
+    gift: "M4 9h16v4H4zM4 13h7v7H4zM13 13h7v7h-7zM12 9v11M6.8 7c0-2 2.2-3 3.7-1.7L12 6.5l1.5-1.2C15 4 17.2 5 17.2 7",
+    spark: "M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"
+  };
+  const iconPath = iconPaths[icon] || iconPaths.star;
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-      <rect width="120" height="120" rx="24" fill="${bg}"/>
-      <circle cx="60" cy="54" r="28" fill="${skin}"/>
-      <path d="M18 120c10-28 30-36 42-36s32 8 42 36" fill="${shirt}"/>
-      <path d="M30 44c6-18 18-26 30-26s24 8 30 26" fill="${hair}"/>
-      <circle cx="50" cy="54" r="3" fill="#111"/>
-      <circle cx="70" cy="54" r="3" fill="#111"/>
-      <path d="M48 64c6 8 18 8 24 0" stroke="#111" stroke-width="3" stroke-linecap="round" fill="none"/>
-      <circle cx="92" cy="28" r="6" fill="${accent}"/>
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${bg1}"/>
+          <stop offset="100%" stop-color="${bg2}"/>
+        </linearGradient>
+        <radialGradient id="glow" cx="30%" cy="20%" r="60%">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.65)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+        </radialGradient>
+      </defs>
+      <rect width="120" height="120" rx="26" fill="url(#bg)"/>
+      <circle cx="34" cy="24" r="38" fill="url(#glow)"/>
+      <circle cx="60" cy="52" r="28" fill="${skin}"/>
+      <path d="M20 120c10-30 30-40 40-40s30 10 40 40" fill="${shirt}"/>
+      <path d="M30 42c6-18 18-26 30-26s24 8 30 26" fill="${hair}"/>
+      <circle cx="50" cy="52" r="3" fill="#111"/>
+      <circle cx="70" cy="52" r="3" fill="#111"/>
+      <path d="M48 63c6 8 18 8 24 0" stroke="#111" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <g transform="translate(74 10)">
+        <circle cx="18" cy="18" r="16" fill="rgba(255,255,255,0.9)" stroke="${accent}" stroke-width="2"/>
+        <g transform="translate(6 6)">
+          <path d="${iconPath}" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </g>
     </svg>
   `;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
 const AVATAR_PRESETS = [
-  makeAvatarSvg("#E0F2FE","#0F172A","#F5CBA7","#2563EB","#38BDF8"),
-  makeAvatarSvg("#FEF9C3","#111827","#F5D0C5","#F97316","#F59E0B"),
-  makeAvatarSvg("#ECFDF5","#064E3B","#EABFA6","#10B981","#34D399"),
-  makeAvatarSvg("#F5F3FF","#3F1D77","#F3C4B0","#8B5CF6","#C4B5FD"),
-  makeAvatarSvg("#FFF1F2","#7F1D1D","#F2C0A2","#EF4444","#FB7185"),
-  makeAvatarSvg("#F1F5F9","#0F172A","#E8C7B3","#0EA5E9","#7DD3FC"),
-  makeAvatarSvg("#FFF7ED","#7C2D12","#F5CBA7","#F97316","#FDBA74"),
-  makeAvatarSvg("#ECFEFF","#164E63","#EEC4A6","#06B6D4","#67E8F9"),
+  makeAvatarSvg({ bg1:"#DBEAFE", bg2:"#93C5FD", hair:"#0F172A", skin:"#F5CBA7", shirt:"#2563EB", accent:"#0EA5E9", icon:"bolt" }),
+  makeAvatarSvg({ bg1:"#FFE4E6", bg2:"#FDBA74", hair:"#7C2D12", skin:"#F3C4B0", shirt:"#F97316", accent:"#EF4444", icon:"heart" }),
+  makeAvatarSvg({ bg1:"#ECFDF5", bg2:"#6EE7B7", hair:"#064E3B", skin:"#EABFA6", shirt:"#10B981", accent:"#22C55E", icon:"shield" }),
+  makeAvatarSvg({ bg1:"#EDE9FE", bg2:"#C4B5FD", hair:"#3F1D77", skin:"#F2C0A2", shirt:"#8B5CF6", accent:"#7C3AED", icon:"star" }),
+  makeAvatarSvg({ bg1:"#F1F5F9", bg2:"#94A3B8", hair:"#0F172A", skin:"#F5D0C5", shirt:"#334155", accent:"#111827", icon:"crown" }),
+  makeAvatarSvg({ bg1:"#ECFEFF", bg2:"#67E8F9", hair:"#164E63", skin:"#F3C4B0", shirt:"#06B6D4", accent:"#0E7490", icon:"gift" }),
+  makeAvatarSvg({ bg1:"#FFF1F2", bg2:"#FDA4AF", hair:"#7F1D1D", skin:"#F2C0A2", shirt:"#EF4444", accent:"#BE123C", icon:"spark" }),
 ];
 
 const pickAvatarForSeed = (seed) => {
