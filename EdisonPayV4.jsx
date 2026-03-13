@@ -33,6 +33,9 @@ const GlobalStyles = () => {
       @keyframes drawerIn { from{transform:translateX(-100%);} to{transform:translateX(0);} }
       @keyframes upFloat  { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
       @keyframes popPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.05);} }
+      @keyframes ep-symbol-float { 0%,100%{transform:translate3d(0,0,0) rotate(0deg);} 50%{transform:translate3d(12px,-18px,0) rotate(3deg);} }
+      @keyframes ep-ambient { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-18px,14px,0) scale(1.03);} }
+      @keyframes ep-ambient-alt { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-10px,0) scale(1.04);} }
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
@@ -1053,6 +1056,70 @@ const CLIENT_NAV = [
   { id: "withdraw",  label: "Withdraw",  ic: "wallet" },
 ];
 
+const LIVE_SYMBOLS = [
+  { ch:"+", x:"6%",  y:"14%", size:26, dur:20, delay:-2 },
+  { ch:"=", x:"16%", y:"42%", size:22, dur:24, delay:-8 },
+  { ch:"-", x:"30%", y:"22%", size:24, dur:19, delay:-5 },
+  { ch:"+", x:"44%", y:"10%", size:28, dur:26, delay:-12 },
+  { ch:"=", x:"58%", y:"36%", size:20, dur:18, delay:-3 },
+  { ch:"-", x:"72%", y:"20%", size:26, dur:23, delay:-9 },
+  { ch:"+", x:"84%", y:"50%", size:22, dur:21, delay:-6 },
+  { ch:"=", x:"12%", y:"72%", size:24, dur:27, delay:-10 },
+  { ch:"-", x:"36%", y:"78%", size:22, dur:25, delay:-7 },
+  { ch:"+", x:"60%", y:"70%", size:26, dur:30, delay:-14 },
+  { ch:"=", x:"78%", y:"80%", size:20, dur:22, delay:-4 },
+];
+// Set this to a local video path (e.g. "/plan-actions.mp4") or a direct MP4 URL.
+const PLAN_BG_VIDEO = "/plan-actions.mp4";
+const LIVE_COLORS_LIGHT = [
+  "rgba(59,130,246,0.16)",
+  "rgba(99,102,241,0.14)",
+  "rgba(16,185,129,0.14)",
+  "rgba(249,115,22,0.14)",
+  "rgba(236,72,153,0.12)",
+  "rgba(14,165,233,0.14)"
+];
+const LIVE_COLORS_DARK = [
+  "rgba(255,255,255,0.14)",
+  "rgba(147,197,253,0.16)",
+  "rgba(196,181,253,0.14)",
+  "rgba(110,231,183,0.14)",
+  "rgba(252,211,77,0.14)"
+];
+
+function LiveMathBackground({ tone = "light", symbols = LIVE_SYMBOLS, opacity = 1, zIndex = 0 }) {
+  const isDark = tone === "dark";
+  const colors = isDark ? LIVE_COLORS_DARK : LIVE_COLORS_LIGHT;
+  const glowA = isDark
+    ? "radial-gradient(circle at 18% 22%, rgba(59,130,246,0.18), rgba(15,23,42,0) 55%)"
+    : "radial-gradient(circle at 18% 22%, rgba(99,102,241,0.25), rgba(255,255,255,0) 55%)";
+  const glowB = isDark
+    ? "radial-gradient(circle at 78% 70%, rgba(16,185,129,0.18), rgba(15,23,42,0) 55%)"
+    : "radial-gradient(circle at 78% 70%, rgba(14,165,233,0.22), rgba(255,255,255,0) 55%)";
+  return (
+    <div style={{ position:"absolute", inset:0, pointerEvents:"none", overflow:"hidden", opacity, zIndex }}>
+      <div style={{ position:"absolute", inset:"-20%", background:glowA, opacity:isDark?0.45:0.6, animation:"ep-ambient 26s ease-in-out infinite" }} />
+      <div style={{ position:"absolute", inset:"-30%", background:glowB, opacity:isDark?0.4:0.55, animation:"ep-ambient-alt 32s ease-in-out infinite" }} />
+      {symbols.map((s, i) => (
+        <span key={`${s.ch}-${i}`} style={{
+          position:"absolute",
+          left:s.x,
+          top:s.y,
+          fontSize:s.size,
+          fontWeight:800,
+          color: colors[i % colors.length],
+          fontFamily:"IBM Plex Sans, Geist, sans-serif",
+          letterSpacing:"0.08em",
+          animation:`ep-symbol-float ${s.dur || 22}s ease-in-out infinite`,
+          animationDelay:`${s.delay || 0}s`,
+          userSelect:"none",
+          textShadow: isDark ? "0 0 12px rgba(255,255,255,0.08)" : "0 4px 10px rgba(15,23,42,0.06)"
+        }}>{s.ch}</span>
+      ))}
+    </div>
+  );
+}
+
 function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState("overview");
@@ -1137,6 +1204,11 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     color:"#6B7280",
     boxShadow:"none"
   };
+  const symScale = isMobile ? 0.85 : 1;
+  const liveSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,7) : LIVE_SYMBOLS).map(s => ({
+    ...s,
+    size: Math.round(s.size * symScale)
+  }));
 
   useEffect(() => {
     if (!profileRow) return;
@@ -1372,7 +1444,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   };
 
   return (
-    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#F2F4F8", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#111", position:"relative" }}>
+    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#fff", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#111", position:"relative" }}>
 
       {/* ── Mobile overlay ── */}
       <div className={`ep-dash-overlay${isMobile && open ? " open" : ""}`} onClick={closeSidebar}
@@ -1975,14 +2047,14 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   justifyContent:"center",
                   gap:3,
                   background:isRef?"linear-gradient(180deg,#FFF7E6 0%,#FFE4B3 100%)":(pop?"#fff":"transparent"),
-                  border:isRef?"2px solid #111":(pop?"1.5px solid #111":"none"),
+                  border:isRef?"1.5px solid #111":(pop?"1px solid #111":"none"),
                   cursor:"pointer",
                   color: isRef ? "#111" : (active?t.acc:"#BBB"),
                   transition:"all .15s",
                   fontFamily:"IBM Plex Sans, Geist, sans-serif",
                   position:"relative",
                   margin:isRef?"6px 8px 10px":0,
-                  borderRadius:isRef?16:(pop?14:0),
+                  borderRadius:isRef?12:(pop?10:0),
                   transform:isRef?"translateY(-6px)":(pop?"translateY(-4px)":"none"),
                   boxShadow:isRef?"0 8px 18px rgba(0,0,0,0.18)":(pop?"0 6px 14px rgba(0,0,0,0.18)":"none")
                 }}>
@@ -2095,6 +2167,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const curMonth = new Date().getMonth();
   const [activeMonth, setActiveMonth] = useState(curMonth);
+  const planSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,5) : LIVE_SYMBOLS.slice(0,7)).map(s => ({
+    ...s,
+    size: Math.max(12, Math.round(s.size * 0.7)),
+    dur: (s.dur || 22) + 6
+  }));
 
   const defaultActivity = [
     { ic:"play",  text:"Watched 2 videos", sub:"KES 100 credited", time:"2h ago",  c:"#059669" },
@@ -2223,7 +2300,23 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   );
   const mobilePlan = (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <div className="ep-frame-light" style={{ background:"linear-gradient(180deg,#FFF2CC 0%, #F59E0B 55%, #F97316 100%)", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.18)", minHeight:230 }}>
+      <div className="ep-frame-light" style={{ background:"#FFF6DA", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.55)", minHeight:230, position:"relative", overflow:"hidden" }}>
+        {PLAN_BG_VIDEO && (
+          <video
+            src={PLAN_BG_VIDEO}
+            autoPlay
+            muted
+            loop
+            playsInline
+            style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.1) contrast(1.05)", zIndex:0 }}
+          />
+        )}
+        <div style={{ position:"absolute", inset:0, background:"linear-gradient(135deg, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0.25) 100%)", zIndex:1 }}/>
+        <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.55} zIndex={2} />
+        <div style={{ position:"absolute", inset:-80, background:"radial-gradient(circle at 18% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%)", pointerEvents:"none", zIndex:2 }}/>
+        <div style={{ position:"absolute", top:-50, right:-40, width:200, height:200, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.45), rgba(255,255,255,0) 60%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
+        <div style={{ position:"absolute", bottom:-60, left:-40, width:180, height:180, background:"radial-gradient(circle at 40% 40%, rgba(255,255,255,0.25), rgba(255,255,255,0) 65%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
+        <div style={{ position:"relative", zIndex:3 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -2251,6 +2344,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>3× Goal<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {goal.toLocaleString()}</span></div>
           </div>
+        </div>
         </div>
       </div>
 
@@ -3677,6 +3771,11 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   const sideW = isMobile ? (isTiny ? 200 : 230) : 230;
   const adminName = profileRow?.name || (authUser?.email ? authUser.email.split("@")[0] : "Admin");
   const adminEmail = profileRow?.email || authUser?.email || "admin@edisonpay.co.ke";
+  const symScale = isMobile ? 0.8 : 1;
+  const liveSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,6) : LIVE_SYMBOLS).map(s => ({
+    ...s,
+    size: Math.round(s.size * symScale)
+  }));
 
   const fmtDate = (d) => {
     if (!d) return "—";
@@ -3810,7 +3909,8 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   };
 
   return (
-    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#080A0F", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#F1F5F9" }}>
+    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"linear-gradient(180deg,#0B0F18 0%, #0B1220 55%, #0A0E15 100%)", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#F1F5F9", position:"relative" }}>
+      <LiveMathBackground tone="dark" symbols={liveSymbols} />
 
       {/* Mobile overlay */}
       {isMobile && sideOpen && (
