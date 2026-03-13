@@ -2650,11 +2650,9 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
         {mobilePlan}
         {mobileActions}
-        {!stripHidden && (
-          <div style={{ position:"sticky", top:6, zIndex:25 }}>
-            {mobileSummary}
-          </div>
-        )}
+        <div style={{ position:"sticky", top:6, zIndex:25 }}>
+          {mobileSummary}
+        </div>
 
         <MobileSection id="income" title="Income">
           <div className="ep-card" style={{ borderRadius:18, padding:"18px 18px" }}>
