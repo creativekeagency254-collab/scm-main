@@ -459,6 +459,30 @@ const AVATAR_PRESETS = [
   makeAvatarSvg({ bg1:"#FFF1F2", bg2:"#FDA4AF", hair:"#7F1D1D", skin:"#F2C0A2", shirt:"#EF4444", accent:"#BE123C", icon:"spark" }),
 ];
 
+const REF_STORAGE_KEY = "ep:ref";
+const getBaseUrl = () => {
+  if (typeof window === "undefined") return "https://edisonpay.co.ke";
+  return window.location.origin;
+};
+const getRefFromUrl = () => {
+  if (typeof window === "undefined") return "";
+  try {
+    const url = new URL(window.location.href);
+    const ref = url.searchParams.get("ref") || url.searchParams.get("referral") || url.searchParams.get("code");
+    return normalizeRefCode(ref);
+  } catch (e) {
+    return "";
+  }
+};
+const getStoredRef = () => {
+  if (typeof window === "undefined") return "";
+  try { return normalizeRefCode(localStorage.getItem(REF_STORAGE_KEY)) || ""; } catch (e) { return ""; }
+};
+const storeRef = (ref) => {
+  if (!ref || typeof window === "undefined") return;
+  try { localStorage.setItem(REF_STORAGE_KEY, ref); } catch (e) {}
+};
+
 const pickAvatarForSeed = (seed) => {
   const s = String(seed || "0");
   let h = 0;
@@ -921,7 +945,7 @@ function TierCard({ t, go, featured }) {
 ═══════════════════════════════════════════════════════════ */
 function Auth({ type, go, from }) {
   const isLogin = type === "login";
-  const [f, setF] = useState({ name: "", email: "", password: "", confirm: "", ref: "" });
+  const [f, setF] = useState({ name: "", email: "", password: "", confirm: "", ref: getStoredRef() });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
@@ -2237,9 +2261,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 function ReferralMiniCard({ t, data, frame, refCode, compact }) {
   const [copied, setCopied] = useState(false);
   const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
-  const code = `edisonpay.co.ke/ref/${safeCode}`;
-  const short = safeCode;
-  const copy = () => { try { navigator.clipboard?.writeText(`https://${code}`); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const link = `${getBaseUrl()}/?ref=${safeCode}`;
+  const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
   const baseRefs = [
     { name:"John M.", bonus: t.deposit*.1, status:"Active", when:"2d ago" },
@@ -2264,9 +2287,9 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
   const showTracking = !compact;
 
   return (
-    <div className={frame ? "ep-frame-dark" : undefined} style={{ background:"#fff", borderRadius:14, border:`1px solid ${t.mid}`, boxShadow:`0 2px 12px rgba(${t.rgb},0.08)`, overflow:"hidden" }}>
+    <div className={frame ? "ep-frame-dark" : undefined} style={{ background:"#fff", borderRadius:16, border:"1px solid #111", boxShadow:`0 10px 24px rgba(0,0,0,0.08)`, overflow:"hidden" }}>
       {/* Header stripe */}
-      <div style={{ background:`linear-gradient(135deg, #0D1B36 0%, ${t.acc}DD 100%)`, padding:"18px 22px", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
+      <div style={{ background:`linear-gradient(135deg, #0D1B36 0%, ${t.acc}DD 100%)`, padding:"18px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ width:38, height:38, borderRadius:11, background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
             <I n="gift" s={18} c="#fff"/>
@@ -2287,14 +2310,24 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
       </div>
 
       {/* Body */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:0 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:0 }}>
         {/* Link + copy */}
-        <div style={{ padding:"16px 22px", borderRight:"1px solid #F0F0F0", display:"flex", alignItems:"center", gap:10 }}>
-          <I n="link" s={14} c={t.acc}/>
-          <span style={{ fontSize:13, fontWeight:700, color:"#111", letterSpacing:"0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>{short}</span>
-          <button onClick={copy} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", background: copied?"#ECFDF5":"#111", color: copied?"#059669":"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Geist,sans-serif", transition:"all .2s", whiteSpace:"nowrap", flexShrink:0 }}>
-            <I n={copied?"check":"copy"} s={12} c={copied?"#059669":"#fff"}/> {copied?"Copied!":"Copy"}
-          </button>
+        <div style={{ padding:"14px 18px", borderBottom:"1px solid #F0F0F0", display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <I n="link" s={14} c={t.acc}/>
+            <span style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.14em" }}>YOUR LINK</span>
+          </div>
+          <a href={link} style={{ fontSize:12, fontWeight:800, color:"#111", textDecoration:"none", border:"1px solid #E2E8F0", borderRadius:10, padding:"8px 10px", background:"#F8FAFC", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {link}
+          </a>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={copy} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", background: copied?"#ECFDF5":"#111", color: copied?"#059669":"#fff", border:"none", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", transition:"all .2s", whiteSpace:"nowrap" }}>
+              <I n={copied?"check":"copy"} s={12} c={copied?"#059669":"#fff"}/> {copied?"Copied!":"Copy"}
+            </button>
+            <a href={link} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", background:"#fff", color:"#111", border:"1px solid #111", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", textDecoration:"none" }}>
+              Open Signup
+            </a>
+          </div>
         </div>
 
         {/* Recent 3 referrals inline */}
@@ -2314,7 +2347,7 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
       </div>
 
       {showTracking && (
-        <div style={{ padding:"14px 22px 18px", background:"#FBFBFB", borderTop:"1px solid #F0F0F0" }}>
+        <div style={{ padding:"14px 18px 18px", background:"#FBFBFB", borderTop:"1px solid #F0F0F0" }}>
           <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.14em", color:"#94A3B8", marginBottom:10 }}>REFERRAL TRACKING</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10 }}>
             {[
@@ -2568,7 +2601,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
         {mobilePlan}
         {mobileActions}
-        {!stripHidden && mobileSummary}
+        {!stripHidden && (
+          <div style={{ position:"sticky", top:6, zIndex:25 }}>
+            {mobileSummary}
+          </div>
+        )}
 
         <MobileSection id="income" title="Income">
           <div className="ep-card" style={{ borderRadius:18, padding:"18px 18px" }}>
@@ -3594,7 +3631,7 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
   const chipBorder = isMobile ? "1px solid #111" : "1px solid #EBEBEB";
   const [copied, setCopied] = useState(false);
   const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
-  const link = `https://edisonpay.co.ke/ref/${safeCode}`;
+  const link = `${getBaseUrl()}/?ref=${safeCode}`;
   const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2e3); };
   const socials = [
     ["WhatsApp","#25D366"],
@@ -4840,6 +4877,8 @@ export default function App() {
   const [isMobileInstall, setIsMobileInstall] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [installHint, setInstallHint] = useState("");
+  const [showInstallPanel, setShowInstallPanel] = useState(false);
+  const [installPanelSeen, setInstallPanelSeen] = useState(false);
 
   useEffect(() => {
     const url = window.location.href;
@@ -4848,6 +4887,13 @@ export default function App() {
       try { sessionStorage.setItem("ep:recovery", "1"); } catch (e) {}
       setPrevPage("login");
       setPage("login");
+    }
+  }, []);
+
+  useEffect(() => {
+    const ref = getRefFromUrl();
+    if (ref) {
+      storeRef(ref);
     }
   }, []);
 
@@ -5032,6 +5078,27 @@ export default function App() {
 
   const showInstallButton = isMobileInstall && !isStandalone;
   const installReady = !!installPrompt && showInstall;
+  const showInstallPanelReady = showInstallButton && !installPanelSeen;
+
+  useEffect(() => {
+    if (!showInstallPanelReady) return;
+    let timer;
+    let armed = false;
+    const arm = () => {
+      if (armed) return;
+      armed = true;
+      timer = setTimeout(() => {
+        setShowInstallPanel(true);
+        setInstallPanelSeen(true);
+      }, 5000);
+    };
+    const events = ["pointerdown", "keydown", "scroll", "touchstart"];
+    events.forEach(e => window.addEventListener(e, arm, { passive: true }));
+    return () => {
+      events.forEach(e => window.removeEventListener(e, arm));
+      if (timer) clearTimeout(timer);
+    };
+  }, [showInstallPanelReady]);
 
   return (
     <ErrorBoundary>
@@ -5138,6 +5205,57 @@ export default function App() {
           >
             Download App
           </button>
+        </div>
+      )}
+      {showInstallPanel && showInstallButton && (
+        <div
+          style={{
+            position:"fixed",
+            right:14,
+            top:"50%",
+            transform:"translateY(-50%)",
+            zIndex:9998,
+            width:"min(260px, 78vw)",
+            background:"#fff",
+            border:"1.5px solid #111",
+            borderRadius:16,
+            boxShadow:"0 10px 30px rgba(0,0,0,0.18)",
+            padding:"14px 14px 12px",
+            display:"grid",
+            gap:10
+          }}
+        >
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+            <div style={{ fontSize:12, fontWeight:900, color:"#111", letterSpacing:"0.06em" }}>DOWNLOAD APP</div>
+            <button
+              onClick={() => setShowInstallPanel(false)}
+              style={{ width:22, height:22, borderRadius:"50%", border:"1px solid #111", background:"#fff", display:"grid", placeItems:"center", cursor:"pointer" }}
+            >
+              <I n="xmark" s={12} c="#111" />
+            </button>
+          </div>
+          <div style={{ fontSize:12, color:"#444", lineHeight:1.5 }}>
+            Install the app for a faster, full‑screen experience.
+          </div>
+          <button
+            onClick={handleInstall}
+            style={{
+              padding:"9px 12px",
+              borderRadius:10,
+              border:"1.5px solid #111",
+              background: installReady ? "#111" : "#222",
+              color:"#fff",
+              fontWeight:900,
+              fontSize:12,
+              cursor:"pointer",
+              boxShadow:"0 4px 0 #111"
+            }}
+          >
+            Install App
+          </button>
+          {installHint && (
+            <div style={{ fontSize:10, color:"#6B7280" }}>{installHint}</div>
+          )}
         </div>
       )}
       <button onClick={openHelp}
