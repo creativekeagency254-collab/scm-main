@@ -36,6 +36,7 @@ const GlobalStyles = () => {
       @keyframes ep-symbol-float { 0%,100%{transform:translate3d(0,0,0) rotate(0deg);} 50%{transform:translate3d(12px,-18px,0) rotate(3deg);} }
       @keyframes ep-ambient { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-18px,14px,0) scale(1.03);} }
       @keyframes ep-ambient-alt { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-10px,0) scale(1.04);} }
+      @keyframes ep-upgrade-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.9;} 25%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
@@ -43,7 +44,9 @@ const GlobalStyles = () => {
       .ep-skeleton::after { content:""; position:absolute; inset:-40%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.75) 45%, transparent 100%); animation:ep-shine 1.4s linear infinite; }
       @keyframes ep-shine { 0%{ transform:translateX(-60%);} 100%{ transform:translateX(60%);} }
       .ep-card { background:#fff; border-radius:16px; border:1px solid rgba(17,17,17,0.15); box-shadow:0 1px 4px rgba(0,0,0,0.04); }
-      .ep-upgrade-btn { animation: popPulse 1.6s ease-in-out infinite; }
+      .ep-upgrade-btn { position:relative; overflow:hidden; animation: popPulse 1.6s ease-in-out infinite; }
+      .ep-upgrade-btn::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.9) 48%, transparent 100%); transform:translateX(-120%); animation:ep-upgrade-glare 2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
+      .ep-upgrade-btn:disabled::after { animation:none; opacity:0; }
       .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
       .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
       .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
@@ -1081,6 +1084,7 @@ const LIVE_SYMBOLS = [
 // Set this to a local video path (e.g. "/plan-actions.mp4") or a direct MP4 URL.
 const PLAN_BG_VIDEO = "/plan-actions.mp4";
 const HOME_BALANCE_VIDEO = "/home-balance.mp4";
+const ACCOUNT_GOAL_VIDEO = "/account-goal.mp4";
 const LIVE_COLORS_LIGHT = [
   "rgba(59,130,246,0.16)",
   "rgba(99,102,241,0.14)",
@@ -1141,6 +1145,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   ]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [depositFocus, setDepositFocus] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
   const [recentOpen, setRecentOpen] = useState(false);
@@ -1208,12 +1213,26 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     color:"#111",
     boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.65)"
   };
+  const upgradeBtnHeaderActive = {
+    background:"linear-gradient(180deg,#F8FAFC 0%, #D1D5DB 45%, #F8FAFC 100%)",
+    border:"2px solid #111",
+    color:"#111",
+    boxShadow:"0 6px 0 #111, 0 14px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.9)"
+  };
   const upgradeBtnDisabled = {
     background:"#E5E7EB",
     border:"2px solid #9CA3AF",
     color:"#6B7280",
     boxShadow:"none"
   };
+  const goDeposit = (focus = false) => {
+    setDepositFocus(!!focus);
+    setTab("withdraw");
+  };
+  useEffect(() => {
+    if (tab !== "withdraw" && depositFocus) setDepositFocus(false);
+  }, [tab, depositFocus]);
+  const addClientTx = (tx) => setClientTx(prev => [tx, ...(Array.isArray(prev) ? prev : [])]);
   const symScale = isMobile ? 0.85 : 1;
   const liveSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,7) : LIVE_SYMBOLS).map(s => ({
     ...s,
@@ -1504,7 +1523,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
           {open && t.id < 5 && (
             <button
-              onClick={() => { if (canUpgrade) setTab("withdraw"); }}
+              onClick={() => { if (canUpgrade) goDeposit(true); }}
               disabled={!canUpgrade}
               style={{
                 margin:"8px 0 0",
@@ -1517,7 +1536,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                 fontWeight:800,
                 fontSize:12,
                 transition:"transform .12s, box-shadow .12s",
-                ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled)
+                ...(canUpgrade ? upgradeBtnHeaderActive : upgradeBtnDisabled)
               }}>
               <I n="star" s={14} c={canUpgrade ? "#111" : "#6B7280"}/>
               <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2 }}>
@@ -1637,7 +1656,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           )}
           {isMobile && (
             <button
-              onClick={() => { if (canUpgrade) setTab("withdraw"); }}
+              onClick={() => { if (canUpgrade) goDeposit(true); }}
               disabled={!canUpgrade}
               title={nextTier ? `Upgrade to ${nextTier.name}` : "Max tier"}
               className="ep-upgrade-btn"
@@ -1870,7 +1889,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
         <div style={{ flex:1, overflowY:"auto", padding: pagePad }} onScroll={onBodyScroll} onClick={()=>{setNotifOpen(false); setProfileOpen(false);}}>
           {isMobile && (
-            <div style={{ position:"sticky", top:4, zIndex:30, display:"flex", justifyContent:"center", pointerEvents:"none", opacity: stripToggleHidden ? 0 : 1, transform: stripToggleHidden ? "translateY(-6px)" : "translateY(0)", transition:"opacity .2s ease, transform .2s ease" }}>
+            <div style={{ position:"sticky", top:4, zIndex:30, display:"flex", justifyContent:"center", pointerEvents:"none", opacity: stripToggleHidden ? 0 : 1, transform: stripToggleHidden ? "translateY(-6px)" : "translateY(0)", transition:"opacity .2s ease, transform .2s ease", marginBottom:10 }}>
               <button onClick={()=>{ setStripHidden(s => !s); }}
                 style={{
                   pointerEvents: stripToggleHidden ? "none" : "auto",
@@ -1899,11 +1918,11 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
               </button>
             </div>
           )}
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined} refCode={refCode}/>}
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden}/>}
           {tab==="videos"    && <VideosContent    t={t}/>}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode}/>}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode}/>}
-          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn}/>}
+          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx}/>}
           {tab==="settings"  && (
             <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
               <div className="ep-card" style={{ borderRadius:14, padding:"20px 22px" }}>
@@ -2192,7 +2211,7 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
 }
 
 /* ── OVERVIEW ── */
-function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode }) {
+function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const weekData = days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) }));
   const maxV = Math.max(...weekData.map(x=>x.v));
@@ -2314,47 +2333,61 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     </div>
   );
   const mobileSummary = (
-    <div className="ep-frame-dark" style={{ background:"linear-gradient(135deg,#FFF7ED 0%,#FFEBD1 60%,#FFF 100%)", borderRadius:18, padding:"16px 16px 14px", border:"1px solid #F3E2C7" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.12em", color:"#92400E" }}>ACCOUNT + GOAL</div>
-        <div style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 8px", background:"#fff", border:"1px solid #F3E2C7", borderRadius:99 }}>
-          <I n="shield" s={10} c="#92400E"/>
-          <span style={{ fontSize:9, fontWeight:800, color:"#92400E" }}>SECURE</span>
-        </div>
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-        <div style={{ background:"#fff", border:"1px solid #F3E2C7", borderRadius:12, padding:"10px 12px" }}>
-          <div style={{ fontSize:9, color:"#A16207", fontWeight:800, letterSpacing:"0.1em", marginBottom:6 }}>ACCOUNT</div>
-          <div style={{ fontSize:20, fontWeight:900, letterSpacing:"-0.03em", color:"#111" }}>KES {balance.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:"#A16207", marginTop:4 }}>{t.name} Tier</div>
-        </div>
-        <div style={{ background:"#fff", border:"1px solid #F3E2C7", borderRadius:12, padding:"10px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-          <div>
-            <div style={{ fontSize:9, color:"#A16207", fontWeight:800, letterSpacing:"0.1em", marginBottom:6 }}>GOAL</div>
-            <div style={{ fontSize:16, fontWeight:900, letterSpacing:"-0.03em", color:"#111" }}>KES {goal.toLocaleString()}</div>
-            <div style={{ fontSize:10, color:"#A16207", marginTop:4 }}>{pct}% complete</div>
-          </div>
-          <div style={{ height:6, background:"#F3E2C7", borderRadius:99, overflow:"hidden", marginTop:10 }}>
-            <div style={{ height:"100%", width:`${pct}%`, background:"#F59E0B", borderRadius:99 }}/>
-          </div>
-        </div>
-      </div>
+    <div className="ep-frame-dark" style={{ background:"#0B0B0B", borderRadius:18, padding:"16px 16px 14px", border:"1px solid #111", position:"relative", overflow:"hidden" }}>
+      {ACCOUNT_GOAL_VIDEO && (
+        <video
+          src={ACCOUNT_GOAL_VIDEO}
+          autoPlay
+          muted
+          loop
+          playsInline
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.05) contrast(1.08)", zIndex:0 }}
+        />
+      )}
+      <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(5,7,12,0.7) 0%, rgba(5,7,12,0.4) 100%)", zIndex:1 }} />
 
-      <div className="ep-frame-light" style={{ background:"#111", borderRadius:14, padding:"12px 14px", marginTop:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-        <div>
-          <div style={{ fontSize:9, color:"rgba(255,255,255,0.55)", fontWeight:800, letterSpacing:"0.12em" }}>NEXT TIER</div>
-          <div style={{ fontSize:14, fontWeight:900, color:"#fff", letterSpacing:"-0.02em" }}>{nextTier ? nextTier.name : "Max Tier"}</div>
-          <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", marginTop:2 }}>
-            {nextTier ? "Upgrade available anytime" : "You're already at the top"}
+      <div style={{ position:"relative", zIndex:2 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+          <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.12em", color:"#E2E8F0" }}>ACCOUNT + GOAL</div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 8px", background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:99 }}>
+            <I n="shield" s={10} c="#E2E8F0"/>
+            <span style={{ fontSize:9, fontWeight:800, color:"#E2E8F0" }}>SECURE</span>
           </div>
         </div>
-        <button onClick={()=>{ if (canUpgrade) setTab("withdraw"); }} disabled={!canUpgrade}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.16)", borderRadius:12, padding:"10px 12px", backdropFilter:"blur(6px)" }}>
+            <div style={{ fontSize:9, color:"rgba(255,255,255,0.65)", fontWeight:800, letterSpacing:"0.1em", marginBottom:6 }}>ACCOUNT</div>
+            <div style={{ fontSize:20, fontWeight:900, letterSpacing:"-0.03em", color:"#fff" }}>KES {balance.toLocaleString()}</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", marginTop:4 }}>{t.name} Tier</div>
+          </div>
+          <div style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.16)", borderRadius:12, padding:"10px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between", backdropFilter:"blur(6px)" }}>
+            <div>
+              <div style={{ fontSize:9, color:"rgba(255,255,255,0.65)", fontWeight:800, letterSpacing:"0.1em", marginBottom:6 }}>GOAL</div>
+              <div style={{ fontSize:16, fontWeight:900, letterSpacing:"-0.03em", color:"#fff" }}>KES {goal.toLocaleString()}</div>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", marginTop:4 }}>{pct}% complete</div>
+            </div>
+            <div style={{ height:6, background:"rgba(255,255,255,0.15)", borderRadius:99, overflow:"hidden", marginTop:10 }}>
+              <div style={{ height:"100%", width:`${pct}%`, background:"#22C55E", borderRadius:99 }}/>
+            </div>
+          </div>
+        </div>
+
+        <div className="ep-frame-light" style={{ background:"rgba(0,0,0,0.6)", borderRadius:14, padding:"12px 14px", marginTop:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, border:"1px solid rgba(255,255,255,0.12)" }}>
+          <div>
+            <div style={{ fontSize:9, color:"rgba(255,255,255,0.55)", fontWeight:800, letterSpacing:"0.12em" }}>NEXT TIER</div>
+            <div style={{ fontSize:14, fontWeight:900, color:"#fff", letterSpacing:"-0.02em" }}>{nextTier ? nextTier.name : "Max Tier"}</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.55)", marginTop:2 }}>
+              {nextTier ? "Upgrade available anytime" : "You're already at the top"}
+            </div>
+          </div>
+        <button onClick={()=>{ if (canUpgrade) (goDeposit ? goDeposit(true) : setTab("withdraw")); }} disabled={!canUpgrade}
           style={{ padding:"8px 12px", borderRadius:10, fontSize:11, fontWeight:900, cursor: canUpgrade ? "pointer" : "not-allowed", fontFamily:"IBM Plex Sans, Geist, sans-serif", ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled) }}>
           {nextTier ? "Upgrade" : "Max Tier"}
         </button>
-      </div>
+        </div>
 
-      <div style={{ marginTop:8, fontSize:11, color:"#92400E" }}>Deposit and watch promotional videos to earn daily rewards.</div>
+        <div style={{ marginTop:8, fontSize:11, color:"rgba(255,255,255,0.6)" }}>Deposit and watch promotional videos to earn daily rewards.</div>
+      </div>
     </div>
   );
   const mobileActions = (
@@ -2374,7 +2407,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1px solid #E8E8E8", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
             Withdraw
           </button>
-          <button onClick={()=>setTab("overview")} style={{ padding:"10px 0", background:"linear-gradient(180deg,#FDE68A 0%, #F59E0B 100%)", color:"#111", border:"1px solid #111", borderRadius:10, fontSize:11, fontWeight:900, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+          <button onClick={()=>goDeposit(false)} style={{ padding:"10px 0", background:"linear-gradient(180deg,#FDE68A 0%, #F59E0B 100%)", color:"#111", border:"1px solid #111", borderRadius:10, fontSize:11, fontWeight:900, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
             Deposit
           </button>
         </div>
@@ -2405,7 +2438,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
         {mobilePlan}
         {mobileActions}
-        {mobileSummary}
+        {!stripHidden && mobileSummary}
 
         <MobileSection id="income" title="Income">
           <div className="ep-card" style={{ borderRadius:18, padding:"18px 18px" }}>
@@ -2964,6 +2997,7 @@ const YT_VIDEOS = [
 /* ── VIDEOS CONTENT ── */
 function VideosContent({ t }) {
   const MANUAL_COUNT = 2;
+  const MANUAL_SECONDS = 45;
   const BOT_COUNT = 14; // 16 total - 2 manual
   const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0,10));
   const initialActivatedOn = (() => {
@@ -2983,7 +3017,7 @@ function VideosContent({ t }) {
   // playing: null | 0 | 1 (which manual video index)
   const [playing, setPlaying] = useState(null);
   const [showPlayer, setShowPlayer] = useState(null);
-  const [timer, setTimer] = useState(30);
+  const [timer, setTimer] = useState(MANUAL_SECONDS);
   const [timerRunning, setTimerRunning] = useState(false);
   const [errMsg, setErrMsg] = useState("");
   const [botActivatedOn, setBotActivatedOn] = useState(initialActivatedOn);
@@ -3025,7 +3059,7 @@ function VideosContent({ t }) {
         setWatched(0);
         setPlaying(null);
         setTimerRunning(false);
-        setTimer(30);
+        setTimer(MANUAL_SECONDS);
         setShowPlayer(null);
         setBotActivatedOn("");
         setBotPct(0);
@@ -3041,9 +3075,10 @@ function VideosContent({ t }) {
   }, [dayKey]);
 
   const botActive = botActivatedOn === dayKey;
-  const canActivateBot = !botActive;
+  const canActivateBot = !botActive && watched >= MANUAL_COUNT;
 
   const activateBot = () => {
+    if (!canActivateBot) return;
     setBotActivatedOn(dayKey);
     try { localStorage?.setItem("ep-bot-activated-on", dayKey); } catch (e) {}
     setBotPct(0);
@@ -3075,14 +3110,14 @@ function VideosContent({ t }) {
     if (timerRunning) { setErrMsg("A video is already playing. Wait for it to finish."); return; }
     setPlaying(idx);
     setShowPlayer(idx);
-    setTimer(30);
+    setTimer(MANUAL_SECONDS);
     setTimerRunning(true);
   };
   const closePlayer = () => {
     setTimerRunning(false);
     setPlaying(null);
     setShowPlayer(null);
-    setTimer(30);
+    setTimer(MANUAL_SECONDS);
   };
 
   const todayEarn = watched * V_PRICE + Math.floor(botDone * V_PRICE * 0.4);
@@ -3092,7 +3127,10 @@ function VideosContent({ t }) {
     : watched >= MANUAL_COUNT
       ? "All manual videos completed"
       : `Ready for Video ${watched + 1}`;
-  const manualPct = playing !== null ? Math.round(((30 - timer) / 30) * 100) : (watched >= MANUAL_COUNT ? 100 : 0);
+  const manualPct = playing !== null
+    ? Math.round(((MANUAL_SECONDS - timer) / MANUAL_SECONDS) * 100)
+    : (watched >= MANUAL_COUNT ? 100 : 0);
+  const manualUnlockPct = Math.min(100, Math.round((watched / MANUAL_COUNT) * 100));
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
@@ -3114,7 +3152,7 @@ function VideosContent({ t }) {
               />
             </div>
             <div style={{ padding:"10px 16px", fontSize:11, color:"#64748B", fontWeight:700 }}>
-              Keep this open for 30 seconds to earn your reward today.
+              Keep this open for {MANUAL_SECONDS} seconds to earn your reward today.
             </div>
           </div>
         </div>
@@ -3162,7 +3200,7 @@ function VideosContent({ t }) {
             <div>
               <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em" }}>Your 2 Daily Videos</h3>
               <p style={{ fontSize:13,color:"#BBB",marginTop:4 }}>
-                Watch full 30 seconds to earn <strong style={{color:"#111"}}>KES {V_PRICE}</strong> each.
+                Watch full {MANUAL_SECONDS} seconds to earn <strong style={{color:"#111"}}>KES {V_PRICE}</strong> each.
                 Video 2 unlocks after Video 1 is complete.
               </p>
             </div>
@@ -3219,7 +3257,7 @@ function VideosContent({ t }) {
               const isActive = playing === i && timerRunning;
               const isLocked = i === 1 && watched < 1 && !timerRunning;
               const isReady  = !isDone && !isActive && !isLocked;
-              const pct      = isActive ? ((30 - timer) / 30) * 100 : isDone ? 100 : 0;
+              const pct      = isActive ? ((MANUAL_SECONDS - timer) / MANUAL_SECONDS) * 100 : isDone ? 100 : 0;
 
               return (
                 <div key={i} style={{ borderRadius:16,border:"1px solid #111",boxShadow:"0 6px 16px rgba(0,0,0,0.08)",overflow:"hidden",background:"#fff",transition:"all .25s",outline:isActive?`2px solid ${t.acc}`:"none" }}>
@@ -3344,13 +3382,25 @@ function VideosContent({ t }) {
               <div style={{ fontSize:11,color:"#BBB",marginTop:2 }}>{botDone}/{BOT_COUNT} complete · {Math.round(botPct)}%</div>
             </div>
           </div>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 12px",background:watched>=MANUAL_COUNT?"#ECFDF5":"#FFF7ED",border:`1px solid ${watched>=MANUAL_COUNT?"#A7F3D0":"#FDBA74"}`,borderRadius:12,marginBottom:14,flexWrap:"wrap" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:watched>=MANUAL_COUNT?"#059669":"#B45309" }}>
+              <I n={watched>=MANUAL_COUNT?"check":"lock"} s={13} c={watched>=MANUAL_COUNT?"#059669":"#B45309"}/>
+              {watched>=MANUAL_COUNT ? "Bot unlocked - manual videos complete" : "Complete all manual videos to unlock the bot"}
+            </div>
+            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <div style={{ fontSize:11,fontWeight:800,color:watched>=MANUAL_COUNT?"#059669":"#B45309" }}>{watched}/{MANUAL_COUNT}</div>
+              <div style={{ width:84,height:6,background:"rgba(0,0,0,0.1)",borderRadius:99,overflow:"hidden" }}>
+                <div style={{ height:"100%",width:`${manualUnlockPct}%`,background:watched>=MANUAL_COUNT?"#059669":"#F59E0B",borderRadius:99,transition:"width .3s ease" }}/>
+              </div>
+            </div>
+          </div>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap" }}>
-            <div style={{ fontSize:12, fontWeight:700, color: botActive ? "#059669" : "#888" }}>
-              {botActive ? "Bot activated today" : "Activate the bot to run once today."}
+            <div style={{ fontSize:12, fontWeight:700, color: botActive ? "#059669" : watched>=MANUAL_COUNT ? "#111" : "#B45309" }}>
+              {botActive ? "Bot activated today" : watched>=MANUAL_COUNT ? "Ready to activate once today." : `Finish ${MANUAL_COUNT - watched} manual video${MANUAL_COUNT - watched === 1 ? "" : "s"} to enable.`}
             </div>
             <button onClick={activateBot} disabled={!canActivateBot}
               style={{ padding:"8px 14px", background:canActivateBot?"#111":"#F5F5F5", color:canActivateBot?"#fff":"#AAA", border:canActivateBot?"none":"1px solid #E0E0E0", borderRadius:9, fontSize:12, fontWeight:800, cursor:canActivateBot?"pointer":"not-allowed", fontFamily:"Geist,sans-serif" }}>
-              {canActivateBot ? "Activate Bot" : "Activated Today"}
+              {botActive ? "Activated Today" : canActivateBot ? "Activate Bot" : "Complete Manual Videos"}
             </button>
           </div>
           <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:24 }}>
@@ -3630,8 +3680,17 @@ function ReferralsContent({ t, earn, refData, refCode }) {
 }
 
 /* ── WITHDRAW ── */
-function WithdrawContent({ t, earn }) {
+function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx }) {
   const [wdAmt,setWdAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
+  const [depMethod, setDepMethod] = useState("M-Pesa");
+  const [depAmt, setDepAmt] = useState("");
+  const [depPhone, setDepPhone] = useState("");
+  const [depName, setDepName] = useState("");
+  const [depCard, setDepCard] = useState("");
+  const [depExp, setDepExp] = useState("");
+  const [depCvv, setDepCvv] = useState("");
+  const [depDone, setDepDone] = useState(false);
+  const depositRef = useRef(null);
   const [cryptoNet, setCryptoNet] = useState("USDT-TRC20");
   const [cryptoAmt, setCryptoAmt] = useState("");
   const [cryptoWdAmt, setCryptoWdAmt] = useState("");
@@ -3641,6 +3700,20 @@ function WithdrawContent({ t, earn }) {
   const [cryptoTopupDone, setCryptoTopupDone] = useState(false);
   const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
   const can=["Tuesday","Wednesday","Friday"].includes(today);
+  const nextTier = TIERS[t.id];
+  const safeBalance = Number.isFinite(balance) ? balance : t.deposit;
+  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - safeBalance, 0) : 0;
+  const accountRef = String(profileRow?.name || authUser?.email || authUser?.id || "EDISONPAY").slice(0, 18);
+  const depMethods = ["M-Pesa","Airtel Money","Tigo Pesa","HaloPesa","MTN MoMo","Card","Crypto"];
+  const mobileMoneyMeta = {
+    "M-Pesa": { label:"PAYBILL", code:"247247" },
+    "Airtel Money": { label:"BUSINESS", code:"509999" },
+    "Tigo Pesa": { label:"MERCHANT", code:"555555" },
+    "HaloPesa": { label:"BUSINESS", code:"777777" },
+    "MTN MoMo": { label:"MERCHANT", code:"890000" },
+  };
+  const isMobileMoney = Object.prototype.hasOwnProperty.call(mobileMoneyMeta, depMethod);
+  const mobileMeta = mobileMoneyMeta[depMethod] || mobileMoneyMeta["M-Pesa"];
   const cryptoAddresses = {
     "USDT-TRC20": "TV4bY7fK7yFQJt9iWcQk2L3S8P2Vw7HcJ9",
     "USDT-ERC20": "0x7a7b9C2e6C4B9cA2cB7e0a1d9A8BfF3C2D4E5F6a",
@@ -3650,6 +3723,31 @@ function WithdrawContent({ t, earn }) {
   };
   const curAddress = cryptoAddresses[cryptoNet];
   const copyCrypto = () => { try { navigator.clipboard?.writeText(curAddress); } catch(e){} setCryptoCopied(true); setTimeout(()=>setCryptoCopied(false), 2000); };
+  useEffect(() => {
+    if (!focusDeposit) return;
+    if (depositRef.current) depositRef.current.scrollIntoView({ behavior:"smooth", block:"start" });
+    if (upgradeNeed > 0 && !depAmt) setDepAmt(String(upgradeNeed));
+    if (onFocusDone) onFocusDone();
+  }, [focusDeposit, upgradeNeed]);
+  const submitDeposit = async () => {
+    const amt = Number(depAmt);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    setDepDone(true);
+    setTimeout(()=>setDepDone(false), 2500);
+    onNewTx?.({
+      ic:"wallet",
+      text:"Deposit submitted",
+      sub:`KES ${amt.toLocaleString()} via ${depMethod}`,
+      time:"Just now",
+      c:"#0066FF",
+      amt
+    });
+    if (supabase && authUser?.id) {
+      const payload = { user_id: authUser.id, type:"Deposit", amount: amt, method: depMethod, status:"Pending", created_at: new Date().toISOString() };
+      try { await supabase.from("transactions").insert(payload); } catch(e) {}
+      try { await supabase.from("client_transactions").insert(payload); } catch(e) {}
+    }
+  };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
       <div style={{ padding:"14px 18px",borderRadius:10,border:`1px solid ${can?"#A7F3D0":"#FCA5A5"}`,background:can?"#ECFDF5":"#FFF0F0",display:"flex",alignItems:"center",gap:12 }}>
@@ -3661,6 +3759,92 @@ function WithdrawContent({ t, earn }) {
             <div style={{ fontSize:12,color:"#888",marginTop:2 }}>Available: Tue, Wed & Fri · 08:30 – 17:30</div>
           </div>
         </div>
+
+      <div ref={depositRef} style={{ background:"#fff",borderRadius:14,padding:"20px 22px",border:"1px solid #111",boxShadow:"0 6px 18px rgba(0,0,0,0.08)" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:10 }}>
+          <div>
+            <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>Upgrade & Deposit</div>
+            <div style={{ fontSize:11,color:"#666",marginTop:2 }}>
+              {nextTier ? `Next tier: ${nextTier.name}` : "You’re already at the top tier."}
+            </div>
+          </div>
+          {nextTier && (
+            <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:9,fontSize:11,color:"#9A3412",fontWeight:800 }}>
+              Need KES {upgradeNeed.toLocaleString()} to upgrade
+            </div>
+          )}
+        </div>
+
+        {nextTier && (
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:12 }}>
+            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #E8E8E8",background:"#FAFAFA" }}>
+              <div style={{ fontSize:9,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:4 }}>BALANCE</div>
+              <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>KES {safeBalance.toLocaleString()}</div>
+              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>{t.name} Tier</div>
+            </div>
+            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #111",background:"#fff" }}>
+              <div style={{ fontSize:9,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:4 }}>NEXT</div>
+              <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>{nextTier.name}</div>
+              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>KES {nextTier.deposit.toLocaleString()}</div>
+            </div>
+            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #E8E8E8",background:"#FAFAFA" }}>
+              <div style={{ fontSize:9,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:4 }}>TOP UP</div>
+              <div style={{ fontSize:13,fontWeight:900,color:"#059669" }}>KES {upgradeNeed.toLocaleString()}</div>
+              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>to upgrade</div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:12 }}>
+          {depMethods.map(m=>(
+            <button key={m} onClick={()=>setDepMethod(m)} style={{ padding:"7px 12px",borderRadius:9,border:`1.5px solid ${depMethod===m?"#111":"#E8E8E8"}`,background:depMethod===m?"#111":"#fff",color:depMethod===m?"#fff":"#666",fontWeight:800,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{m}</button>
+          ))}
+        </div>
+
+        {isMobileMoney && (
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
+            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #E8E8E8",background:"#FAFAFA" }}>
+              <div style={{ fontSize:10,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:6 }}>{mobileMeta.label}</div>
+              <div style={{ fontSize:14,fontWeight:900,color:"#111" }}>{mobileMeta.code}</div>
+              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>Account: {accountRef}</div>
+            </div>
+            <div>
+              <input value={depPhone} onChange={e=>setDepPhone(e.target.value)} placeholder="Mobile money number" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif",marginBottom:8 }}/>
+              <input value={depAmt} onChange={e=>setDepAmt(e.target.value)} placeholder={`Amount (e.g. ${upgradeNeed || 5000})`} style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
+            </div>
+          </div>
+        )}
+
+        {depMethod === "Card" && (
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
+            <input value={depName} onChange={e=>setDepName(e.target.value)} placeholder="Card holder name" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
+            <input value={depCard} onChange={e=>setDepCard(e.target.value)} placeholder="Card number" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
+            <input value={depExp} onChange={e=>setDepExp(e.target.value)} placeholder="MM/YY" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
+            <input value={depCvv} onChange={e=>setDepCvv(e.target.value)} placeholder="CVV" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
+            <input value={depAmt} onChange={e=>setDepAmt(e.target.value)} placeholder={`Amount (e.g. ${upgradeNeed || 5000})`} style={{ gridColumn:"1 / -1",width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
+          </div>
+        )}
+
+        {depMethod === "Crypto" && (
+          <div style={{ marginBottom:12 }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
+              {Object.keys(cryptoAddresses).map(n=>(
+                <button key={n} onClick={()=>setCryptoNet(n)} style={{ padding:"5px 10px",borderRadius:8,border:`1px solid ${cryptoNet===n?"#111":"#E8E8E8"}`,background:cryptoNet===n?"#111":"#fff",color:cryptoNet===n?"#fff":"#777",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{n}</button>
+              ))}
+            </div>
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
+              <div style={{ flex:1, padding:"8px 10px",background:"#fff",border:"1px solid #E8E8E8",borderRadius:8,fontSize:11,color:"#444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{curAddress}</div>
+              <button onClick={copyCrypto} style={{ padding:"7px 10px",borderRadius:8,border:"none",background:cryptoCopied?"#059669":"#111",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{cryptoCopied?"Copied":"Copy"}</button>
+            </div>
+            <input type="number" value={depAmt} onChange={e=>setDepAmt(e.target.value)} placeholder={`Amount (e.g. ${upgradeNeed || 5000})`} style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box" }}/>
+          </div>
+        )}
+
+        <button onClick={submitDeposit} style={{ width:"100%",padding:"12px 12px",background:"#111",color:"#fff",border:"none",borderRadius:10,fontWeight:900,fontSize:13,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>
+          {depDone ? "Deposit Submitted" : "Submit Deposit"}
+        </button>
+        <div style={{ marginTop:8, fontSize:11, color:"#888" }}>Admin will see your deposit under Transactions.</div>
+      </div>
       <div style={{ background:"#fff",borderRadius:14,padding:"20px 22px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
           <div>
@@ -3681,7 +3865,7 @@ function WithdrawContent({ t, earn }) {
               <div style={{ flex:1, padding:"8px 10px",background:"#fff",border:"1px solid #E8E8E8",borderRadius:8,fontSize:11,color:"#444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{curAddress}</div>
               <button onClick={copyCrypto} style={{ padding:"7px 10px",borderRadius:8,border:"none",background:cryptoCopied?"#059669":"#111",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{cryptoCopied?"Copied":"Copy"}</button>
             </div>
-            <input type="number" value={cryptoAmt} onChange={e=>setCryptoAmt(e.target.value)} placeholder="Amount to top up (KES)" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
+            <input type="number" value={cryptoAmt} onChange={e=>setCryptoAmt(e.target.value)} placeholder={`Amount to top up (KES ${upgradeNeed || 5000})`} style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
             <button onClick={()=>{if(cryptoAmt){setCryptoTopupDone(true);setTimeout(()=>setCryptoTopupDone(false),2500);}}} style={{ width:"100%",padding:"10px 12px",background:"#111",color:"#fff",border:"none",borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>
               {cryptoTopupDone ? "Top Up Submitted" : "I Sent Crypto"}
             </button>
@@ -4669,4 +4853,5 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
 
