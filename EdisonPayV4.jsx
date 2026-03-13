@@ -2032,7 +2032,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
       {/* ── Mobile bottom nav ── */}
       {isMobile && (
-        <nav style={{ position:"fixed", bottom:0, left:0, right:0, height:60, background:"#fff", borderTop:"1px solid #E8E8E8", display:"flex", alignItems:"stretch", zIndex:150, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)" }}>
+        <nav style={{ position:"fixed", bottom:0, left:0, right:0, height:60, background:"#fff", borderTop:"none", display:"flex", alignItems:"stretch", zIndex:150, boxShadow:"0 -6px 22px rgba(0,0,0,0.1)" }}>
           {navItems.filter(n=>["overview","videos","referrals","withdraw","settings"].includes(n.id)).map(({id,ic,label}) => {
             const active = tab===id;
             const isRef = id === "referrals";
@@ -2054,11 +2054,11 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   fontFamily:"IBM Plex Sans, Geist, sans-serif",
                   position:"relative",
                   margin:isRef?"6px 8px 10px":0,
-                  borderRadius:isRef?14:(pop?12:0),
-                  transform:isRef?"translateY(-10px) scale(1.04)":(pop?"translateY(-7px) scale(1.03)":"none"),
-                  boxShadow:isRef?"0 10px 22px rgba(0,0,0,0.2)":(pop?"0 8px 16px rgba(0,0,0,0.2)":"none")
+                  borderRadius:isRef?15:(pop?13:0),
+                  transform:isRef?"translateY(-12px) scale(1.06)":(pop?"translateY(-9px) scale(1.04)":"none"),
+                  boxShadow:isRef?"0 12px 24px rgba(0,0,0,0.22)":(pop?"0 10px 18px rgba(0,0,0,0.22)":"none")
                 }}>
-                <I n={ic} s={active?20:18} c={isRef? "#111" : (active?t.acc:"#BBBBBB")}/>
+                <I n={ic} s={active?22:19} c={isRef? "#111" : (active?t.acc:"#BBBBBB")}/>
                 <span style={{ fontSize:9, fontWeight:800, whiteSpace:"nowrap", letterSpacing:"0.04em", color:isRef? "#111" : (active?t.acc:"#888") }}>{label}</span>
                 {isRef && <div style={{ position:"absolute", top:6, right:10, padding:"2px 6px", borderRadius:8, background:"#111", color:"#fff", fontSize:8, fontWeight:800, letterSpacing:"0.06em" }}>PRIZE</div>}
                 {active && !isRef && <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:28, height:2, background:t.acc, borderRadius:99 }}/>}
@@ -2259,7 +2259,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     boxShadow:"none"
   };
   const PlanActionsCard = () => (
-    <div className="ep-frame-light" style={{ background:"rgba(255,246,218,0.25)", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.55)", minHeight:230, position:"relative", overflow:"hidden" }}>
+    <div className="ep-frame-light" style={{ background:"transparent", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22)", minHeight:230, position:"relative", overflow:"hidden" }}>
       {PLAN_BG_VIDEO && (
         <video
           src={PLAN_BG_VIDEO}
@@ -2267,14 +2267,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           muted
           loop
           playsInline
-          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.1) contrast(1.05)", zIndex:0 }}
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.78, filter:"saturate(1.15) contrast(1.08)", zIndex:0 }}
         />
       )}
-      <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.35} zIndex={1} />
-      <div style={{ position:"absolute", inset:-80, background:"radial-gradient(circle at 18% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%)", pointerEvents:"none", zIndex:2 }}/>
-      <div style={{ position:"absolute", top:-50, right:-40, width:200, height:200, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.45), rgba(255,255,255,0) 60%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
-      <div style={{ position:"absolute", bottom:-60, left:-40, width:180, height:180, background:"radial-gradient(circle at 40% 40%, rgba(255,255,255,0.25), rgba(255,255,255,0) 65%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
-      <div style={{ position:"relative", zIndex:3 }}>
+      <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.2} zIndex={1} />
+      <div style={{ position:"relative", zIndex:2 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
