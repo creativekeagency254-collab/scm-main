@@ -2047,18 +2047,18 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   justifyContent:"center",
                   gap:3,
                   background:isRef?"linear-gradient(180deg,#FFF7E6 0%,#FFE4B3 100%)":(pop?"#fff":"transparent"),
-                  border:isRef?"1.5px solid #111":(pop?"1px solid #111":"none"),
+                  border:"none",
                   cursor:"pointer",
                   color: isRef ? "#111" : (active?t.acc:"#BBB"),
                   transition:"all .15s",
                   fontFamily:"IBM Plex Sans, Geist, sans-serif",
                   position:"relative",
                   margin:isRef?"6px 8px 10px":0,
-                  borderRadius:isRef?12:(pop?10:0),
-                  transform:isRef?"translateY(-6px)":(pop?"translateY(-4px)":"none"),
-                  boxShadow:isRef?"0 8px 18px rgba(0,0,0,0.18)":(pop?"0 6px 14px rgba(0,0,0,0.18)":"none")
+                  borderRadius:isRef?14:(pop?12:0),
+                  transform:isRef?"translateY(-10px) scale(1.04)":(pop?"translateY(-7px) scale(1.03)":"none"),
+                  boxShadow:isRef?"0 10px 22px rgba(0,0,0,0.2)":(pop?"0 8px 16px rgba(0,0,0,0.2)":"none")
                 }}>
-                <I n={ic} s={active?18:16} c={isRef? "#111" : (active?t.acc:"#BBBBBB")}/>
+                <I n={ic} s={active?20:18} c={isRef? "#111" : (active?t.acc:"#BBBBBB")}/>
                 <span style={{ fontSize:9, fontWeight:800, whiteSpace:"nowrap", letterSpacing:"0.04em", color:isRef? "#111" : (active?t.acc:"#888") }}>{label}</span>
                 {isRef && <div style={{ position:"absolute", top:6, right:10, padding:"2px 6px", borderRadius:8, background:"#111", color:"#fff", fontSize:8, fontWeight:800, letterSpacing:"0.06em" }}>PRIZE</div>}
                 {active && !isRef && <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:28, height:2, background:t.acc, borderRadius:99 }}/>}
@@ -2300,7 +2300,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   );
   const mobilePlan = (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <div className="ep-frame-light" style={{ background:"#FFF6DA", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.55)", minHeight:230, position:"relative", overflow:"hidden" }}>
+      <div className="ep-frame-light" style={{ background:"rgba(255,246,218,0.25)", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.55)", minHeight:230, position:"relative", overflow:"hidden" }}>
         {PLAN_BG_VIDEO && (
           <video
             src={PLAN_BG_VIDEO}
@@ -2311,8 +2311,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.1) contrast(1.05)", zIndex:0 }}
           />
         )}
-        <div style={{ position:"absolute", inset:0, background:"linear-gradient(135deg, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0.25) 100%)", zIndex:1 }}/>
-        <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.55} zIndex={2} />
+        <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.35} zIndex={1} />
         <div style={{ position:"absolute", inset:-80, background:"radial-gradient(circle at 18% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%)", pointerEvents:"none", zIndex:2 }}/>
         <div style={{ position:"absolute", top:-50, right:-40, width:200, height:200, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.45), rgba(255,255,255,0) 60%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
         <div style={{ position:"absolute", bottom:-60, left:-40, width:180, height:180, background:"radial-gradient(circle at 40% 40%, rgba(255,255,255,0.25), rgba(255,255,255,0) 65%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
