@@ -512,6 +512,33 @@ function AnimNum({ target, prefix = "", suffix = "" }) {
   return <>{prefix}{val.toLocaleString()}{suffix}</>;
 }
 
+function LazyVideo({ src, eager = false, ...props }) {
+  const ref = useRef(null);
+  const [shouldLoad, setShouldLoad] = useState(!!eager);
+  useEffect(() => {
+    if (eager) return;
+    const el = ref.current;
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) { setShouldLoad(true); return; }
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setShouldLoad(true);
+        io.disconnect();
+      }
+    }, { rootMargin: "200px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [eager]);
+  return (
+    <video
+      ref={ref}
+      src={shouldLoad ? src : undefined}
+      preload={shouldLoad ? "auto" : "metadata"}
+      {...props}
+    />
+  );
+}
+
 /* ── DONUT ── */
 function Donut({ pct, acc, size = 80, thickness = 8 }) {
   const r = (size - thickness) / 2, cx = size / 2, cy = size / 2;
@@ -637,8 +664,9 @@ function Landing({ go }) {
           {/* Main panel — dark gradient background simulating image */}
           <div style={{ flex: 1, borderRadius: 24, background: "#0B1320", position: "relative", overflow: "hidden", minHeight: 480 }}>
             {HOME_BALANCE_VIDEO && (
-              <video
+              <LazyVideo
                 src={HOME_BALANCE_VIDEO}
+                eager
                 autoPlay
                 muted
                 loop
@@ -2453,7 +2481,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const PlanActionsCard = () => (
     <div className="ep-frame-light" style={{ background:"transparent", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22)", minHeight:230, position:"relative", overflow:"hidden" }}>
       {PLAN_BG_VIDEO && (
-        <video
+        <LazyVideo
           src={PLAN_BG_VIDEO}
           autoPlay
           muted
@@ -2498,7 +2526,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const mobileSummary = (
     <div className="ep-frame-dark" style={{ background:"#0B0B0B", borderRadius:18, padding:"16px 16px 14px", border:"1px solid #111", position:"relative", overflow:"hidden" }}>
       {ACCOUNT_GOAL_VIDEO && (
-        <video
+        <LazyVideo
           src={ACCOUNT_GOAL_VIDEO}
           autoPlay
           muted
