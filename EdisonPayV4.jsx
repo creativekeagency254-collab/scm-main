@@ -2077,7 +2077,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 }
 
 /* ── REFERRAL MINI CARD (shown in overview) ── */
-function ReferralMiniCard({ t, data, frame, refCode }) {
+function ReferralMiniCard({ t, data, frame, refCode, compact }) {
   const [copied, setCopied] = useState(false);
   const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
   const code = `edisonpay.co.ke/ref/${safeCode}`;
@@ -2102,6 +2102,9 @@ function ReferralMiniCard({ t, data, frame, refCode }) {
   const refList = Array.isArray(data) && data.length ? data.map(mapRef) : baseRefs.map(mapRef);
   const referrals = refList.slice(0,4);
   const earned = refList.filter(r=>r.status==="Active").reduce((sum,r)=>sum + (Number.isFinite(r.bonus)?r.bonus:0),0);
+  const activeCount = refList.filter(r=>r.status==="Active").length;
+  const pendingCount = refList.filter(r=>r.status!=="Active").length;
+  const showTracking = !compact;
 
   return (
     <div className={frame ? "ep-frame-dark" : undefined} style={{ background:"#fff", borderRadius:14, border:`1px solid ${t.mid}`, boxShadow:`0 2px 12px rgba(${t.rgb},0.08)`, overflow:"hidden" }}>
@@ -2152,6 +2155,28 @@ function ReferralMiniCard({ t, data, frame, refCode }) {
           </div>
         </div>
       </div>
+
+      {showTracking && (
+        <div style={{ padding:"14px 22px 18px", background:"#FBFBFB", borderTop:"1px solid #F0F0F0" }}>
+          <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.14em", color:"#94A3B8", marginBottom:10 }}>REFERRAL TRACKING</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10 }}>
+            {[
+              [`${refList.length}`,"Tracked"],
+              [`${activeCount}`,"Active"],
+              [`${pendingCount}`,"Pending"],
+              [`KES ${earned.toLocaleString()}`,"Rewards"],
+            ].map(([v,l],i)=>(
+              <div key={i} style={{ padding:"10px 12px", background:"#fff", borderRadius:12, border:"1px solid #111" }}>
+                <div style={{ fontSize:12, fontWeight:900, color:"#111", letterSpacing:"-0.02em" }}>{v}</div>
+                <div style={{ fontSize:10, color:"#94A3B8", marginTop:4, letterSpacing:"0.08em" }}>{l.toUpperCase()}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:10, fontSize:11, color:"#64748B", fontWeight:600 }}>
+            Every signup through your link is traced and rewarded automatically.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2233,6 +2258,54 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     color:"#6B7280",
     boxShadow:"none"
   };
+  const PlanActionsCard = () => (
+    <div className="ep-frame-light" style={{ background:"rgba(255,246,218,0.25)", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.55)", minHeight:230, position:"relative", overflow:"hidden" }}>
+      {PLAN_BG_VIDEO && (
+        <video
+          src={PLAN_BG_VIDEO}
+          autoPlay
+          muted
+          loop
+          playsInline
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.1) contrast(1.05)", zIndex:0 }}
+        />
+      )}
+      <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.35} zIndex={1} />
+      <div style={{ position:"absolute", inset:-80, background:"radial-gradient(circle at 18% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%)", pointerEvents:"none", zIndex:2 }}/>
+      <div style={{ position:"absolute", top:-50, right:-40, width:200, height:200, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.45), rgba(255,255,255,0) 60%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
+      <div style={{ position:"absolute", bottom:-60, left:-40, width:180, height:180, background:"radial-gradient(circle at 40% 40%, rgba(255,255,255,0.25), rgba(255,255,255,0) 65%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
+      <div style={{ position:"relative", zIndex:3 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ width:22, height:22, borderRadius:6, background:"#111", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <I n="lock" s={12} c="#fff"/>
+              </div>
+              <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Plan & Actions</div>
+            </div>
+            <div style={{ fontSize:11, color:"rgba(17,17,17,0.6)", marginTop:4, fontWeight:700 }}>{t.id} of 5 Tiers · Secured</div>
+          </div>
+          <div style={{ width:28, height:28, borderRadius:8, background:"#111", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.2)" }}>
+            <I n="bolt" s={13} c="#fff"/>
+          </div>
+        </div>
+        <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)" }}>
+          <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
+          <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
+          <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:4 }}>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.18em" }}>ACCOUNT NO.</span>
+            <span style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,0.95)", letterSpacing:"0.16em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+              {joinCardLabel}
+            </span>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>3× Goal<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {goal.toLocaleString()}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
   const mobileSummary = (
     <div className="ep-frame-dark" style={{ background:"linear-gradient(135deg,#FFF7ED 0%,#FFEBD1 60%,#FFF 100%)", borderRadius:18, padding:"16px 16px 14px", border:"1px solid #F3E2C7" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
@@ -2300,52 +2373,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   );
   const mobilePlan = (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <div className="ep-frame-light" style={{ background:"rgba(255,246,218,0.25)", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.55)", minHeight:230, position:"relative", overflow:"hidden" }}>
-        {PLAN_BG_VIDEO && (
-          <video
-            src={PLAN_BG_VIDEO}
-            autoPlay
-            muted
-            loop
-            playsInline
-            style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.1) contrast(1.05)", zIndex:0 }}
-          />
-        )}
-        <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.35} zIndex={1} />
-        <div style={{ position:"absolute", inset:-80, background:"radial-gradient(circle at 18% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%)", pointerEvents:"none", zIndex:2 }}/>
-        <div style={{ position:"absolute", top:-50, right:-40, width:200, height:200, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.45), rgba(255,255,255,0) 60%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
-        <div style={{ position:"absolute", bottom:-60, left:-40, width:180, height:180, background:"radial-gradient(circle at 40% 40%, rgba(255,255,255,0.25), rgba(255,255,255,0) 65%)", mixBlendMode:"screen", pointerEvents:"none", zIndex:2 }}/>
-        <div style={{ position:"relative", zIndex:3 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:22, height:22, borderRadius:6, background:"#111", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <I n="lock" s={12} c="#fff"/>
-              </div>
-              <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Plan & Actions</div>
-            </div>
-            <div style={{ fontSize:11, color:"rgba(17,17,17,0.6)", marginTop:4, fontWeight:700 }}>{t.id} of 5 Tiers Â· Secured</div>
-          </div>
-          <div style={{ width:28, height:28, borderRadius:8, background:"#111", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.2)" }}>
-            <I n="bolt" s={13} c="#fff"/>
-          </div>
-        </div>
-        <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)" }}>
-          <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
-          <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
-          <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:4 }}>
-            <span style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.18em" }}>ACCOUNT NO.</span>
-            <span style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,0.95)", letterSpacing:"0.16em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-              {joinCardLabel}
-            </span>
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>3× Goal<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {goal.toLocaleString()}</span></div>
-          </div>
-        </div>
-        </div>
-      </div>
+      <PlanActionsCard />
 
       <div className="ep-card" style={{ borderRadius:14, padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
         <div style={{ width:34, height:34, borderRadius:10, background:canW?"#ECFDF5":"#FFF5F5", border:`1.5px solid ${canW?"#A7F3D0":"#FCA5A5"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -2461,7 +2489,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </div>
           </div>
 
-          <ReferralMiniCard t={t} data={referralData} frame refCode={refCode}/>
+          <ReferralMiniCard t={t} data={referralData} frame refCode={refCode} compact />
         </MobileSection>
 
         <MobileSection id="mix" title="Earning Mix">
@@ -2602,6 +2630,10 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           DESKTOP — Image 1 style
           Top 3 stat cards
       ══════════════════════════════════════ */}
+      <div className="ep-desktop-only" style={{ marginBottom:18 }}>
+        <PlanActionsCard />
+      </div>
+
       <div className="ep-grid-4 ep-desktop-only" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:18 }}>
         {/* Card 1 — Total Balance (dark) */}
         <div className="ep-hover-lift" style={{ borderRadius:18, background:"#111", padding:"22px 24px", position:"relative", overflow:"hidden" }}>
@@ -2623,7 +2655,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
         </div>
 
         {/* Card 2 — Total Spending (Daily Potential) */}
-        <div className="ep-hover-lift ep-card" style={{ borderRadius:18, padding:"22px 24px", position:"relative", overflow:"hidden" }}>
+        <div className="ep-hover-lift ep-card" style={{ borderRadius:18, padding:"22px 24px", position:"relative", overflow:"hidden", border:"1px solid #111", boxShadow:"0 8px 18px rgba(0,0,0,0.08)" }}>
           <div style={{ position:"absolute", top:-20, right:-20, width:120, height:120, borderRadius:"50%", background:`${t.acc}08`, pointerEvents:"none" }}/>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
             <div style={{ width:36, height:36, borderRadius:11, background:`${t.acc}14`, border:`1px solid ${t.acc}22`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -2640,7 +2672,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
         </div>
 
         {/* Card 3 — Total Saved (Goal Progress) */}
-        <div className="ep-hover-lift ep-card" style={{ borderRadius:18, padding:"22px 24px", position:"relative", overflow:"hidden" }}>
+        <div className="ep-hover-lift ep-card" style={{ borderRadius:18, padding:"22px 24px", position:"relative", overflow:"hidden", border:"1px solid #111", boxShadow:"0 8px 18px rgba(0,0,0,0.08)" }}>
           <div style={{ position:"absolute", top:-20, right:-20, width:120, height:120, borderRadius:"50%", background:"#05966908", pointerEvents:"none" }}/>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
             <div style={{ width:36, height:36, borderRadius:11, background:"#ECFDF5", border:"1px solid #A7F3D044", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -2824,7 +2856,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           </div>
 
           {/* Withdrawal window pill */}
-          <div className="ep-card" style={{ borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:12 }}>
+          <div className="ep-card" style={{ borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:12, border:"1px solid #111" }}>
             <div style={{ width:38, height:38, borderRadius:11, background:canW?"#ECFDF5":"#FFF5F5", border:`1.5px solid ${canW?"#A7F3D0":"#FCA5A5"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
               <I n="wallet" s={16} c={canW?"#059669":"#EF4444"}/>
             </div>
@@ -2838,7 +2870,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           </div>
 
           {/* Earning Mix */}
-          <div className="ep-card" style={{ borderRadius:14, padding:"16px 18px" }}>
+          <div className="ep-card" style={{ borderRadius:14, padding:"16px 18px", border:"1px solid #111" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:deskOpen.mix?12:0 }}>
               <h3 style={{ fontWeight:900, fontSize:13, letterSpacing:"-0.02em" }}>Earning Mix</h3>
               <button onClick={()=>toggleDesk("mix")} style={{ padding:"4px 8px", borderRadius:8, border:"1px solid #E8E8E8", background:"#fff", fontSize:10, fontWeight:800, color:"#666", cursor:"pointer" }}>
@@ -2865,7 +2897,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       </div>
 
       {/* ── Referral mini card ── */}
-      <ReferralMiniCard t={t} data={referralData} refCode={refCode}/>
+      <ReferralMiniCard t={t} data={referralData} refCode={refCode} frame />
 
       {/* ── Account Summary ── */}
       <div className="ep-card" style={{ padding:"22px 26px", borderRadius:18 }}>
@@ -4627,3 +4659,4 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
