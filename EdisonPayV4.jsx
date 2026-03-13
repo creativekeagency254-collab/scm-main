@@ -925,6 +925,8 @@ function Auth({ type, go, from }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
+  const [resetMode, setResetMode] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
   const set = k => v => { setF(p => ({ ...p, [k]: v })); setErr(""); };
 
@@ -934,7 +936,64 @@ function Auth({ type, go, from }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  useEffect(() => {
+    if (!isLogin) return;
+    const url = window.location.href;
+    const hasRecovery =
+      /type=recovery/i.test(url) ||
+      /access_token=/i.test(url) ||
+      /refresh_token=/i.test(url) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("ep:recovery") === "1");
+    if (hasRecovery) {
+      setRecoveryMode(true);
+      setResetMode(false);
+      setInfo("Set a new password for your account.");
+    }
+  }, [isLogin]);
+
+  const clearRecovery = () => {
+    try { sessionStorage.removeItem("ep:recovery"); } catch (e) {}
+    try {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
+      window.history.replaceState({}, document.title, url.pathname);
+    } catch (e) {}
+    setRecoveryMode(false);
+  };
+
+  const handleResetRequest = async () => {
+    setErr("");
+    setInfo("");
+    if (!f.email) { setErr("Email is required."); return; }
+    if (!supabase) { setErr("Supabase is not configured."); return; }
+    setLoading(true);
+    const redirectTo = `${window.location.origin}/?type=recovery`;
+    const { error } = await supabase.auth.resetPasswordForEmail(f.email, { redirectTo });
+    setLoading(false);
+    if (error) { setErr(error.message); return; }
+    setInfo("Password reset link sent. Check your email.");
+  };
+
+  const handlePasswordUpdate = async () => {
+    setErr("");
+    setInfo("");
+    if (!f.password) { setErr("New password is required."); return; }
+    if (f.password !== f.confirm) { setErr("Passwords don't match."); return; }
+    if (!supabase) { setErr("Supabase is not configured."); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: f.password });
+    setLoading(false);
+    if (error) { setErr(error.message); return; }
+    setInfo("Password updated. Please sign in.");
+    clearRecovery();
+    try { await supabase.auth.signOut(); } catch (e) {}
+    setTimeout(() => { setResetMode(false); go("login"); }, 900);
+  };
+
   const submit = async () => {
+    if (resetMode) return handleResetRequest();
+    if (recoveryMode) return handlePasswordUpdate();
     setErr("");
     setInfo("");
     if (!f.email) { setErr("Email is required."); return; }
@@ -1019,19 +1078,40 @@ function Auth({ type, go, from }) {
       <div style={{ background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "32px 22px 48px" : 48 }}>
         <div style={{ width: "100%", maxWidth: 400, animation: "scaleIn .35s ease both" }}>
           <div style={{ marginBottom: 36 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", color: "#111", marginBottom: 8 }}>{isLogin ? "Welcome back" : "Create account"}</h1>
-            <p style={{ fontSize: 14, color: "#999" }}>{isLogin ? "Sign in to your EdisonPay account" : "Start earning in under 2 minutes"}</p>
+            <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", color: "#111", marginBottom: 8 }}>
+              {recoveryMode ? "Set new password" : resetMode ? "Forgot password" : (isLogin ? "Welcome back" : "Create account")}
+            </h1>
+            <p style={{ fontSize: 14, color: "#999" }}>
+              {recoveryMode
+                ? "Choose a new secure password for your account."
+                : resetMode
+                  ? "We'll email you a secure reset link."
+                  : (isLogin ? "Sign in to your EdisonPay account" : "Start earning in under 2 minutes")}
+            </p>
           </div>
 
-          {!isLogin && <Field label="Full Name" ph="Alex Johnson" val={f.name} set={set("name")} ic="user" />}
-          <Field label="Email" type="email" ph="alex@example.com" val={f.email} set={set("email")} ic="user" />
-          <Field label="Password" type="password" ph="••••••••" val={f.password} set={set("password")} ic="lock" />
-          {!isLogin && <>
+          {!isLogin && !resetMode && !recoveryMode && <Field label="Full Name" ph="Alex Johnson" val={f.name} set={set("name")} ic="user" />}
+          {!recoveryMode && <Field label="Email" type="email" ph="alex@example.com" val={f.email} set={set("email")} ic="user" />}
+          {!resetMode && (
+            <Field label={recoveryMode ? "New Password" : "Password"} type="password" ph="••••••••" val={f.password} set={set("password")} ic="lock" />
+          )}
+          {(recoveryMode || (!isLogin && !resetMode)) && (
             <Field label="Confirm Password" type="password" ph="••••••••" val={f.confirm} set={set("confirm")} ic="lock" />
+          )}
+          {!isLogin && !resetMode && !recoveryMode && (
             <Field label="Referral Code (optional)" ph="EDP-1A2B3C" val={f.ref} set={set("ref")} ic="gift" />
-          </>}
+          )}
 
-          {isLogin && <div style={{ textAlign: "right", marginBottom: 20 }}><span style={{ fontSize: 13, color: "#0066FF", fontWeight: 600, cursor: "pointer" }}>Forgot password?</span></div>}
+          {isLogin && !resetMode && !recoveryMode && (
+            <div style={{ textAlign: "right", marginBottom: 20 }}>
+              <span
+                style={{ fontSize: 13, color: "#0066FF", fontWeight: 600, cursor: "pointer" }}
+                onClick={() => { setResetMode(true); setInfo(""); setErr(""); }}
+              >
+                Forgot password?
+              </span>
+            </div>
+          )}
 
           {err && (
             <div style={{ padding: "10px 14px", background: "#FFF0F0", border: "1px solid #FCA5A5", borderRadius: 9, fontSize: 13, color: "#DC2626", fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -1044,7 +1124,8 @@ function Auth({ type, go, from }) {
             </div>
           )}
 
-          <>
+          {(!resetMode && !recoveryMode) && (
+            <>
             <button onClick={handleGoogle} disabled={loading || !SUPABASE_ENABLED}
               style={{ width: "100%", padding: "12px 16px", background: "#fff", color: "#111", border: "1.5px solid #111", borderRadius: 999, fontWeight: 700, fontSize: 14, cursor: (loading || !SUPABASE_ENABLED) ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, opacity: !SUPABASE_ENABLED ? 0.7 : 1, boxShadow: "0 3px 0 #111" }}>
               <span style={{ width: 18, height: 18, borderRadius: "50%", background: "conic-gradient(#4285F4 0 90deg, #34A853 90deg 180deg, #FBBC05 180deg 270deg, #EA4335 270deg 360deg)", display: "grid", placeItems: "center" }}>
@@ -1062,18 +1143,27 @@ function Auth({ type, go, from }) {
               <span style={{ fontSize: 11, color: "#999", fontWeight: 600 }}>OR</span>
               <div style={{ height: 1, background: "#EEE", flex: 1 }} />
             </div>
-          </>
+            </>
+          )}
 
           <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "14px", background: loading ? "#888" : "#111", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 20, letterSpacing: "-0.01em", transition: "all .15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {loading ? (
-              <><div style={{ width: 16, height: 16, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .7s linear infinite" }} /> {isLogin ? "Signing in…" : "Creating account…"}</>
-            ) : (isLogin ? "Sign In" : "Create Account")}
+              <><div style={{ width: 16, height: 16, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .7s linear infinite" }} /> {recoveryMode ? "Updating password…" : resetMode ? "Sending link…" : (isLogin ? "Signing in…" : "Creating account…")}</>
+            ) : (recoveryMode ? "Update Password" : resetMode ? "Send Reset Link" : (isLogin ? "Sign In" : "Create Account"))}
           </button>
 
-          <div style={{ textAlign: "center", fontSize: 13, color: "#999" }}>
-            {isLogin ? "No account? " : "Have an account? "}
-            <span onClick={() => go(isLogin ? "signup" : "login")} style={{ color: "#111", fontWeight: 700, cursor: "pointer" }}>{isLogin ? "Sign Up" : "Sign In"}</span>
-          </div>
+          {(!resetMode && !recoveryMode) && (
+            <div style={{ textAlign: "center", fontSize: 13, color: "#999" }}>
+              {isLogin ? "No account? " : "Have an account? "}
+              <span onClick={() => go(isLogin ? "signup" : "login")} style={{ color: "#111", fontWeight: 700, cursor: "pointer" }}>{isLogin ? "Sign Up" : "Sign In"}</span>
+            </div>
+          )}
+
+          {(resetMode || recoveryMode) && (
+            <div style={{ textAlign: "center", fontSize: 13, color: "#999" }}>
+              <span onClick={() => { setResetMode(false); clearRecovery(); setErr(""); setInfo(""); }} style={{ color: "#111", fontWeight: 700, cursor: "pointer" }}>Back to sign in</span>
+            </div>
+          )}
 
           <div onClick={() => go("landing")} style={{ textAlign: "center", marginTop: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, cursor: "pointer", color: "#CCC", fontSize: 13, fontWeight: 500 }}>
             <I n="chevL" s={13} c="#CCC" /> Back to home
@@ -4750,6 +4840,16 @@ export default function App() {
   const [isMobileInstall, setIsMobileInstall] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [installHint, setInstallHint] = useState("");
+
+  useEffect(() => {
+    const url = window.location.href;
+    const hasRecovery = /type=recovery/i.test(url) || /access_token=/i.test(url) || /refresh_token=/i.test(url);
+    if (hasRecovery) {
+      try { sessionStorage.setItem("ep:recovery", "1"); } catch (e) {}
+      setPrevPage("login");
+      setPage("login");
+    }
+  }, []);
 
   useEffect(() => {
     try {
