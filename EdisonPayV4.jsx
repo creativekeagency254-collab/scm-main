@@ -814,7 +814,14 @@ function Auth({ type, go, from }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
   const set = k => v => { setF(p => ({ ...p, [k]: v })); setErr(""); };
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 900);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const submit = async () => {
     setErr("");
@@ -862,10 +869,10 @@ function Auth({ type, go, from }) {
   };
 
   return (
-    <div className="ep-auth-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", fontFamily: "Geist,sans-serif" }}>
+    <div className="ep-auth-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", fontFamily: "Geist,sans-serif" }}>
 
       {/* LEFT — brand panel */}
-      <div className="ep-auth-left" style={{ background: "#0D1117", display: "flex", flexDirection: "column", padding: "48px 56px", position: "relative", overflow: "hidden" }}>
+      <div className="ep-auth-left" style={{ background: "#0D1117", display: "flex", flexDirection: "column", padding: isMobile ? "32px 28px" : "48px 56px", position: "relative", overflow: "hidden", minHeight: isMobile ? 320 : "auto" }}>
         {/* Subtle grid */}
         <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)", backgroundSize: "36px 36px", pointerEvents: "none" }} />
 
@@ -900,7 +907,7 @@ function Auth({ type, go, from }) {
       </div>
 
       {/* RIGHT — form */}
-      <div style={{ background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 48 }}>
+      <div style={{ background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "32px 22px 48px" : 48 }}>
         <div style={{ width: "100%", maxWidth: 400, animation: "scaleIn .35s ease both" }}>
           <div style={{ marginBottom: 36 }}>
             <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", color: "#111", marginBottom: 8 }}>{isLogin ? "Welcome back" : "Create account"}</h1>
@@ -928,19 +935,22 @@ function Auth({ type, go, from }) {
             </div>
           )}
 
-          {SUPABASE_ENABLED && (
-            <>
-              <button onClick={handleGoogle} disabled={loading}
-                style={{ width: "100%", padding: "12px", background: "#fff", color: "#111", border: "1.5px solid #E5E7EB", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                Continue with Google
-              </button>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <div style={{ height: 1, background: "#EEE", flex: 1 }} />
-                <span style={{ fontSize: 11, color: "#999", fontWeight: 600 }}>OR</span>
-                <div style={{ height: 1, background: "#EEE", flex: 1 }} />
+          <>
+            <button onClick={handleGoogle} disabled={loading || !SUPABASE_ENABLED}
+              style={{ width: "100%", padding: "12px", background: "#fff", color: "#111", border: "1.5px solid #E5E7EB", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !SUPABASE_ENABLED) ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: !SUPABASE_ENABLED ? 0.7 : 1 }}>
+              Continue with Google
+            </button>
+            {!SUPABASE_ENABLED && (
+              <div style={{ fontSize: 11, color: "#AAA", fontWeight: 600, marginBottom: 10 }}>
+                Connect Google in Supabase to enable.
               </div>
-            </>
-          )}
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ height: 1, background: "#EEE", flex: 1 }} />
+              <span style={{ fontSize: 11, color: "#999", fontWeight: 600 }}>OR</span>
+              <div style={{ height: 1, background: "#EEE", flex: 1 }} />
+            </div>
+          </>
 
           <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "14px", background: loading ? "#888" : "#111", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 20, letterSpacing: "-0.01em", transition: "all .15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {loading ? (
