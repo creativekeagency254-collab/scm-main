@@ -53,6 +53,7 @@ const GlobalStyles = () => {
       .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
       .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
       .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
+      .ep-help-fab { position: fixed; }
       * { box-sizing:border-box; margin:0; padding:0; }
       ::-webkit-scrollbar { width:5px; height:5px; }
       ::-webkit-scrollbar-track { background:transparent; }
@@ -86,6 +87,7 @@ const GlobalStyles = () => {
         .ep-footer-brand { grid-column: 1 / -1 !important; }
         .ep-footer-bottom { flex-direction:column !important; align-items:flex-start !important; gap:10px !important; }
         .ep-footer-bottom-links { flex-wrap:wrap !important; gap:10px !important; }
+        .ep-help-fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; right: 14px !important; }
       }
         @media (max-width:600px) {
           .ep-footer-grid { grid-template-columns:1fr !important; gap:20px !important; }
@@ -2137,10 +2139,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
         </nav>
       )}
 
-      {/* Help FAB */}
-      <div style={{ position:"fixed", bottom: isMobile?72:24, right:24, width:44, height:44, borderRadius:"50%", background:"#111", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.22)", zIndex:100 }}>
-        <I n="shield" s={18} c="#fff"/>
-      </div>
     </div>
   );
 }
@@ -5043,8 +5041,8 @@ export default function App() {
         </div>
       )}
       <button onClick={openHelp}
+        className="ep-help-fab"
         style={{
-          position:"fixed",
           right:18,
           bottom:18,
           zIndex:9999,
