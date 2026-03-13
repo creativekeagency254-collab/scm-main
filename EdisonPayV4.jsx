@@ -37,6 +37,7 @@ const GlobalStyles = () => {
       @keyframes ep-ambient { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-18px,14px,0) scale(1.03);} }
       @keyframes ep-ambient-alt { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-10px,0) scale(1.04);} }
       @keyframes ep-upgrade-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.9;} 25%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
+      @keyframes ep-tier-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.85;} 28%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
@@ -47,6 +48,8 @@ const GlobalStyles = () => {
       .ep-upgrade-btn { position:relative; overflow:hidden; animation: popPulse 1.6s ease-in-out infinite; }
       .ep-upgrade-btn::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.9) 48%, transparent 100%); transform:translateX(-120%); animation:ep-upgrade-glare 2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
       .ep-upgrade-btn:disabled::after { animation:none; opacity:0; }
+      .ep-tier-glare { position:relative; overflow:hidden; }
+      .ep-tier-glare::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, var(--glare, rgba(255,255,255,0.85)) 48%, transparent 100%); transform:translateX(-120%); animation:ep-tier-glare 2.2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
       .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
       .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
       .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
@@ -380,8 +383,8 @@ function PaymentLogo({ name }) {
 /* ── TIERS ── */
 const TIERS = [
   { id:1, name:"Regular",      tag:"REG", deposit:5000,   videos:2,  bot:2,  acc:"#0066FF", rgb:"0,102,255",  lgt:"#EBF2FF", mid:"#99C2FF" },
-  { id:2, name:"Standard",     tag:"STD", deposit:10000,  videos:4,  bot:6,  acc:"#E8820C", rgb:"232,130,12", lgt:"#FEF3E2", mid:"#FDC06A" },
-  { id:3, name:"Deluxe",       tag:"DLX", deposit:20000,  videos:8,  bot:18, acc:"#059669", rgb:"5,150,105",  lgt:"#ECFDF5", mid:"#6EE7B7" },
+  { id:2, name:"Standard",     tag:"STD", deposit:10000,  videos:4,  bot:6,  acc:"#BFC5CC", rgb:"191,197,204", lgt:"#F4F6F8", mid:"#D1D5DB" },
+  { id:3, name:"Deluxe",       tag:"DLX", deposit:20000,  videos:8,  bot:18, acc:"#8A6A00", rgb:"138,106,0",  lgt:"#FFF5D1", mid:"#E3C56A" },
   { id:4, name:"Executive",    tag:"EXC", deposit:50000,  videos:20, bot:38, acc:"#7C3AED", rgb:"124,58,237", lgt:"#F5F0FF", mid:"#C4B5FD" },
   { id:5, name:"Executive Pro",tag:"PRO", deposit:100000, videos:40, bot:38, acc:"#DC2626", rgb:"220,38,38",  lgt:"#FFF0F0", mid:"#FCA5A5" },
 ];
@@ -815,20 +818,25 @@ function TierCard({ t, go, featured }) {
   const [hov, setHov] = useState(false);
   const daily = (t.videos + t.bot) * V_PRICE;
   const days = Math.ceil((t.deposit * 3) / daily);
+  const hasGlare = t.name === "Standard" || t.name === "Deluxe";
+  const glareTone = t.name === "Deluxe" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
+  const cardStyle = {
+    borderRadius: 16,
+    border: featured ? "2px solid #111" : `1.5px solid ${hov ? "#111" : "#E0E0E0"}`,
+    background: hov ? "#FAFAFA" : "#fff",
+    padding: "26px 22px",
+    cursor: "pointer",
+    transition: "all .2s ease",
+    transform: hov ? "translateY(-3px)" : "none",
+    boxShadow: hov ? "0 8px 24px rgba(0,0,0,0.12)" : featured ? "0 4px 16px rgba(0,0,0,0.08)" : "0 1px 4px rgba(0,0,0,0.04)",
+    position: "relative",
+    overflow: "hidden",
+  };
+  if (hasGlare) cardStyle["--glare"] = glareTone;
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={() => go("signup")}
-      style={{
-        borderRadius: 16,
-        border: featured ? "2px solid #111" : `1.5px solid ${hov ? "#111" : "#E0E0E0"}`,
-        background: hov ? "#FAFAFA" : "#fff",
-        padding: "26px 22px",
-        cursor: "pointer",
-        transition: "all .2s ease",
-        transform: hov ? "translateY(-3px)" : "none",
-        boxShadow: hov ? "0 8px 24px rgba(0,0,0,0.12)" : featured ? "0 4px 16px rgba(0,0,0,0.08)" : "0 1px 4px rgba(0,0,0,0.04)",
-        position: "relative",
-        overflow: "hidden",
-      }}>
+      className={hasGlare ? "ep-tier-glare" : undefined}
+      style={cardStyle}>
       {featured && (
         <div style={{ position: "absolute", top: 16, right: 16, padding: "3px 10px", background: "#111", borderRadius: 50, fontSize: 9, fontWeight: 900, color: "#fff", letterSpacing: "0.1em" }}>POPULAR</div>
       )}
@@ -2275,6 +2283,8 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const [actionsOpen, setActionsOpen] = useState(false);
   const nextTier = TIERS[t.id]; // next in list (t.id is 1-based)
   const canUpgrade = !!nextTier;
+  const hasTierGlare = t.name === "Standard" || t.name === "Deluxe";
+  const tierGlareTone = t.name === "Deluxe" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
   const upgradeBtnActive = {
     background:"linear-gradient(180deg,#FDE047 0%, #F59E0B 45%, #F97316 100%)",
     border:"2px solid #111",
@@ -2315,7 +2325,9 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             <I n="bolt" s={13} c="#fff"/>
           </div>
         </div>
-        <div style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)" }}>
+        <div
+          className={hasTierGlare ? "ep-tier-glare" : undefined}
+          style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)", ...(hasTierGlare ? {"--glare": tierGlareTone} : {}) }}>
           <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
           <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
           <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:4 }}>
