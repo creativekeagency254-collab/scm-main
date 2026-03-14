@@ -122,7 +122,7 @@ const GlobalStyles = () => {
     document.head.appendChild(s);
   }, []);
   return null;
-};
+    };
 
 /* ── SUPABASE (optional) ── */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -133,14 +133,14 @@ const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPA
     autoRefreshToken: true,
     detectSessionInUrl: true
   }
-}) : null;
+    }) : null;
 const SUPABASE_ENABLED = !!supabase;
 
 const normalizeRefCode = (input) => {
   const raw = String(input || "").trim().toUpperCase();
   const cleaned = raw.replace(/[^A-Z0-9-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
   return cleaned.slice(0, 32);
-};
+    };
 
 const makeRefCode = (seed) => {
   const base = String(seed || "EDISONPAY");
@@ -148,7 +148,7 @@ const makeRefCode = (seed) => {
   for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) >>> 0;
   const tail = (h % 0xFFFFFFF).toString(36).toUpperCase().padStart(6, "0").slice(-6);
   return `EDP-${tail}`;
-};
+    };
 
 async function fetchTable(table, opts = {}) {
   if (!supabase) return null;
@@ -164,7 +164,7 @@ async function fetchTable(table, opts = {}) {
   } catch (e) {
     return null;
   }
-}
+    }
 
 async function loadProfileRow(userId) {
   if (!supabase || !userId) return null;
@@ -179,7 +179,7 @@ async function loadProfileRow(userId) {
   } catch (e) {
     return null;
   }
-}
+    }
 
 async function upsertProfileRow(payload) {
   if (!supabase) return null;
@@ -194,7 +194,7 @@ async function upsertProfileRow(payload) {
   } catch (e) {
     return null;
   }
-}
+    }
 
 /* ── ICON LIBRARY ── */
 const I = ({ n, s = 16, c = "currentColor", w = 1.75 }) => {
@@ -237,7 +237,7 @@ const I = ({ n, s = 16, c = "currentColor", w = 1.75 }) => {
       {d[n]}
     </svg>
   );
-};
+    };
 
 /* PAYMENT LOGOS (monochrome) */
 const PAY_LOGO_GREY = "#B8B8B8";
@@ -380,7 +380,7 @@ function PaymentLogo({ name }) {
     default:
       return <Wordmark text={name} width={90} />;
   }
-}
+    }
 
 const BRAND_LOGO_SRC = "/brand/logo.png";
 const BrandMark = ({ size = 34 }) => (
@@ -447,7 +447,7 @@ const makeAvatarSvg = ({ bg1, bg2, hair, skin, shirt, accent, icon }) => {
     </svg>
   `;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-};
+    };
 
 const AVATAR_PRESETS = [
   makeAvatarSvg({ bg1:"#DBEAFE", bg2:"#93C5FD", hair:"#0F172A", skin:"#F5CBA7", shirt:"#2563EB", accent:"#0EA5E9", icon:"bolt" }),
@@ -463,7 +463,7 @@ const REF_STORAGE_KEY = "ep:ref";
 const getBaseUrl = () => {
   if (typeof window === "undefined") return "https://edisonpay.co.ke";
   return window.location.origin;
-};
+    };
 const getRefFromUrl = () => {
   if (typeof window === "undefined") return "";
   try {
@@ -473,29 +473,29 @@ const getRefFromUrl = () => {
   } catch (e) {
     return "";
   }
-};
+    };
 const getStoredRef = () => {
   if (typeof window === "undefined") return "";
   try { return normalizeRefCode(localStorage.getItem(REF_STORAGE_KEY)) || ""; } catch (e) { return ""; }
-};
+    };
 const storeRef = (ref) => {
   if (!ref || typeof window === "undefined") return;
   try { localStorage.setItem(REF_STORAGE_KEY, ref); } catch (e) {}
-};
+    };
 
 const pickAvatarForSeed = (seed) => {
   const s = String(seed || "0");
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return AVATAR_PRESETS[h % AVATAR_PRESETS.length];
-};
+    };
 
 const resolveTierIndex = (value) => {
   if (!value) return null;
   const raw = String(value).toLowerCase().trim();
   const idx = TIERS.findIndex(t => t.name.toLowerCase() === raw || t.tag.toLowerCase() === raw);
   return idx >= 0 ? idx : null;
-};
+    };
 
 /* ── ANIMATED NUMBER ── */
 function AnimNum({ target, prefix = "", suffix = "" }) {
@@ -510,7 +510,7 @@ function AnimNum({ target, prefix = "", suffix = "" }) {
     return () => clearInterval(id);
   }, [target]);
   return <>{prefix}{val.toLocaleString()}{suffix}</>;
-}
+    }
 
 function LazyVideo({ src, fallbackSrc = "", eager = false, ...props }) {
   const ref = useRef(null);
@@ -549,7 +549,7 @@ function LazyVideo({ src, fallbackSrc = "", eager = false, ...props }) {
       {...props}
     />
   );
-}
+    }
 
 /* ── DONUT ── */
 function Donut({ pct, acc, size = 80, thickness = 8 }) {
@@ -567,7 +567,7 @@ function Donut({ pct, acc, size = 80, thickness = 8 }) {
       </text>
     </svg>
   );
-}
+    }
 
 /* ═══════════════════════════════════════════════════════════
    LANDING PAGE
@@ -894,7 +894,7 @@ function Landing({ go }) {
       </footer>
     </div>
   );
-}
+    }
 
 function TierRow({ t, go }) {
   const [hov, setHov] = useState(false);
@@ -915,7 +915,7 @@ function TierRow({ t, go }) {
       <I n="chevR" s={16} c={hov ? "#111" : "#DDD"} />
     </div>
   );
-}
+    }
 
 function TierCard({ t, go, featured }) {
   const [hov, setHov] = useState(false);
@@ -979,7 +979,7 @@ function TierCard({ t, go, featured }) {
       </button>
     </div>
   );
-}
+    }
 
 /* ═══════════════════════════════════════════════════════════
    AUTH PAGES
@@ -1242,7 +1242,7 @@ function Auth({ type, go, from }) {
       </div>
     </div>
   );
-}
+    }
 
 function Field({ label, type = "text", ph, val, set, ic }) {
   const [focus, setFocus] = useState(false);
@@ -1259,7 +1259,7 @@ function Field({ label, type = "text", ph, val, set, ic }) {
       </div>
     </div>
   );
-}
+    }
 
 /* ═══════════════════════════════════════════════════════════
    CLIENT DASHBOARD
@@ -1342,7 +1342,7 @@ function LiveMathBackground({ tone = "light", symbols = LIVE_SYMBOLS, opacity = 
       ))}
     </div>
   );
-}
+    }
 
 function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [open, setOpen] = useState(true);
@@ -1393,7 +1393,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [clientRefs, setClientRefs] = useState([]);
   const [clientRefTable, setClientRefTable] = useState([]);
   const baseEarn = Math.round(t.deposit * 0.47);
+  const USE_LOCAL_WALLET = !SUPABASE_ENABLED;
   const [earnBonus, setEarnBonus] = useState(() => {
+    if (!USE_LOCAL_WALLET) return 0;
     try {
       const v = Number(localStorage.getItem("ep:earn-bonus") || 0);
       return Number.isFinite(v) ? v : 0;
@@ -1402,6 +1404,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     }
   });
   const [walletBalance, setWalletBalance] = useState(() => {
+    if (!USE_LOCAL_WALLET) return null;
     try {
       const v = Number(localStorage.getItem("ep:wallet-balance"));
       return Number.isFinite(v) ? v : null;
@@ -1410,14 +1413,18 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     }
   });
   useEffect(() => {
+    if (!USE_LOCAL_WALLET) return;
     try { localStorage.setItem("ep:earn-bonus", String(earnBonus)); } catch (e) {}
-  }, [earnBonus]);
+  }, [earnBonus, USE_LOCAL_WALLET]);
 
   useEffect(() => {
+    if (!USE_LOCAL_WALLET) return;
     if (!Number.isFinite(walletBalance)) return;
     try { localStorage.setItem("ep:wallet-balance", String(walletBalance)); } catch (e) {}
-  }, [walletBalance]);
-  const earn = baseEarn + earnBonus;
+  }, [walletBalance, USE_LOCAL_WALLET]);
+  const serverBalanceVal = Number(profile.balance);
+  const serverBalance = Number.isFinite(serverBalanceVal) ? serverBalanceVal : null;
+  const earn = Number.isFinite(serverBalance) ? serverBalance : (baseEarn + earnBonus);
   const goal = t.deposit * 3;
   const pct = Math.round((earn / goal) * 100);
   const profileName = profile.name || "Account";
@@ -1425,8 +1432,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const profileInitials = profileParts.map(n=>n[0]).join("").slice(0,2).toUpperCase() || "EP";
   const profileShort = profileParts.length > 1 ? `${profileParts[0]} ${profileParts[1][0]}.` : profileName;
   const balanceVal = Number(profile.balance);
-  const baseBalance = Number.isFinite(balanceVal) ? balanceVal : (baseEarn + earnBonus);
-  const balance = Number.isFinite(walletBalance) ? walletBalance : baseBalance;
+  const baseBalance = Number.isFinite(balanceVal) ? balanceVal : (Number.isFinite(serverBalance) ? serverBalance : (baseEarn + earnBonus));
+  const balance = Number.isFinite(serverBalance) ? serverBalance : (Number.isFinite(walletBalance) ? walletBalance : baseBalance);
   const joinSeed = (profile.email || profile.name || "EP").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   const joinNumberVal = Number(profile.joinNumber);
   const joinNumber = Number.isFinite(joinNumberVal)
@@ -1472,15 +1479,61 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const addClientTx = useCallback((tx) => {
     setClientTx(prev => [tx, ...(Array.isArray(prev) ? prev : [])]);
   }, []);
-  const handleEarning = useCallback((delta, source = "manual") => {
-    if (!Number.isFinite(delta) || delta <= 0) return;
-    const amt = Math.round(delta);
+  const makeEventId = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  };
+  const handleEarning = useCallback(async (payload, source = "manual") => {
+    const isObj = payload && typeof payload === "object";
+    const kind = (isObj ? payload.kind : source) || source;
+    const isBot = kind === "bot";
+    const qtyRaw = isObj ? Number(payload.qty) : 0;
+    const unit = isObj && Number.isFinite(payload.unit)
+      ? Number(payload.unit)
+      : (isBot ? Math.round(V_PRICE * 0.4) : V_PRICE);
+    const amtRaw = isObj ? Number(payload.amount) : Number(payload);
+    const qty = Number.isFinite(qtyRaw) && qtyRaw > 0
+      ? qtyRaw
+      : (Number.isFinite(amtRaw) && unit > 0 ? Math.max(1, Math.round(amtRaw / unit)) : 0);
+    const amt = Number.isFinite(amtRaw) && amtRaw > 0
+      ? Math.round(amtRaw)
+      : (qty > 0 ? Math.round(qty * unit) : 0);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+
+    if (supabase && authUser?.id && !USE_LOCAL_WALLET) {
+      try {
+        const { data, error } = await supabase.rpc("claim_earning", {
+          p_kind: isBot ? "bot" : "manual",
+          p_qty: qty || 1,
+          p_event_id: makeEventId()
+        });
+        if (error) return;
+        const row = Array.isArray(data) ? data[0] : data;
+        const credited = Number(row?.credited_amount ?? amt);
+        const newBalance = Number(row?.new_balance);
+        if (Number.isFinite(newBalance)) {
+          setWalletBalance(newBalance);
+          setProfile(p => ({ ...p, balance: newBalance }));
+        }
+        if (Number.isFinite(credited) && credited > 0) {
+          addClientTx({
+            ic: isBot ? "activity" : "play",
+            text: isBot ? "Bot earnings credited" : "Video earnings credited",
+            sub: `KES ${credited.toLocaleString()} added to wallet`,
+            time: "Just now",
+            c: isBot ? "#7C3AED" : "#059669",
+            amt: credited
+          });
+        }
+      } catch (e) {}
+      return;
+    }
+
     setEarnBonus(prev => prev + amt);
     setWalletBalance(prev => {
       const current = Number.isFinite(prev) ? prev : baseBalance;
       return current + amt;
     });
-    const isBot = source === "bot";
     addClientTx({
       ic: isBot ? "activity" : "play",
       text: isBot ? "Bot earnings credited" : "Video earnings credited",
@@ -1489,7 +1542,12 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
       c: isBot ? "#7C3AED" : "#059669",
       amt
     });
-  }, [baseBalance, addClientTx]);
+  }, [authUser?.id, baseBalance, addClientTx, USE_LOCAL_WALLET, setProfile]);
+  const applyBalance = useCallback((nextBalance) => {
+    if (!Number.isFinite(nextBalance)) return;
+    setWalletBalance(nextBalance);
+    setProfile(p => ({ ...p, balance: nextBalance }));
+  }, [setProfile]);
   const symScale = isMobile ? 0.85 : 1;
   const liveSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,7) : LIVE_SYMBOLS).map(s => ({
     ...s,
@@ -1604,7 +1662,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
       const name = r.name || r.full_name || r.user || `User ${i+1}`;
       const rawStatus = String(r.status || "Pending");
       const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
-      return { name, init: name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase(), status };
+      const rawBonus = Number(r.bonus ?? r.ref_bonus ?? r.bonus_amount ?? r.amount ?? r.earnings);
+      const bonus = Number.isFinite(rawBonus) ? rawBonus : undefined;
+      return { name, init: name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase(), status, bonus };
     };
     const normalizeRefRow = (r, i) => ({
       name: r.name || r.full_name || r.user || `User ${i+1}`,
@@ -2195,7 +2255,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} />}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} />}
-          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx}/>}
+          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx} onBalanceUpdate={applyBalance}/>}
           {tab==="settings"  && (
             <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
               <div className="ep-card" style={{ borderRadius:14, padding:"20px 22px" }}>
@@ -2372,7 +2432,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
     </div>
   );
-}
+    }
 
 /* ── REFERRAL MINI CARD (shown in overview) ── */
 function ReferralMiniCard({ t, data, frame, refCode, compact }) {
@@ -2486,18 +2546,104 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
       )}
     </div>
   );
-}
+    }
 
 /* ── OVERVIEW ── */
 function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden, mediaEager }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-  const weekData = useMemo(
-    () => days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) })),
-    [earn]
-  );
-  const maxV = useMemo(() => Math.max(...weekData.map(x=>x.v)), [weekData]);
+  const todayIdx = (new Date().getDay() + 6) % 7;
   const dailyEarn = useMemo(() => (t.videos + t.bot) * V_PRICE, [t.videos, t.bot]);
-  const daysLeft = useMemo(() => Math.ceil((goal - earn) / dailyEarn), [goal, earn, dailyEarn]);
+
+  const isEarningTx = useCallback((tx) => {
+    const type = String(tx?.type || tx?.category || tx?.kind || "").toLowerCase();
+    const text = String(tx?.text || tx?.title || "").toLowerCase();
+    const ic = String(tx?.ic || "").toLowerCase();
+
+    if (type.includes("withdraw") || type.includes("deposit")) return false;
+    if (text.includes("withdraw") || text.includes("deposit")) return false;
+
+    if (type.includes("earn") || type.includes("referral") || type.includes("ref_bonus") || type.includes("bonus") || type.includes("signup")) return true;
+    if (text.includes("earn") || text.includes("referral") || text.includes("bonus") || text.includes("signup")) return true;
+
+    return ic === "play" || ic === "activity" || ic === "gift" || ic === "users";
+  }, []);
+
+  const isReferralTx = useCallback((tx) => {
+    const type = String(tx?.type || tx?.category || tx?.kind || "").toLowerCase();
+    const text = String(tx?.text || tx?.title || "").toLowerCase();
+    const ic = String(tx?.ic || "").toLowerCase();
+    return type.includes("referral") || type.includes("ref_bonus") || type.includes("ref bonus") || text.includes("referral") || text.includes("signup") || text.includes("bonus") || ic === "gift" || ic === "users";
+  }, []);
+
+  const referralBonusTotal = useMemo(() => {
+    if (!Array.isArray(referralData)) return 0;
+    return referralData.reduce((sum, r) => {
+      const raw = Number(r?.bonus ?? r?.ref_bonus ?? r?.bonus_amount ?? r?.amount ?? r?.earnings ?? 0);
+      if (!Number.isFinite(raw) || raw <= 0) return sum;
+      const status = String(r?.status || "").toLowerCase();
+      if (status && status !== "active") return sum;
+      return sum + raw;
+    }, 0);
+  }, [referralData]);
+
+  const activityHasReferralAmount = useMemo(() => {
+    if (!Array.isArray(activityData)) return false;
+    return activityData.some((tx) => {
+      if (!isReferralTx(tx)) return false;
+      const amt = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value ?? 0);
+      return Number.isFinite(amt) && amt > 0;
+    });
+  }, [activityData, isReferralTx]);
+
+  const activityEarnTotal = useMemo(() => {
+    if (!Array.isArray(activityData)) return 0;
+    return activityData.reduce((sum, tx) => {
+      if (!isEarningTx(tx)) return sum;
+      const amt = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value ?? 0);
+      return Number.isFinite(amt) && amt > 0 ? sum + amt : sum;
+    }, 0);
+  }, [activityData, isEarningTx]);
+
+  const actualEarnTotal = useMemo(() => {
+    const refAdd = activityHasReferralAmount ? 0 : referralBonusTotal;
+    return activityEarnTotal + refAdd;
+  }, [activityEarnTotal, referralBonusTotal, activityHasReferralAmount]);
+
+  const remainingEarn = useMemo(() => Math.max(goal - actualEarnTotal, 0), [goal, actualEarnTotal]);
+
+  const weekData = useMemo(() => {
+    const start = new Date();
+    const day = start.getDay();
+    const diff = (day + 6) % 7;
+    start.setDate(start.getDate() - diff);
+    start.setHours(0,0,0,0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+
+    const buckets = days.map(d => ({ d, v: 0 }));
+    if (!Array.isArray(activityData)) return buckets;
+
+    activityData.forEach((tx) => {
+      if (!isEarningTx(tx)) return;
+      const amt = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value ?? 0);
+      if (!Number.isFinite(amt) || amt <= 0) return;
+      const rawDate = tx?.created_at || tx?.date || tx?.timestamp;
+      if (!rawDate) return;
+      const dt = new Date(rawDate);
+      if (Number.isNaN(dt.getTime())) return;
+      if (dt < start || dt >= end) return;
+      const idx = Math.floor((dt - start) / 86400000);
+      if (idx >= 0 && idx < 7) buckets[idx].v += amt;
+    });
+
+    return buckets;
+  }, [activityData, isEarningTx]);
+
+  const maxV = useMemo(() => Math.max(...weekData.map(x=>x.v), 0), [weekData]);
+  const daysLeft = useMemo(() => {
+    if (dailyEarn <= 0) return 0;
+    return Math.max(0, Math.ceil((goal - actualEarnTotal) / dailyEarn));
+  }, [goal, actualEarnTotal, dailyEarn]);
   const canW = ["Tuesday","Wednesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const curMonth = new Date().getMonth();
@@ -2743,7 +2889,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               <div>
                 <div style={{ fontSize:11, color:"#AAA", fontWeight:700, letterSpacing:"0.06em", marginBottom:4 }}>INCOME</div>
                 <div style={{ fontSize:22, fontWeight:900, color:"#111", letterSpacing:"-0.04em", lineHeight:1 }}>
-                  <AnimNum target={earn} prefix="KES "/>
+                  <AnimNum target={actualEarnTotal} prefix="KES "/>
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:6 }}>
                   <div style={{ width:18, height:18, borderRadius:5, background:`${t.acc}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -2761,8 +2907,8 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
                 <div key={p} style={{ position:"absolute", left:0, right:0, bottom:`${p*100}%`, height:1, background:"#F5F5F5", marginBottom:18 }}/>
               ))}
               {weekData.map((b,i)=> {
-                const h = Math.max(8,(b.v/maxV)*100);
-                const isToday = i === new Date().getDay()-1;
+                const h = maxV > 0 ? (b.v / maxV) * 100 : 0;
+                const isToday = i === todayIdx;
                 return (
                   <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, zIndex:1 }}>
                     <div style={{ width:"100%", height:h, background: isToday ? t.acc : `${t.acc}40`, borderRadius:"6px 6px 0 0", position:"relative", overflow:"hidden", transition:"height .8s ease" }} />
@@ -3044,7 +3190,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               <div>
                 <div style={{ fontSize:11, color:"#AAA", fontWeight:700, letterSpacing:"0.06em", marginBottom:4 }}>INCOME</div>
                 <div style={{ fontSize:26, fontWeight:900, color:"#111", letterSpacing:"-0.04em", lineHeight:1 }}>
-                  <AnimNum target={earn} prefix="KES "/>
+                  <AnimNum target={actualEarnTotal} prefix="KES "/>
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:6 }}>
                   <div style={{ width:18, height:18, borderRadius:5, background:`${t.acc}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -3064,8 +3210,8 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
                 <div key={p} style={{ position:"absolute", left:0, right:0, bottom:`${p*100}%`, height:1, background:"#F5F5F5", marginBottom:24 }}/>
               ))}
               {weekData.map((b,i)=>{
-                const h = Math.max(8,(b.v/maxV)*100);
-                const isToday = i === new Date().getDay()-1;
+                const h = maxV > 0 ? (b.v / maxV) * 100 : 0;
+                const isToday = i === todayIdx;
                 return (
                   <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, zIndex:1 }}>
                     {b.v===maxV && <div style={{ fontSize:9, fontWeight:800, color:"#fff", background:"#111", padding:"2px 6px", borderRadius:5, whiteSpace:"nowrap" }}>KES {(b.v/1000).toFixed(1)}K</div>}
@@ -3079,7 +3225,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </div>
 
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, paddingTop:14, borderTop:"1px solid #F5F5F5", marginTop:4 }}>
-              {[[`KES ${earn.toLocaleString()}`, "Total earned", t.acc],[`KES ${(goal-earn).toLocaleString()}`, "Remaining", "#888"],[`${daysLeft} days`, "To 3× goal", "#111"]].map(([v,l,c],i)=>(
+              {[[`KES ${actualEarnTotal.toLocaleString()}`, "Total earned", t.acc],[`KES ${remainingEarn.toLocaleString()}`, "Remaining", "#888"],[`${daysLeft} days`, "To 3× goal", "#111"]].map(([v,l,c],i)=>(
                 <div key={i}>
                   <div style={{ fontSize:14, fontWeight:900, color:c, letterSpacing:"-0.03em" }}>{v}</div>
                   <div style={{ fontSize:11, color:"#BBB", marginTop:2 }}>{l}</div>
@@ -3267,7 +3413,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       </div>
     </div>
   );
-}
+    }
 
 /* ── VIDEO DATA — 16 YouTube-style videos ── */
 const YT_VIDEOS = [
@@ -3291,9 +3437,9 @@ const YT_VIDEOS = [
 
 /* ── VIDEOS CONTENT ── */
 function VideosContent({ t, onEarning }) {
-  const MANUAL_COUNT = 2;
+  const MANUAL_COUNT = Math.max(1, Number(t?.videos) || 0);
   const MANUAL_SECONDS = 45;
-  const BOT_COUNT = 14; // 16 total - 2 manual
+  const BOT_COUNT = Math.max(0, Number(t?.bot) || 0);
   const botUnit = Math.round(V_PRICE * 0.4);
   const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0,10));
   const initialActivatedOn = (() => {
@@ -3401,8 +3547,8 @@ function VideosContent({ t, onEarning }) {
     const wDelta = watched - prevWatchedRef.current;
     const bDelta = botDone - prevBotRef.current;
     if (onEarning) {
-      if (wDelta > 0) onEarning(wDelta * V_PRICE, "manual");
-      if (bDelta > 0) onEarning(bDelta * botUnit, "bot");
+      if (wDelta > 0) onEarning({ kind:"manual", qty:wDelta, unit: V_PRICE, amount: wDelta * V_PRICE }, "manual");
+      if (bDelta > 0) onEarning({ kind:"bot", qty:bDelta, unit: botUnit, amount: bDelta * botUnit }, "bot");
     }
     prevWatchedRef.current = watched;
     prevBotRef.current = botDone;
@@ -3719,7 +3865,7 @@ function VideosContent({ t, onEarning }) {
             <span style={{ fontSize:12,fontWeight:800,color:"#059669",minWidth:40 }}>{Math.round(botPct)}%</span>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
-            {YT_VIDEOS.slice(MANUAL_COUNT).map((vid, i) => {
+            {YT_VIDEOS.slice(MANUAL_COUNT, MANUAL_COUNT + BOT_COUNT).map((vid, i) => {
               const done = botActive && i < botDone;
               const isActive = botActive && i === botDone;
               return (
@@ -3769,11 +3915,20 @@ function VideosContent({ t, onEarning }) {
       )}
     </div>
   );
-}
+    }
 
 /* ── REFERRAL LINK CARD (shared) ── */
 function ReferralLinkCard({ t, refCode, isMobile }) {
   const cardBorder = isMobile ? "1px solid #111" : "1.5px solid #111";
+  const botUnit = Math.round(V_PRICE * 0.4);
+  const moneyLines = [
+    `Balance source: server wallet (profiles.balance).`,
+    `Manual earnings: ${t.videos} videos/day x KES ${V_PRICE} = KES ${(t.videos * V_PRICE).toLocaleString()} max.`,
+    `Bot earnings: ${t.bot} videos/day x KES ${botUnit} = KES ${(t.bot * botUnit).toLocaleString()} max.`,
+    `Referral bonus: 10% (L1), 2% (L2), 1% (L3) on first paid deposit only.`,
+    `Withdrawals: Tue/Wed/Fri only; balance checked server-side, then deducted.`,
+    `Goal target: KES ${(t.deposit * 3).toLocaleString()} (display target only).`,
+  ];
   const chipBorder = isMobile ? "1px solid #111" : "1px solid #EBEBEB";
   const [copied, setCopied] = useState(false);
   const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
@@ -3847,13 +4002,22 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
       </div>
     </div>
   );
-}
+    }
 
 /* ── ANALYTICS CONTENT ── */
 function AnalyticsContent({ t, earn, refCode, isMobile }) {
   const dailyEarn = (t.videos + t.bot) * V_PRICE;
   const refBonus = Math.round(t.deposit * 0.1);
   const cardBorder = isMobile ? "1px solid #111" : "1.5px solid #111";
+  const botUnit = Math.round(V_PRICE * 0.4);
+  const moneyLines = [
+    `Balance source: server wallet (profiles.balance).`,
+    `Manual earnings: ${t.videos} videos/day x KES ${V_PRICE} = KES ${(t.videos * V_PRICE).toLocaleString()} max.`,
+    `Bot earnings: ${t.bot} videos/day x KES ${botUnit} = KES ${(t.bot * botUnit).toLocaleString()} max.`,
+    `Referral bonus: 10% (L1), 2% (L2), 1% (L3) on first paid deposit only.`,
+    `Withdrawals: Tue/Wed/Fri only; balance checked server-side, then deducted.`,
+    `Goal target: KES ${(t.deposit * 3).toLocaleString()} (display target only).`,
+  ];
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
@@ -3870,10 +4034,20 @@ function AnalyticsContent({ t, earn, refCode, isMobile }) {
         ))}
       </div>
 
+
+      <div style={{ background:"#fff", borderRadius:12, padding:"16px 18px", border:cardBorder, boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div style={{ fontSize:11, color:"#AAA", fontWeight:800, letterSpacing:"0.08em", marginBottom:10 }}>MONEY FLOW</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {moneyLines.map((line,i)=>(
+            <div key={i} style={{ fontSize:12, color:"#555", lineHeight:1.5 }}>{line}</div>
+          ))}
+        </div>
+      </div>
+
       <ReferralLinkCard t={t} refCode={refCode} isMobile={isMobile} />
     </div>
   );
-}
+    }
 
 /* ── REFERRALS CONTENT ── */
 function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
@@ -4004,10 +4178,10 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
       </div>
     </div>
   );
-}
+    }
 
 /* ── WITHDRAW ── */
-function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx }) {
+function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx, onBalanceUpdate }) {
   const [wdAmt,setWdAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
   const [depMethod, setDepMethod] = useState("M-Pesa");
   const [depAmt, setDepAmt] = useState("");
@@ -4072,8 +4246,54 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
     if (supabase && authUser?.id) {
       const payload = { user_id: authUser.id, type:"Deposit", amount: amt, method: depMethod, status:"Pending", created_at: new Date().toISOString() };
       try { await supabase.from("transactions").insert(payload); } catch(e) {}
-      try { await supabase.from("client_transactions").insert(payload); } catch(e) {}
     }
+  };
+  const requestWithdrawal = async (amount, methodLabel, payoutRef) => {
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return false;
+    if (!can) return false;
+    if (Number.isFinite(balance) && amt > balance) return false;
+    if (supabase && authUser?.id) {
+      try {
+        const { data, error } = await supabase.rpc("request_withdrawal", {
+          p_amount: amt,
+          p_method: methodLabel || "M-Pesa",
+          p_phone: String(payoutRef || profileRow?.phone || "")
+        });
+        if (error) return false;
+        const row = Array.isArray(data) ? data[0] : data;
+        const newBalance = Number(row?.new_balance);
+        if (Number.isFinite(newBalance)) onBalanceUpdate?.(newBalance);
+        onNewTx?.({
+          ic:"up",
+          text:"Withdrawal requested",
+          sub:`KES ${amt.toLocaleString()} via ${methodLabel || "M-Pesa"}`,
+          time:"Just now",
+          c:"#E8820C",
+          amt: -amt
+        });
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const submitWithdrawal = async () => {
+    if (!wdAmt) return;
+    const ok = await requestWithdrawal(wdAmt, method, profileRow?.phone || "");
+    if (!ok) return;
+    setDone(true);
+    setTimeout(()=>setDone(false), 3000);
+  };
+
+  const submitCryptoWithdrawal = async () => {
+    if (!cryptoWdAmt || !cryptoWallet) return;
+    const ok = await requestWithdrawal(cryptoWdAmt, "Crypto", cryptoWallet);
+    if (!ok) return;
+    setCryptoWdDone(true);
+    setTimeout(()=>setCryptoWdDone(false), 2500);
   };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
@@ -4206,7 +4426,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             </div>
             <input type="text" value={cryptoWallet} onChange={e=>setCryptoWallet(e.target.value)} placeholder="Your wallet address" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
             <input type="number" value={cryptoWdAmt} onChange={e=>setCryptoWdAmt(e.target.value)} placeholder="Amount to withdraw (KES)" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
-            <button onClick={()=>{if(can&&cryptoWdAmt&&cryptoWallet){setCryptoWdDone(true);setTimeout(()=>setCryptoWdDone(false),2500);}}} style={{ width:"100%",padding:"10px 12px",background:can?"#111":"#E8E8E8",color:can?"#fff":"#BBB",border:"none",borderRadius:8,fontWeight:800,fontSize:12,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif" }}>
+            <button onClick={submitCryptoWithdrawal} style={{ width:"100%",padding:"10px 12px",background:can?"#111":"#E8E8E8",color:can?"#fff":"#BBB",border:"none",borderRadius:8,fontWeight:800,fontSize:12,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif" }}>
               {cryptoWdDone ? "Withdrawal Submitted" : "Withdraw to Crypto"}
             </button>
           </div>
@@ -4232,7 +4452,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
               Use the Crypto Withdrawal panel above for wallet-based payouts.
             </div>
           )}
-          <button onClick={()=>{if(can&&wdAmt){setDone(true);setTimeout(()=>setDone(false),3e3);}}} style={{ width:"100%",padding:"13px",background:can?"#111":"#EBEBEB",color:can?"#fff":"#BBB",border:"none",borderRadius:9,fontWeight:800,fontSize:14,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s" }}>
+          <button onClick={submitWithdrawal} style={{ width:"100%",padding:"13px",background:can?"#111":"#EBEBEB",color:can?"#fff":"#BBB",border:"none",borderRadius:9,fontWeight:800,fontSize:14,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s" }}>
             <I n={done?"check":"wallet"} s={14} c={can?"#fff":"#BBB"}/>{done?"Submitted!":"Submit Withdrawal"}
           </button>
         </div>
@@ -4252,7 +4472,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       </div>
     </div>
   );
-}
+    }
 
 /* ═══════════════════════════════════════════════════════════
    ADMIN DASHBOARD — FULL
@@ -5003,7 +5223,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
       </div>
     </div>
   );
-}
+    }
 
 /* ═══════════════════════════════════════════════════════════
    ROOT
@@ -5022,7 +5242,7 @@ class ErrorBoundary extends React.Component {
     );
     return this.props.children;
   }
-}
+    }
 
 export default function App() {
   const [page, setPage] = useState("landing");
@@ -5450,7 +5670,7 @@ export default function App() {
       </button>
     </ErrorBoundary>
   );
-}
+    }
 
 
 

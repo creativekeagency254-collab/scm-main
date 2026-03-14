@@ -233,3 +233,348 @@ Steps:
 ## 6. Referral Codes
 When a user signs up, the optional referral code is stored as `referred_by` on their profile.
 Each user also gets a generated `ref_code` for sharing their own referral link.
+
+## 7. Security Hardening (Recommended for Production)
+Run this AFTER the base schema/RLS to lock down rewards, withdrawals, and referral abuse.
+
+```sql
+-- === Tier rules (server-authoritative reward limits) ===
+create table if not exists tier_rules (
+  tier text primary key,
+  deposit numeric,
+  manual_videos int,
+  bot_videos int,
+  video_price numeric default 50,
+  bot_multiplier numeric default 0.4,
+  updated_at timestamptz default now()
+);
+
+insert into tier_rules (tier, deposit, manual_videos, bot_videos, video_price, bot_multiplier) values
+('Regular',       5000,   2,  2, 50, 0.4),
+('Standard',     10000,   4,  6, 50, 0.4),
+('Deluxe',       20000,   8, 18, 50, 0.4),
+('Executive',    50000,  20, 38, 50, 0.4),
+('Executive Pro',100000, 40, 38, 50, 0.4)
+on conflict (tier) do update
+set deposit = excluded.deposit,
+    manual_videos = excluded.manual_videos,
+    bot_videos = excluded.bot_videos,
+    video_price = excluded.video_price,
+    bot_multiplier = excluded.bot_multiplier,
+    updated_at = now();
+
+-- === Earning claims & replay protection ===
+create table if not exists earning_claims (
+  user_id uuid references auth.users(id) on delete cascade,
+  day date not null,
+  manual_count int not null default 0,
+  bot_count int not null default 0,
+  updated_at timestamptz default now(),
+  primary key (user_id, day)
+);
+
+create table if not exists earning_events (
+  id uuid primary key default gen_random_uuid(),
+  event_id text unique not null,
+  user_id uuid references auth.users(id) on delete cascade,
+  kind text,
+  qty int,
+  created_at timestamptz default now()
+);
+
+alter table earning_claims enable row level security;
+alter table earning_events enable row level security;
+
+drop policy if exists "earning_claims_select" on earning_claims;
+create policy "earning_claims_select" on earning_claims
+for select using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "earning_events_select" on earning_events;
+create policy "earning_events_select" on earning_events
+for select using (auth.uid() = user_id or public.is_admin());
+
+-- === Tighten client inserts ===
+drop policy if exists "client_tx_insert" on client_transactions;
+create policy "client_tx_insert_admin" on client_transactions
+for insert with check (public.is_admin());
+
+drop policy if exists "client_refs_insert" on client_referrals;
+create policy "client_refs_insert_admin" on client_referrals
+for insert with check (public.is_admin());
+
+drop policy if exists "transactions_insert" on transactions;
+drop policy if exists "transactions_insert_pending" on transactions;
+drop policy if exists "transactions_insert_admin" on transactions;
+create policy "transactions_insert_pending" on transactions
+for insert with check (
+  auth.uid() = user_id
+  and type ilike 'deposit%'
+  and status ilike 'pending%'
+);
+create policy "transactions_insert_admin" on transactions
+for insert with check (public.is_admin());
+
+drop policy if exists "withdrawals_insert" on withdrawals;
+create policy "withdrawals_insert_admin" on withdrawals
+for insert with check (public.is_admin());
+
+-- === Prevent referral + balance tampering ===
+create or replace function public.prevent_referral_change()
+returns trigger
+language plpgsql
+as $$
+begin
+  if (old.referred_by is not null and old.referred_by <> '' and new.referred_by is distinct from old.referred_by) then
+    raise exception 'referred_by cannot be changed';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_prevent_referral_change on profiles;
+create trigger trg_prevent_referral_change
+before update on profiles
+for each row execute function public.prevent_referral_change();
+
+create or replace function public.prevent_profile_balance_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not public.is_admin() then
+    if new.balance is distinct from old.balance then
+      raise exception 'balance is system-managed';
+    end if;
+    if new.role is distinct from old.role then
+      raise exception 'role cannot be changed';
+    end if;
+    if new.ref_code is distinct from old.ref_code then
+      raise exception 'ref_code cannot be changed';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_prevent_profile_updates on profiles;
+create trigger trg_prevent_profile_updates
+before update on profiles
+for each row execute function public.prevent_profile_balance_update();
+
+-- === Referral rewards: only first paid deposit + referrer must be paid ===
+create or replace function public.apply_referral_rewards(p_user_id uuid, p_amount numeric)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_level int := 1;
+  v_ref_code text;
+  v_ref_id uuid;
+  v_next_code text;
+  v_bonus numeric;
+  v_ref_paid boolean;
+begin
+  select referred_by into v_ref_code from profiles where id = p_user_id;
+
+  while v_level <= 3 and v_ref_code is not null and v_ref_code <> '' loop
+    select id, referred_by into v_ref_id, v_next_code from profiles where ref_code = v_ref_code;
+    exit when v_ref_id is null;
+
+    select exists(
+      select 1 from transactions
+      where user_id = v_ref_id
+        and type ilike 'deposit%'
+        and status ilike 'paid%'
+    ) into v_ref_paid;
+
+    if v_ref_paid then
+      if v_level = 1 then
+        v_bonus := p_amount * 0.10;
+      elsif v_level = 2 then
+        v_bonus := p_amount * 0.02;
+      else
+        v_bonus := p_amount * 0.01;
+      end if;
+
+      insert into client_referrals (user_id, source_user_id, level, name, email, tier, bonus, status, earnings, created_at)
+      select v_ref_id, p_user_id, v_level, p.name, p.email, p.tier, v_bonus, 'Pending', 0, now()
+      from profiles p
+      where p.id = p_user_id;
+
+      insert into transactions (user_id, type, amount, method, status, created_at)
+      values (v_ref_id, concat('Referral Bonus L', v_level), v_bonus, 'Referral', 'Pending', now());
+    end if;
+
+    v_ref_code := v_next_code;
+    v_level := v_level + 1;
+  end loop;
+end;
+$$;
+
+create or replace function public.handle_deposit_referrals()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_already_paid boolean;
+begin
+  if (new.type ilike 'deposit%' and new.status ilike 'paid%') then
+    select exists(
+      select 1 from transactions
+      where user_id = new.user_id
+        and type ilike 'deposit%'
+        and status ilike 'paid%'
+        and id <> new.id
+    ) into v_already_paid;
+
+    if not v_already_paid then
+      perform public.apply_referral_rewards(new.user_id, new.amount);
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_deposit_referrals on transactions;
+create trigger trg_deposit_referrals
+after insert on transactions
+for each row execute function public.handle_deposit_referrals();
+
+-- === Secure earning claims (server time + limits + replay protection) ===
+create or replace function public.claim_earning(p_kind text, p_qty int, p_event_id text)
+returns table(credited_amount numeric, new_balance numeric)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_day date := current_date;
+  v_manual_limit int;
+  v_bot_limit int;
+  v_price numeric;
+  v_bot_mult numeric;
+  v_manual int;
+  v_bot int;
+  v_credit numeric;
+  v_balance numeric;
+begin
+  if v_user is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_qty is null or p_qty <= 0 or p_qty > 100 then
+    raise exception 'Invalid quantity';
+  end if;
+  if p_kind not in ('manual','bot') then
+    raise exception 'Invalid kind';
+  end if;
+  if p_event_id is null or length(p_event_id) < 6 then
+    raise exception 'Invalid event id';
+  end if;
+
+  if (select count(*) from earning_events where user_id = v_user and created_at > now() - interval '30 seconds') > 40 then
+    raise exception 'Rate limit exceeded';
+  end if;
+
+  insert into earning_events (event_id, user_id, kind, qty)
+  values (p_event_id, v_user, p_kind, p_qty);
+
+  select tr.manual_videos, tr.bot_videos, tr.video_price, tr.bot_multiplier
+  into v_manual_limit, v_bot_limit, v_price, v_bot_mult
+  from profiles p
+  join tier_rules tr on lower(tr.tier) = lower(p.tier)
+  where p.id = v_user;
+
+  if not found then
+    raise exception 'Tier rules missing';
+  end if;
+
+  insert into earning_claims (user_id, day) values (v_user, v_day)
+  on conflict (user_id, day) do nothing;
+
+  select manual_count, bot_count into v_manual, v_bot
+  from earning_claims
+  where user_id = v_user and day = v_day
+  for update;
+
+  if p_kind = 'manual' then
+    if (v_manual + p_qty) > v_manual_limit then
+      raise exception 'Manual daily limit exceeded';
+    end if;
+    v_credit := p_qty * v_price;
+    update earning_claims set manual_count = v_manual + p_qty, updated_at = now()
+    where user_id = v_user and day = v_day;
+  else
+    if (v_bot + p_qty) > v_bot_limit then
+      raise exception 'Bot daily limit exceeded';
+    end if;
+    v_credit := p_qty * (v_price * v_bot_mult);
+    update earning_claims set bot_count = v_bot + p_qty, updated_at = now()
+    where user_id = v_user and day = v_day;
+  end if;
+
+  update profiles
+  set balance = coalesce(balance, 0) + v_credit, updated_at = now()
+  where id = v_user
+  returning balance into v_balance;
+
+  insert into client_transactions (user_id, type, amount, method, status, note, created_at)
+  values (v_user, 'Earning', v_credit, p_kind, 'Credited', 'Auto', now());
+
+  return query select v_credit, v_balance;
+end;
+$$;
+
+-- === Secure withdrawal requests (server time + balance checks) ===
+create or replace function public.request_withdrawal(p_amount numeric, p_method text, p_phone text)
+returns table(new_balance numeric)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_balance numeric;
+  v_day text;
+begin
+  if v_user is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Invalid amount';
+  end if;
+  v_day := trim(to_char(now(), 'Day'));
+  if v_day not in ('Tuesday','Wednesday','Friday') then
+    raise exception 'Withdrawals are closed today';
+  end if;
+
+  select coalesce(balance, 0) into v_balance
+  from profiles
+  where id = v_user
+  for update;
+
+  if v_balance < p_amount then
+    raise exception 'Insufficient balance';
+  end if;
+
+  update profiles
+  set balance = v_balance - p_amount, updated_at = now()
+  where id = v_user
+  returning balance into v_balance;
+
+  insert into withdrawals (user_id, amount, method, status, phone, tier, created_at, updated_at)
+  select v_user, p_amount, p_method, 'Pending', p_phone, p.tier, now(), now()
+  from profiles p
+  where p.id = v_user;
+
+  insert into client_transactions (user_id, type, amount, method, status, note, created_at)
+  values (v_user, 'Withdrawal', p_amount, p_method, 'Pending', 'Request', now());
+
+  return query select v_balance;
+end;
+$$;
+```
