@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import React from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -1002,6 +1002,11 @@ function Auth({ type, go, from }) {
   }, []);
 
   useEffect(() => {
+    const stored = getStoredRef();
+    if (stored && !f.ref) setF(p => ({ ...p, ref: stored }));
+  }, []);
+
+  useEffect(() => {
     if (!isLogin) return;
     const url = window.location.href;
     const hasRecovery =
@@ -1353,6 +1358,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [depositFocus, setDepositFocus] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
+  const [overviewMediaReady, setOverviewMediaReady] = useState(() => window.innerWidth >= 769);
   const [recentOpen, setRecentOpen] = useState(false);
   const [stripHidden, setStripHidden] = useState(false);
   const [stripToggleHidden, setStripToggleHidden] = useState(false);
@@ -1386,7 +1392,32 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [clientTx, setClientTx] = useState([]);
   const [clientRefs, setClientRefs] = useState([]);
   const [clientRefTable, setClientRefTable] = useState([]);
-  const earn = Math.round(t.deposit * 0.47);
+  const baseEarn = Math.round(t.deposit * 0.47);
+  const [earnBonus, setEarnBonus] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem("ep:earn-bonus") || 0);
+      return Number.isFinite(v) ? v : 0;
+    } catch (e) {
+      return 0;
+    }
+  });
+  const [walletBalance, setWalletBalance] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem("ep:wallet-balance"));
+      return Number.isFinite(v) ? v : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ep:earn-bonus", String(earnBonus)); } catch (e) {}
+  }, [earnBonus]);
+
+  useEffect(() => {
+    if (!Number.isFinite(walletBalance)) return;
+    try { localStorage.setItem("ep:wallet-balance", String(walletBalance)); } catch (e) {}
+  }, [walletBalance]);
+  const earn = baseEarn + earnBonus;
   const goal = t.deposit * 3;
   const pct = Math.round((earn / goal) * 100);
   const profileName = profile.name || "Account";
@@ -1394,7 +1425,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const profileInitials = profileParts.map(n=>n[0]).join("").slice(0,2).toUpperCase() || "EP";
   const profileShort = profileParts.length > 1 ? `${profileParts[0]} ${profileParts[1][0]}.` : profileName;
   const balanceVal = Number(profile.balance);
-  const balance = Number.isFinite(balanceVal) ? balanceVal : earn;
+  const baseBalance = Number.isFinite(balanceVal) ? balanceVal : (baseEarn + earnBonus);
+  const balance = Number.isFinite(walletBalance) ? walletBalance : baseBalance;
   const joinSeed = (profile.email || profile.name || "EP").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   const joinNumberVal = Number(profile.joinNumber);
   const joinNumber = Number.isFinite(joinNumberVal)
@@ -1437,7 +1469,27 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   useEffect(() => {
     if (tab !== "withdraw" && depositFocus) setDepositFocus(false);
   }, [tab, depositFocus]);
-  const addClientTx = (tx) => setClientTx(prev => [tx, ...(Array.isArray(prev) ? prev : [])]);
+  const addClientTx = useCallback((tx) => {
+    setClientTx(prev => [tx, ...(Array.isArray(prev) ? prev : [])]);
+  }, []);
+  const handleEarning = useCallback((delta, source = "manual") => {
+    if (!Number.isFinite(delta) || delta <= 0) return;
+    const amt = Math.round(delta);
+    setEarnBonus(prev => prev + amt);
+    setWalletBalance(prev => {
+      const current = Number.isFinite(prev) ? prev : baseBalance;
+      return current + amt;
+    });
+    const isBot = source === "bot";
+    addClientTx({
+      ic: isBot ? "activity" : "play",
+      text: isBot ? "Bot earnings credited" : "Video earnings credited",
+      sub: `KES ${amt.toLocaleString()} added to wallet`,
+      time: "Just now",
+      c: isBot ? "#7C3AED" : "#059669",
+      amt
+    });
+  }, [baseBalance, addClientTx]);
   const symScale = isMobile ? 0.85 : 1;
   const liveSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,7) : LIVE_SYMBOLS).map(s => ({
     ...s,
@@ -1473,6 +1525,21 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     return () => window.removeEventListener("resize", fn);
   }, []);
 
+  useEffect(() => {
+    if (!isMobile) { setOverviewMediaReady(true); return; }
+    if (tab !== "overview") return;
+    let id;
+    const warm = () => setOverviewMediaReady(true);
+    if ("requestIdleCallback" in window) {
+      id = window.requestIdleCallback(warm, { timeout: 1200 });
+    } else {
+      id = setTimeout(warm, 600);
+    }
+    return () => {
+      if ("cancelIdleCallback" in window) window.cancelIdleCallback(id);
+      else clearTimeout(id);
+    };
+  }, [isMobile, tab]);
   const onBodyScroll = (e) => {
     if (!isMobile) return;
     const y = e.currentTarget.scrollTop;
@@ -1601,6 +1668,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     { id:"withdraw",  label:"Withdraw",  ic:"wallet" },
     { id:"settings",  label:"Settings",  ic:"settings" },
   ];
+
+  const activityFeed = Array.isArray(clientTx) && clientTx.length ? clientTx : undefined;
+  const referralFeed = Array.isArray(clientRefs) && clientRefs.length ? clientRefs : undefined;
 
   const recentTx = [
     {d:"Mar 7", a:1200, s:"Paid",    type:"out"},
@@ -2121,8 +2191,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
               </button>
             </div>
           )}
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={supabase ? clientTx : undefined} referralData={supabase ? clientRefs : undefined} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden}/>}
-          {tab==="videos"    && <VideosContent    t={t}/>}
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady}/>}
+          {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} />}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} />}
           {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx}/>}
@@ -2419,38 +2489,50 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
 }
 
 /* ── OVERVIEW ── */
-function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden }) {
+function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden, mediaEager }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-  const weekData = days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) }));
-  const maxV = Math.max(...weekData.map(x=>x.v));
-  const dailyEarn = (t.videos + t.bot) * V_PRICE;
-  const daysLeft = Math.ceil((goal - earn) / dailyEarn);
+  const weekData = useMemo(
+    () => days.map((d,i) => ({ d, v: Math.round(earn * (0.08 + i * 0.04 + Math.random() * 0.06)) })),
+    [earn]
+  );
+  const maxV = useMemo(() => Math.max(...weekData.map(x=>x.v)), [weekData]);
+  const dailyEarn = useMemo(() => (t.videos + t.bot) * V_PRICE, [t.videos, t.bot]);
+  const daysLeft = useMemo(() => Math.ceil((goal - earn) / dailyEarn), [goal, earn, dailyEarn]);
   const canW = ["Tuesday","Wednesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const curMonth = new Date().getMonth();
   const [activeMonth, setActiveMonth] = useState(curMonth);
-  const planSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,5) : LIVE_SYMBOLS.slice(0,7)).map(s => ({
-    ...s,
-    size: Math.max(12, Math.round(s.size * 0.7)),
-    dur: (s.dur || 22) + 6
-  }));
+  const planSymbols = useMemo(
+    () => (isMobile ? LIVE_SYMBOLS.slice(0,5) : LIVE_SYMBOLS.slice(0,7)).map(s => ({
+      ...s,
+      size: Math.max(12, Math.round(s.size * 0.7)),
+      dur: (s.dur || 22) + 6
+    })),
+    [isMobile]
+  );
 
-  const defaultActivity = [
+  const defaultActivity = useMemo(() => ([
     { ic:"play",  text:"Watched 2 videos", sub:"KES 100 credited", time:"2h ago",  c:"#059669" },
-    { ic:"gift",  text:"Referral joined",  sub:"John M. signed up · +KES 500", time:"5h ago",  c:t.acc },
-    { ic:"up",    text:"Withdrawal sent",  sub:"KES 1,200 → M-Pesa", time:"1d ago",  c:"#E8820C" },
-    { ic:"activity", text:"Bot completed", sub:"14 videos · KES 280 earned", time:"1d ago",  c:"#7C3AED" },
+    { ic:"gift",  text:"Referral joined",  sub:"John M. signed up � +KES 500", time:"5h ago",  c:t.acc },
+    { ic:"up",    text:"Withdrawal sent",  sub:"KES 1,200 to M-Pesa", time:"1d ago",  c:"#E8820C" },
+    { ic:"activity", text:"Bot completed", sub:"14 videos � KES 280 earned", time:"1d ago",  c:"#7C3AED" },
     { ic:"users", text:"New referral",     sub:"Amina K. deposited", time:"3d ago",  c:"#0066FF" },
-  ];
+  ]), [t.acc]);
 
-  const defaultReferrals = [
+  const defaultReferrals = useMemo(() => ([
     { name:"John M.", init:"JM", status:"Active" },
     { name:"Amina K.", init:"AK", status:"Active" },
     { name:"Peter O.", init:"PO", status:"Pending" },
     { name:"Grace W.", init:"GW", status:"Active" },
-  ];
-  const activity = Array.isArray(activityData) ? activityData : defaultActivity;
-  const referrals = Array.isArray(referralData) ? referralData : defaultReferrals;
+  ]), []);
+  const activity = useMemo(
+    () => (Array.isArray(activityData) ? activityData : defaultActivity),
+    [activityData, defaultActivity]
+  );
+  const referrals = useMemo(
+    () => (Array.isArray(referralData) ? referralData : defaultReferrals),
+    [referralData, defaultReferrals]
+  );
 
   const [openSections, setOpenSections] = useState({
     income: true,
@@ -2497,9 +2579,10 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     color:"#6B7280",
     boxShadow:"none"
   };
+  const showOverviewMedia = !isMobile || mediaEager;
   const PlanActionsCard = () => (
     <div className="ep-frame-light" style={{ background:"transparent", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22)", minHeight:230, position:"relative", overflow:"hidden" }}>
-      {PLAN_BG_VIDEO && (
+      {PLAN_BG_VIDEO && showOverviewMedia && (
         <LazyVideo
           src={PLAN_BG_VIDEO}
           fallbackSrc={PLAN_BG_VIDEO_FALLBACK}
@@ -2507,10 +2590,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           muted
           loop
           playsInline
+          eager={showOverviewMedia}
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.78, filter:"saturate(1.15) contrast(1.08)", zIndex:0 }}
         />
       )}
-      <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.2} zIndex={1} />
+      {showOverviewMedia && <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.2} zIndex={1} />}
       <div style={{ position:"relative", zIndex:2 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
@@ -2543,9 +2627,9 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       </div>
     </div>
   );
-  const mobileSummary = (
+  const accountGoalCard = (
     <div className="ep-frame-dark" style={{ background:"#0B0B0B", borderRadius:18, padding:"16px 16px 14px", border:"1px solid #111", position:"relative", overflow:"hidden" }}>
-      {ACCOUNT_GOAL_VIDEO && (
+      {ACCOUNT_GOAL_VIDEO && showOverviewMedia && (
         <LazyVideo
           src={ACCOUNT_GOAL_VIDEO}
           fallbackSrc={ACCOUNT_GOAL_VIDEO_FALLBACK}
@@ -2553,6 +2637,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           muted
           loop
           playsInline
+          eager={showOverviewMedia}
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.05) contrast(1.08)", zIndex:0 }}
         />
       )}
@@ -2650,9 +2735,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
         {mobilePlan}
         {mobileActions}
-        <div style={{ position:"sticky", top:6, zIndex:25 }}>
-          {mobileSummary}
-        </div>
+        {accountGoalCard}
 
         <MobileSection id="income" title="Income">
           <div className="ep-card" style={{ borderRadius:18, padding:"18px 18px" }}>
@@ -2950,8 +3033,10 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       ══════════════════════════════════════ */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 320px", gap:18 }} className="ep-overview-chart-grid">
 
-        {/* Left: Income Chart + Transactions */}
+        {/* Left: Account + Goal + Income Chart + Transactions */}
         <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+
+          {accountGoalCard}
 
           {/* Income/Weekly Earnings Chart */}
           <div className="ep-card" style={{ borderRadius:18, padding:"24px 26px" }}>
@@ -3205,10 +3290,11 @@ const YT_VIDEOS = [
 ];
 
 /* ── VIDEOS CONTENT ── */
-function VideosContent({ t }) {
+function VideosContent({ t, onEarning }) {
   const MANUAL_COUNT = 2;
   const MANUAL_SECONDS = 45;
   const BOT_COUNT = 14; // 16 total - 2 manual
+  const botUnit = Math.round(V_PRICE * 0.4);
   const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0,10));
   const initialActivatedOn = (() => {
     try { return localStorage?.getItem("ep-bot-activated-on") || ""; } catch (e) { return ""; }
@@ -3236,6 +3322,8 @@ function VideosContent({ t }) {
   const [activeTab, setActiveTab] = useState("manual");
   const [imgErrors, setImgErrors] = useState({});
   const [imgLoaded, setImgLoaded] = useState({});
+  const prevWatchedRef = useRef(watched);
+  const prevBotRef = useRef(botDone);
 
   // ── Manual video timer
   useEffect(() => {
@@ -3309,6 +3397,17 @@ function VideosContent({ t }) {
     return () => clearInterval(id);
   }, [botActive, botPct]);
 
+  useEffect(() => {
+    const wDelta = watched - prevWatchedRef.current;
+    const bDelta = botDone - prevBotRef.current;
+    if (onEarning) {
+      if (wDelta > 0) onEarning(wDelta * V_PRICE, "manual");
+      if (bDelta > 0) onEarning(bDelta * botUnit, "bot");
+    }
+    prevWatchedRef.current = watched;
+    prevBotRef.current = botDone;
+  }, [watched, botDone, botUnit, onEarning]);
+
   const startWatch = (idx) => {
     setErrMsg("");
     // Video 0 always available. Video 1 only available after video 0 watched.
@@ -3330,7 +3429,7 @@ function VideosContent({ t }) {
     setTimer(MANUAL_SECONDS);
   };
 
-  const todayEarn = watched * V_PRICE + Math.floor(botDone * V_PRICE * 0.4);
+  const todayEarn = watched * V_PRICE + (botDone * botUnit);
   const nextManual = playing !== null ? playing : (watched < MANUAL_COUNT ? watched : null);
   const manualStatus = playing !== null
     ? `Watching Video ${playing + 1}`
@@ -3585,10 +3684,10 @@ function VideosContent({ t }) {
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
             <div>
               <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em" }}>Bot Auto-Watch — 14 Videos</h3>
-              <p style={{ fontSize:13,color:"#BBB",marginTop:4 }}>Running silently · 30 sec each · KES {Math.round(V_PRICE*0.4)} per bot video</p>
+              <p style={{ fontSize:13,color:"#BBB",marginTop:4 }}>Running silently · 30 sec each · KES {botUnit} per bot video</p>
             </div>
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:14,fontWeight:900,color:"#059669" }}>KES {(botDone*Math.round(V_PRICE*0.4)).toLocaleString()} earned</div>
+              <div style={{ fontSize:14,fontWeight:900,color:"#059669" }}>KES {(botDone*botUnit).toLocaleString()} earned</div>
               <div style={{ fontSize:11,color:"#BBB",marginTop:2 }}>{botDone}/{BOT_COUNT} complete · {Math.round(botPct)}%</div>
             </div>
           </div>
@@ -3653,7 +3752,7 @@ function VideosContent({ t }) {
                     <div style={{ fontSize:11,fontWeight:700,color:"#111",lineHeight:1.3,marginBottom:4,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden" }}>{vid.title}</div>
                     <div style={{ display:"flex",justifyContent:"space-between" }}>
                       <span style={{ fontSize:10,color:"#AAA" }}>{vid.channel}</span>
-                      {done?<span style={{ fontSize:10,fontWeight:800,color:"#059669" }}>+KES {Math.round(V_PRICE*0.4)}</span>
+                      {done?<span style={{ fontSize:10,fontWeight:800,color:"#059669" }}>+KES {botUnit}</span>
                       :isActive?<span style={{ fontSize:10,fontWeight:800,color:"#F59E0B" }}>Watching…</span>
                       :<span style={{ fontSize:10,color:"#CCC" }}>Queued</span>}
                     </div>
@@ -3680,13 +3779,28 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
   const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
   const link = `${getBaseUrl()}/?ref=${safeCode}`;
   const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2e3); };
+  const whatsappText = `Join me on EdisonPay with my referral link: ${link}`;
+  const openWhatsApp = () => {
+    const encoded = encodeURIComponent(whatsappText);
+    const appUrl = `whatsapp://send?text=${encoded}`;
+    const webUrl = `https://wa.me/?text=${encoded}`;
+    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    if (isMobileDevice) {
+      window.location.href = appUrl;
+      setTimeout(() => {
+        if (!document.hidden) window.open(webUrl, "_blank", "noopener,noreferrer");
+      }, 700);
+      return;
+    }
+    window.open(webUrl, "_blank", "noopener,noreferrer");
+  };
   const socials = [
-    ["WhatsApp","#25D366"],
-    ["Telegram","#2AABEE"],
-    ["Facebook","#1877F2"],
-    ["X","#111111"],
-    ["Instagram","#E1306C"],
-    ["TikTok","#000000"],
+    { label:"WhatsApp", color:"#25D366", onClick: openWhatsApp },
+    { label:"Telegram", color:"#2AABEE" },
+    { label:"Facebook", color:"#1877F2" },
+    { label:"X", color:"#111111" },
+    { label:"Instagram", color:"#E1306C" },
+    { label:"TikTok", color:"#000000" },
   ];
 
   return (
@@ -3694,7 +3808,7 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
       <div className="ep-grid-2" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24 }}>
         <div>
           <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em",marginBottom:6 }}>Your Referral Link</h3>
-          <p style={{ fontSize:12,color:"#888",marginBottom:14,lineHeight:1.6 }}>Share this link — when they deposit their tier balance, you earn <strong style={{ color:t.acc }}>10% of their deposit</strong> and they get a bonus too.</p>
+          <p style={{ fontSize:12,color:"#888",marginBottom:14,lineHeight:1.6 }}>Share this link - when your friend signs up with your code and deposits, you earn <strong style={{ color:t.acc }}>10% of their deposit</strong> and your friend gets a signup bonus.</p>
           <div style={{ display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
             <div style={{ flex:1,display:"flex",alignItems:"center",gap:9,padding:"10px 12px",background:"#EFF6FF",border:`1.5px dashed ${t.mid}`,borderRadius:9,minWidth:180,backgroundImage:"linear-gradient(rgba(59,130,246,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.12) 1px, transparent 1px)",backgroundSize:"12px 12px" }}>
               <button onClick={copy} style={{ width:28,height:28,borderRadius:8,background:t.lgt,border:`1px solid ${t.mid}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
@@ -3707,9 +3821,9 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
             </button>
           </div>
           <div style={{ display:"flex",gap:7,marginTop:10,flexWrap:"wrap" }}>
-            {socials.map(([b,c])=>(
-              <button key={b} style={{ padding:"6px 12px",background:"#FAFAFA",border:chipBorder,borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
-                <div style={{ width:7,height:7,borderRadius:"50%",background:c }}/>{b}
+            {socials.map(({label,color,onClick})=>(
+              <button key={label} onClick={onClick || copy} style={{ padding:"6px 12px",background:"#FAFAFA",border:chipBorder,borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
+                <div style={{ width:7,height:7,borderRadius:"50%",background:color }}/>{label}
               </button>
             ))}
           </div>
@@ -3719,11 +3833,10 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
         <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:cardBorder }}>
           <div style={{ fontSize:11,fontWeight:700,color:"#BBB",letterSpacing:"0.08em",marginBottom:14 }}>HOW REFERRALS WORK</div>
           {[
-            ["1","Friend clicks your link and signs up",t.acc],
+            ["1","Friend signs up with your referral code",t.acc],
             ["2","They choose a tier and deposit",t.acc],
-            ["3","You instantly earn 10% of their deposit",t.acc],
-            ["4","They earn 10% bonus on their first deposit",t.acc],
-            ["5","You get 2% from anyone who referred you",t.acc],
+            ["3","You earn 10% of their deposit",t.acc],
+            ["4","They get a signup bonus instantly",t.acc],
           ].map(([n,step,c],i) => (
             <div key={i} style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:10 }}>
               <div style={{ width:20,height:20,borderRadius:6,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff",flexShrink:0,marginTop:1 }}>{n}</div>
@@ -5079,6 +5192,13 @@ export default function App() {
     })();
     return () => { ignore = true; };
   }, [authUser?.id]);
+
+  useEffect(() => {
+    if (Number.isFinite(profileRow?.balance)) {
+      setWalletBalance(profileRow.balance);
+    }
+  }, [profileRow?.balance]);
+
 
   const handleSignOut = async () => {
     if (supabase) await supabase.auth.signOut();
