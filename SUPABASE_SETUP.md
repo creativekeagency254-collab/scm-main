@@ -1,5 +1,7 @@
 # Supabase Setup
 
+> Note: The updated MVP schema is in `supabase/migrations/20260314_mvp.sql`, the earning rules are in `supabase/migrations/20260314_claim_earning.sql`, and RLS/auth/withdrawal helpers are in `supabase/migrations/20260315_rls_and_functions.sql`. These replace the legacy schema below.
+
 This project uses Supabase for auth and data when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
 
 ## 1. Environment Variables
@@ -8,10 +10,45 @@ Create a `.env` file (or set these in Vercel):
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_API_BASE=http://localhost:8787
+```
+
+For E2E tests (optional):
+
+```
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+PAYSTACK_SECRET_KEY=sk_test_...
+API_BASE=http://localhost:8787
 ```
 
 ## 2. Database Schema (SQL)
-Run this in Supabase SQL editor:
+Run these in Supabase SQL editor, in order:
+
+1) `supabase/migrations/20260314_mvp.sql`
+2) `supabase/migrations/20260314_claim_earning.sql`
+3) `supabase/migrations/20260315_rls_and_functions.sql`
+
+Legacy schema (no longer used) is below:
+
+## 3. Brutal E2E test (optional)
+Runs a full batch: signup, referral, videos, claim, deposit+webhook, withdrawal.
+
+```
+node scripts/e2e_brutal_test.mjs
+```
+
+The script auto-loads `.env` and `server/.env` if present.
+
+Optional env:
+
+```
+BRUTAL_USERS=3
+BRUTAL_BATCHES=1
+CLEANUP=1
+TEST_PASSWORD=Passw0rd!
+```
 
 ```sql
 create extension if not exists pgcrypto;

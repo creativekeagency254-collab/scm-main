@@ -1,0 +1,17 @@
+﻿{
+  "name": "edisonpay-server",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.11.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
