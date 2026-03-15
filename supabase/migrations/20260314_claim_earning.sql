@@ -112,7 +112,8 @@ BEGIN
     v_total := v_bonus;
   END IF;
 
-  SELECT new_balance INTO v_balance FROM apply_wallet_tx(v_user_id, 'accrual', v_total, NULL, v_ref);
+  SELECT awt.new_balance INTO v_balance
+  FROM apply_wallet_tx(v_user_id, 'accrual', v_total, NULL, v_ref) AS awt;
 
   RETURN QUERY SELECT v_total, v_balance, v_day, v_tier, v_required, v_optional, v_bonus;
 END;

@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS wallets (
   UNIQUE (user_id)
 );
 
--- Deposits (partitioned by created_at)
+-- Deposits
 CREATE TABLE IF NOT EXISTS deposits (
   deposit_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -61,14 +61,11 @@ CREATE TABLE IF NOT EXISTS deposits (
   provider_reference text UNIQUE,
   created_at timestamptz DEFAULT now(),
   confirmed_at timestamptz
-) PARTITION BY RANGE (created_at);
-
--- Default partition to avoid insert failures (add monthly partitions in production)
-CREATE TABLE IF NOT EXISTS deposits_default PARTITION OF deposits DEFAULT;
+);
 
 CREATE INDEX IF NOT EXISTS deposits_status_created_idx ON deposits(status, created_at);
 
--- Transactions (ledger) partitioned by created_at
+-- Transactions (ledger)
 CREATE TABLE IF NOT EXISTS transactions (
   tx_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -78,9 +75,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   related_id uuid,
   reference text UNIQUE,
   created_at timestamptz DEFAULT now()
-) PARTITION BY RANGE (created_at);
-
-CREATE TABLE IF NOT EXISTS transactions_default PARTITION OF transactions DEFAULT;
+);
 
 CREATE INDEX IF NOT EXISTS transactions_user_created_idx ON transactions(user_id, created_at);
 
@@ -93,12 +88,31 @@ CREATE TABLE IF NOT EXISTS video_views (
   duration_watched integer NOT NULL,
   watched_at timestamptz NOT NULL DEFAULT now(),
   verified_by text,
-  watched_day date GENERATED ALWAYS AS (watched_at::date) STORED
+  watched_day date
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS video_views_user_video_day_key
   ON video_views(user_id, video_id, watched_day);
 CREATE INDEX IF NOT EXISTS video_views_user_watched_idx ON video_views(user_id, watched_at);
+
+CREATE OR REPLACE FUNCTION set_video_view_day()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.watched_at IS NULL THEN
+    NEW.watched_at := now();
+  END IF;
+  NEW.watched_day := (NEW.watched_at AT TIME ZONE 'Africa/Nairobi')::date;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_video_views_day ON video_views;
+CREATE TRIGGER trg_video_views_day
+  BEFORE INSERT OR UPDATE OF watched_at ON video_views
+  FOR EACH ROW
+  EXECUTE FUNCTION set_video_view_day();
 
 -- Referrals (single-level commission)
 CREATE TABLE IF NOT EXISTS referrals (

@@ -195,6 +195,8 @@ async function loadProfileRow(userId) {
       join_number: meta.join_number ?? null,
       ref_code: data.referral_code || meta.ref_code || "",
       referred_by: meta.referred_by || "",
+      tier_selected: meta.tier_selected === true,
+      tier_selected_at: meta.tier_selected_at || null,
       role: meta.role || "client",
       category: meta.category || "Client",
       status,
@@ -237,6 +239,8 @@ async function upsertProfileRow(payload) {
       category: payload.category ?? prevMeta.category,
       join_number: payload.join_number ?? payload.joinNumber ?? prevMeta.join_number,
       referred_by: payload.referred_by ?? payload.referredBy ?? prevMeta.referred_by,
+      tier_selected: payload.tier_selected ?? payload.tierSelected ?? prevMeta.tier_selected,
+      tier_selected_at: payload.tier_selected_at ?? payload.tierSelectedAt ?? prevMeta.tier_selected_at,
       updated_at: payload.updated_at || new Date().toISOString()
     };
 
@@ -539,6 +543,7 @@ const AVATAR_PRESETS = [
 ];
 
 const REF_STORAGE_KEY = "ep:ref";
+const TIER_INTENT_KEY = "ep:tier-intent";
 const getBaseUrl = () => {
   if (typeof window === "undefined") return "https://edisonpay.co.ke";
   return window.location.origin;
@@ -560,6 +565,25 @@ const getStoredRef = () => {
 const storeRef = (ref) => {
   if (!ref || typeof window === "undefined") return;
   try { localStorage.setItem(REF_STORAGE_KEY, ref); } catch (e) {}
+    };
+const storeTierIntent = (tierId) => {
+  if (typeof window === "undefined") return;
+  const n = Number(tierId);
+  if (!Number.isFinite(n) || n < 1 || n > TIERS.length) return;
+  try { localStorage.setItem(TIER_INTENT_KEY, String(n)); } catch (e) {}
+    };
+const getTierIntent = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = Number(localStorage.getItem(TIER_INTENT_KEY));
+    return Number.isFinite(raw) ? raw : null;
+  } catch (e) {
+    return null;
+  }
+    };
+const clearTierIntent = () => {
+  if (typeof window === "undefined") return;
+  try { localStorage.removeItem(TIER_INTENT_KEY); } catch (e) {}
     };
 
 const pickAvatarForSeed = (seed) => {
@@ -659,6 +683,10 @@ function Donut({ pct, acc, size = 80, thickness = 8 }) {
 function Landing({ go }) {
   const [scrollPx, setScrollPx] = useState(0);
   const [heroVisible, setHeroVisible] = useState(false);
+  const handleTierPick = (tierId) => {
+    storeTierIntent(tierId);
+    go("signup");
+  };
 
   useEffect(() => {
     setTimeout(() => setHeroVisible(true), 80);
@@ -875,7 +903,7 @@ function Landing({ go }) {
           </div>
           <div className="ep-tier-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
             {TIERS.map((t, i) => (
-              <TierCard key={i} t={t} go={go} featured={i === 2} />
+              <TierCard key={i} t={t} go={go} featured={i === 2} onSelectTier={handleTierPick} />
             ))}
           </div>
         </div>
@@ -980,10 +1008,14 @@ function Landing({ go }) {
   );
     }
 
-function TierRow({ t, go }) {
+function TierRow({ t, go, onSelectTier }) {
   const [hov, setHov] = useState(false);
+  const handlePick = () => {
+    if (onSelectTier) { onSelectTier(t?.id); return; }
+    go("signup");
+  };
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={() => go("signup")}
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={handlePick}
       style={{ display: "flex", alignItems: "center", padding: "20px 24px", background: hov ? "#FAFAFA" : "#fff", cursor: "pointer", borderBottom: "1px solid #EBEBEB", transition: "background .15s", gap: 16 }}>
       <div style={{ width: 36, height: 36, borderRadius: 10, background: hov ? t.acc : t.lgt, display: "flex", alignItems: "center", justifyContent: "center", transition: "background .15s", flexShrink: 0 }}>
         <I n="bolt" s={16} c={hov ? "#fff" : t.acc} />
@@ -1001,7 +1033,7 @@ function TierRow({ t, go }) {
   );
     }
 
-function TierCard({ t, go, featured }) {
+function TierCard({ t, go, featured, onSelectTier }) {
   const [hov, setHov] = useState(false);
   const daily = getTierDailyTotal(t);
   const goal = getTierDailyTotal(t) * 7;
@@ -1021,8 +1053,12 @@ function TierCard({ t, go, featured }) {
     overflow: "hidden",
   };
   if (hasGlare) cardStyle["--glare"] = glareTone;
+  const handlePick = () => {
+    if (onSelectTier) { onSelectTier(t?.id); return; }
+    go("signup");
+  };
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={() => go("signup")}
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={handlePick}
       className={hasGlare ? "ep-tier-glare" : undefined}
       style={cardStyle}>
       {featured && (
@@ -1058,7 +1094,7 @@ function TierCard({ t, go, featured }) {
         ))}
       </div>
 
-      <button onClick={e => { e.stopPropagation(); go("signup"); }}
+      <button onClick={e => { e.stopPropagation(); handlePick(); }}
         style={{ width: "100%", padding: "11px", background: hov ? "#111" : "#fff", color: hov ? "#fff" : "#111", border: "1.5px solid #111", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif", transition: "all .2s", letterSpacing: "-0.01em" }}>
         Get Started '
       </button>
@@ -1069,7 +1105,7 @@ function TierCard({ t, go, featured }) {
 /* 
    AUTH PAGES
  */
-function Auth({ type, go, from }) {
+function Auth({ type, go, from, authMessage }) {
   const isLogin = type === "login";
   const [f, setF] = useState({ name: "", email: "", password: "", confirm: "", ref: getStoredRef() });
   const [loading, setLoading] = useState(false);
@@ -1090,6 +1126,13 @@ function Auth({ type, go, from }) {
     const stored = getStoredRef();
     if (stored && !f.ref) setF(p => ({ ...p, ref: stored }));
   }, []);
+  
+  useEffect(() => {
+    if (authMessage) {
+      setInfo(authMessage);
+      setErr("");
+    }
+  }, [authMessage]);
 
   useEffect(() => {
     if (!isLogin) return;
@@ -1155,8 +1198,7 @@ function Auth({ type, go, from }) {
     if (!f.password) { setErr("Password is required."); return; }
     if (!isLogin && f.password !== f.confirm) { setErr("Passwords don't match."); return; }
     if (!supabase) {
-      setLoading(true);
-      setTimeout(() => { setLoading(false); go(from || "dashboard"); }, 1100);
+      setErr("Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
       return;
     }
     setLoading(true);
@@ -1329,6 +1371,109 @@ function Auth({ type, go, from }) {
   );
     }
 
+function TierSelect({ go, authUser, profileRow, onSelectTier }) {
+  const [selected, setSelected] = useState(() => {
+    const intent = getTierIntent();
+    return Number(profileRow?.tier) || intent || 1;
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    const intent = getTierIntent();
+    if (!Number.isFinite(Number(profileRow?.tier)) && Number.isFinite(intent)) {
+      setSelected(intent);
+    } else if (Number.isFinite(Number(profileRow?.tier))) {
+      setSelected(Number(profileRow.tier));
+    }
+  }, [profileRow?.tier]);
+
+  const handleChoose = async (tierId) => {
+    if (!tierId) return;
+    setSelected(tierId);
+    setErr("");
+    if (!onSelectTier) return;
+    setSaving(true);
+    const ok = await onSelectTier(tierId);
+    setSaving(false);
+    if (!ok) {
+      setErr("Unable to save tier. Please try again.");
+      return;
+    }
+    clearTierIntent();
+    go("dashboard");
+  };
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#F8FAFC", display:"flex", alignItems:"center", justifyContent:"center", padding:"48px 16px", fontFamily:"Geist,sans-serif" }}>
+      <div style={{ width:"min(980px, 92vw)" }}>
+        <div style={{ textAlign:"center", marginBottom:30 }}>
+          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.16em", color:"#0066FF", textTransform:"uppercase", marginBottom:10 }}>Choose Your Tier</div>
+          <div style={{ fontSize:"clamp(26px,3vw,38px)", fontWeight:900, letterSpacing:"-0.04em", color:"#111", marginBottom:10 }}>
+            Pick a tier to enter your dashboard
+          </div>
+          <div style={{ fontSize:14, color:"#6B7280", lineHeight:1.6 }}>
+            You can explore any tier. Earnings and withdrawals unlock after you deposit the tier amount.
+          </div>
+        </div>
+
+        {err && (
+          <div style={{ padding:"10px 14px", background:"#FFF0F0", border:"1px solid #FCA5A5", borderRadius:9, fontSize:13, color:"#DC2626", fontWeight:600, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
+            <I n="xmark" s={14} c="#DC2626" /> {err}
+          </div>
+        )}
+
+        <div className="ep-tier-grid" style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:16 }}>
+          {TIERS.map((tier) => {
+            const isActive = Number(selected) === Number(tier.id);
+            const daily = getTierDailyTotal(tier);
+            return (
+              <div key={tier.id} style={{ background:"#fff", borderRadius:16, border:isActive ? "2px solid #111" : "1.5px solid #E5E7EB", padding:"22px", boxShadow:isActive ? "0 6px 18px rgba(0,0,0,0.08)" : "0 2px 10px rgba(0,0,0,0.04)" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                  <div>
+                    <div style={{ fontSize:10, letterSpacing:"0.12em", fontWeight:800, color:tier.acc }}>TIER {tier.id}</div>
+                    <div style={{ fontSize:18, fontWeight:900, letterSpacing:"-0.03em", color:"#111" }}>{tier.name}</div>
+                  </div>
+                  {isActive && (
+                    <div style={{ padding:"4px 10px", borderRadius:999, background:"#111", color:"#fff", fontSize:10, fontWeight:800 }}>Selected</div>
+                  )}
+                </div>
+                <div style={{ fontSize:13, color:"#6B7280", marginBottom:12 }}>
+                  Deposit: <strong style={{ color:"#111" }}>KES {tier.deposit.toLocaleString()}</strong>
+                </div>
+                <div style={{ fontSize:13, color:"#6B7280", marginBottom:16 }}>
+                  Daily earning: <strong style={{ color:"#111" }}>KES {daily.toLocaleString()}</strong>
+                </div>
+                <button
+                  disabled={saving}
+                  onClick={() => handleChoose(tier.id)}
+                  style={{
+                    width:"100%",
+                    padding:"10px 14px",
+                    borderRadius:10,
+                    border:"1.5px solid #111",
+                    background:isActive ? "#111" : "#fff",
+                    color:isActive ? "#fff" : "#111",
+                    fontWeight:800,
+                    fontSize:13,
+                    cursor:saving ? "not-allowed" : "pointer",
+                    fontFamily:"Geist,sans-serif"
+                  }}
+                >
+                  {saving && isActive ? "Saving..." : isActive ? "Continue" : "Select Tier"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ textAlign:"center", marginTop:20, fontSize:12, color:"#9CA3AF" }}>
+          Signed in as {authUser?.email || "your account"}.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, type = "text", ph, val, set, ic }) {
   const [focus, setFocus] = useState(false);
   return (
@@ -1449,6 +1594,8 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [stripToggleHidden, setStripToggleHidden] = useState(false);
   const lastScrollRef = useRef(0);
   const authId = authUser?.id || null;
+  const [hasTierDeposit, setHasTierDeposit] = useState(null);
+  const [depositCheckBusy, setDepositCheckBusy] = useState(false);
   const [profile, setProfile] = useState({
     id: null,
     name: "Alex Johnson",
@@ -1509,6 +1656,27 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   }, [walletBalance, USE_LOCAL_WALLET]);
   const serverBalanceVal = Number(profile.balance);
   const serverBalance = Number.isFinite(serverBalanceVal) ? serverBalanceVal : null;
+  const depositRequired = !USE_LOCAL_WALLET && hasTierDeposit === false;
+
+  useEffect(() => {
+    if (!supabase || !authId || USE_LOCAL_WALLET) { setHasTierDeposit(null); return; }
+    let ignore = false;
+    (async () => {
+      setDepositCheckBusy(true);
+      const { data, error } = await supabase
+        .from("deposits")
+        .select("deposit_id")
+        .eq("user_id", authId)
+        .eq("status", "success")
+        .eq("tier_at_deposit", Number(t?.id || 1))
+        .limit(1);
+      if (!ignore) {
+        setHasTierDeposit(!error && Array.isArray(data) && data.length > 0);
+        setDepositCheckBusy(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [authId, t?.id, USE_LOCAL_WALLET]);
   const earn = Number.isFinite(serverBalance) ? serverBalance : (baseEarn + earnBonus);
   const goal = getTierDailyTotal(t) * 7;
   const pct = Math.round((earn / goal) * 100);
@@ -1586,6 +1754,17 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     if (!Number.isFinite(amt) || amt <= 0) return;
 
     if (supabase && authUser?.id && !USE_LOCAL_WALLET) {
+      if (hasTierDeposit === false) {
+        addClientTx({
+          ic:"lock",
+          text:"Deposit required",
+          sub:`Deposit KES ${t.deposit.toLocaleString()} to unlock Tier ${t.id} earnings`,
+          time:"Just now",
+          c:"#DC2626",
+          amt: 0
+        });
+        return;
+      }
       try {
         const { data, error } = await supabase.rpc("claim_earning", {
           p_kind: isBonus ? "bonus" : "manual",
@@ -2367,10 +2546,10 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
             </div>
           )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady}/>}
-          {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} authUser={authUser} />}
+          {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} authUser={authUser} hasDeposit={hasTierDeposit} />}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} />}
-          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx} onBalanceUpdate={applyBalance}/>}
+          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx} onBalanceUpdate={applyBalance} hasDeposit={hasTierDeposit}/>}
           {tab==="settings"  && (
             <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
               <div className="ep-card" style={{ borderRadius:14, padding:"20px 22px" }}>
@@ -3551,7 +3730,7 @@ const YT_VIDEOS = [
 ];
 
 /* "" VIDEOS CONTENT "" */
-function VideosContent({ t, onEarning, authUser }) {
+function VideosContent({ t, onEarning, authUser, hasDeposit }) {
   const MANUAL_COUNT = Math.max(1, Number(t?.videos) || 0);
   const MANUAL_SECONDS = 45;
   const BONUS_COUNT = Math.max(0, Number(t?.bonus) || 0);
@@ -3585,6 +3764,7 @@ function VideosContent({ t, onEarning, authUser }) {
   const [imgLoaded, setImgLoaded] = useState({});
   const prevWatchedRef = useRef(watched);
   const prevBotRef = useRef(bonusDone);
+  const depositLocked = hasDeposit === false;
 
   const recordView = async (videoId, isRequired) => {
     if (!supabase || !authUser?.id) return;
@@ -3733,6 +3913,12 @@ function VideosContent({ t, onEarning, authUser }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
+      {depositLocked && (
+        <div style={{ display:"flex",alignItems:"center",gap:10,padding:"12px 18px",background:"#FFF7ED",border:"1.5px solid #FDBA74",borderRadius:12,fontSize:13,color:"#9A3412",fontWeight:700 }}>
+          <I n="lock" s={15} c="#EA580C"/>
+          Deposit required to unlock Tier {t?.id} earnings.
+        </div>
+      )}
 
       {showPlayer !== null && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -4337,8 +4523,9 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
     }
 
 /* "" WITHDRAW "" */
-function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx, onBalanceUpdate }) {
+function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx, onBalanceUpdate, hasDeposit }) {
   const [wdAmt,setWdAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
+  const [wdError, setWdError] = useState("");
   const [depMethod, setDepMethod] = useState("M-Pesa");
   const [depAmt, setDepAmt] = useState("");
   const [depPhone, setDepPhone] = useState("");
@@ -4362,6 +4549,9 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const nextTier = TIERS[t.id];
   const safeBalance = Number.isFinite(balance) ? balance : t.deposit;
   const upgradeNeed = nextTier ? Math.max(nextTier.deposit - safeBalance, 0) : 0;
+  const needsUnlock = hasDeposit === false;
+  const unlockNeed = needsUnlock ? t.deposit : 0;
+  const primaryNeed = needsUnlock ? unlockNeed : upgradeNeed;
   const accountRef = String(profileRow?.name || authUser?.email || authUser?.id || "EDISONPAY").slice(0, 18);
   const depMethods = ["M-Pesa","Airtel Money","Tigo Pesa","HaloPesa","MTN MoMo","Card","Crypto"];
   const mobileMoneyMeta = {
@@ -4385,9 +4575,9 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   useEffect(() => {
     if (!focusDeposit) return;
     if (depositRef.current) depositRef.current.scrollIntoView({ behavior:"smooth", block:"start" });
-    if (upgradeNeed > 0 && !depAmt) setDepAmt(String(upgradeNeed));
+    if (primaryNeed > 0 && !depAmt) setDepAmt(String(primaryNeed));
     if (onFocusDone) onFocusDone();
-  }, [focusDeposit, upgradeNeed]);
+  }, [focusDeposit, primaryNeed]);
   const submitDeposit = async () => {
     const amt = Number(depAmt);
     if (!Number.isFinite(amt) || amt <= 0) return;
@@ -4478,6 +4668,11 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   };
 
   const submitWithdrawal = async () => {
+    setWdError("");
+    if (hasDeposit === false) {
+      setWdError(`Deposit KES ${t.deposit.toLocaleString()} to unlock withdrawals for Tier ${t.id}.`);
+      return;
+    }
     if (!wdAmt) return;
     const ok = await requestWithdrawal(wdAmt, method, profileRow?.phone || "");
     if (!ok) return;
@@ -4486,6 +4681,11 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   };
 
   const submitCryptoWithdrawal = async () => {
+    setWdError("");
+    if (hasDeposit === false) {
+      setWdError(`Deposit KES ${t.deposit.toLocaleString()} to unlock withdrawals for Tier ${t.id}.`);
+      return;
+    }
     if (!cryptoWdAmt || !cryptoWallet) return;
     const ok = await requestWithdrawal(cryptoWdAmt, "Crypto", cryptoWallet);
     if (!ok) return;
@@ -4503,16 +4703,30 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             <div style={{ fontSize:12,color:"#888",marginTop:2 }}>Processing: Tue & Fri - 08:30 - 17:30</div>
           </div>
         </div>
+      {hasDeposit === false && (
+        <div style={{ padding:"12px 16px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFF7ED",display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#9A3412",fontWeight:700 }}>
+          <I n="lock" s={13} c="#EA580C"/> Deposit KES {t.deposit.toLocaleString()} to unlock withdrawals for Tier {t.id}.
+        </div>
+      )}
+      {wdError && (
+        <div style={{ padding:"10px 14px", background:"#FFF0F0", border:"1px solid #FCA5A5", borderRadius:9, fontSize:13, color:"#DC2626", fontWeight:600, display:"flex", alignItems:"center", gap:8 }}>
+          <I n="xmark" s={14} c="#DC2626" /> {wdError}
+        </div>
+      )}
 
       <div ref={depositRef} style={{ background:"#fff",borderRadius:14,padding:"20px 22px",border:"1px solid #111",boxShadow:"0 6px 18px rgba(0,0,0,0.08)" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:10 }}>
           <div>
-            <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>Upgrade & Deposit</div>
+            <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>{needsUnlock ? "Unlock Tier Deposit" : "Upgrade & Deposit"}</div>
             <div style={{ fontSize:11,color:"#666",marginTop:2 }}>
-              {nextTier ? `Next tier: ${nextTier.name}` : "YouTMre already at the top tier."}
+              {needsUnlock ? `Deposit required to unlock ${t.name} earnings.` : (nextTier ? `Next tier: ${nextTier.name}` : "You're already at the top tier.")}
             </div>
           </div>
-          {nextTier && (
+          {needsUnlock ? (
+            <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:9,fontSize:11,color:"#9A3412",fontWeight:800 }}>
+              Deposit KES {unlockNeed.toLocaleString()} to unlock
+            </div>
+          ) : nextTier && (
             <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:9,fontSize:11,color:"#9A3412",fontWeight:800 }}>
               Need KES {upgradeNeed.toLocaleString()} to upgrade
             </div>
@@ -5475,6 +5689,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(!SUPABASE_ENABLED);
   const [profileRow, setProfileRow] = useState(null);
+  const [authMessage, setAuthMessage] = useState("");
   const [installPrompt, setInstallPrompt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
   const [isMobileInstall, setIsMobileInstall] = useState(false);
@@ -5567,6 +5782,7 @@ export default function App() {
   const isAdmin = role === "admin";
   const showDevNav = !SUPABASE_ENABLED || import.meta.env.DEV;
   const profileReady = !SUPABASE_ENABLED || !authUser || profileRow !== null;
+  const tierSelected = profileRow?.tier_selected === true;
 
   useEffect(() => {
     if (!SUPABASE_ENABLED) return;
@@ -5581,6 +5797,14 @@ export default function App() {
     });
     return () => { ignore = true; subscription?.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (!supabase || !authUser?.id) return;
+    supabase
+      .from("users")
+      .update({ last_seen: new Date().toISOString() })
+      .eq("user_id", authUser.id);
+  }, [authUser?.id]);
 
   useEffect(() => {
     const idx = resolveTierIndex(profileRow?.tier);
@@ -5598,6 +5822,17 @@ export default function App() {
       const metaAvatar = meta.avatar_url || meta.picture || meta.avatar || "";
       const metaRefBy = normalizeRefCode(meta.referred_by || meta.ref_code || "");
       if (existing) {
+        const statusRaw = String(existing.status || "active").toLowerCase();
+        if (statusRaw !== "active") {
+          setAuthMessage(`Your account is ${statusRaw}. Please contact support.`);
+          try { await supabase.auth.signOut(); } catch (e) {}
+          if (!ignore) {
+            setProfileRow(null);
+            setPage("login");
+          }
+          return;
+        }
+        setAuthMessage("");
         setProfileRow(existing);
         const updates = {};
         if (!existing.ref_code) updates.ref_code = makeRefCode(authUser.email || authUser.id || existing.email || existing.name);
@@ -5645,12 +5880,30 @@ export default function App() {
 
   const handleSignOut = async () => {
     if (supabase) await supabase.auth.signOut();
+    setAuthMessage("");
     setPage("landing");
   };
 
   const route = !SUPABASE_ENABLED
     ? page
-    : (authUser ? (isAdmin ? "admin" : "dashboard") : (page==="login" || page==="signup" ? page : "landing"));
+    : (authUser ? (isAdmin ? "admin" : (tierSelected ? "dashboard" : "tier-select")) : (page==="login" || page==="signup" ? page : "landing"));
+
+  const handleTierSelect = async (tierId) => {
+    if (!supabase || !authUser?.id) return false;
+    const tierNum = Number(tierId);
+    if (!Number.isFinite(tierNum) || tierNum < 1 || tierNum > TIERS.length) return false;
+    const updated = await upsertProfileRow({
+      id: authUser.id,
+      tier: tierNum,
+      tier_selected: true,
+      tier_selected_at: new Date().toISOString()
+    });
+    if (updated) {
+      setProfileRow(updated);
+      return true;
+    }
+    return false;
+  };
   const openHelp = () => {
     try {
       const w = window.Tawk_API;
@@ -5719,7 +5972,7 @@ export default function App() {
       {showDevNav && (
         <div style={{ position:"sticky",top:0,zIndex:9999,background:"#0A0A0A",display:"flex",alignItems:"center",padding:"0 12px",height:44,gap:4,borderBottom:"1px solid #1A1A1A",flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",gap:4,flex:1,flexWrap:"nowrap",overflowX:"auto" }}>
-            {[["landing","Home","home"],["login","Login","lock"],["signup","Sign Up","user"],["dashboard","Dashboard","chart"],["admin","Admin","settings"]].map(([id,lbl,ic])=>(
+            {[["landing","Home","home"],["login","Login","lock"],["signup","Sign Up","user"],["tier-select","Tier Select","star"],["dashboard","Dashboard","chart"],["admin","Admin","settings"]].map(([id,lbl,ic])=>(
               <button key={id} onClick={()=>go(id)} style={{ padding:"5px 13px",borderRadius:50,border:"none",background:page===id?"#fff":"#1A1A1A",color:page===id?"#111":"#888",fontSize:11,fontWeight:page===id?800:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>
                 <I n={ic} s={11} c={page===id?"#111":"#888"}/>{lbl}
               </button>
@@ -5755,8 +6008,9 @@ export default function App() {
         {(!SUPABASE_ENABLED || (authReady && profileReady)) && (
           <>
             {route==="landing"   && <div style={{ height:"100%",overflowY:"auto" }}><Landing  go={go}/></div>}
-            {route==="login"     && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="login"  go={go} from={prevPage==="landing"?"dashboard":prevPage}/></div>}
-            {route==="signup"    && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="signup" go={go} from={prevPage==="landing"?"dashboard":prevPage}/></div>}
+            {route==="login"     && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="login"  go={go} from={prevPage==="landing"?"dashboard":prevPage} authMessage={authMessage}/></div>}
+            {route==="signup"    && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="signup" go={go} from={prevPage==="landing"?"dashboard":prevPage} authMessage={authMessage}/></div>}
+            {route==="tier-select" && <div style={{ height:"100%",overflowY:"auto" }}><TierSelect go={go} authUser={authUser} profileRow={profileRow} onSelectTier={handleTierSelect} /></div>}
             {route==="dashboard" && <ClientDash t={t} go={go} key={tier} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut}/>}
             {route==="admin"     && <AdminDash go={go} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut}/>}
           </>

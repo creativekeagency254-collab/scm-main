@@ -4,6 +4,8 @@ create or replace function public.is_admin()
 returns boolean
 language sql
 stable
+security definer
+set search_path = public, row_security = off
 as $$
   select exists (
     select 1
@@ -160,7 +162,7 @@ begin
 
   insert into payout_requests(user_id, requested_amount, status, scheduled_for, processed_at)
   values (v_user, p_amount, 'queued', v_sched, null)
-  returning payout_id into v_payout_id;
+  returning payout_requests.payout_id into v_payout_id;
 
   v_ref := 'payout:' || v_payout_id::text;
   select new_balance into v_balance
@@ -190,6 +192,7 @@ alter table if exists public.transactions enable row level security;
 alter table if exists public.video_views enable row level security;
 alter table if exists public.referrals enable row level security;
 alter table if exists public.payout_requests enable row level security;
+alter table if exists public.payout_requests force row level security;
 alter table if exists public.audit_logs enable row level security;
 
 drop policy if exists users_select_own on public.users;

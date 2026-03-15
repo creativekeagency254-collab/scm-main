@@ -3,14 +3,35 @@
 
 const crypto = require("crypto");
 const express = require("express");
+const path = require("path");
 const { Pool } = require("pg");
-require("dotenv").config();
+const dotenv = require("dotenv");
+
+dotenv.config({ path: path.join(__dirname, ".env") });
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 const app = express();
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.PGSSL === "disable" ? false : { rejectUnauthorized: false }
 });
+
+let supabaseClient = null;
+const supabaseUrl = () =>
+  process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const hasSupabase = () =>
+  !!supabaseUrl() && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+async function getSupabase() {
+  if (supabaseClient) return supabaseClient;
+  const mod = await import("@supabase/supabase-js");
+  supabaseClient = mod.createClient(
+    supabaseUrl(),
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  return supabaseClient;
+}
 
 // Capture raw body for signature verification
 app.use(
@@ -51,6 +72,85 @@ app.post("/api/v1/webhook/paystack", async (req, res) => {
 
   if (!providerReference || !userId || !Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ ok: false, error: "invalid payload" });
+  }
+
+  if (hasSupabase()) {
+    try {
+      const sb = await getSupabase();
+
+      const { data: depRow, error: depErr } = await sb
+        .from("deposits")
+        .select("deposit_id,status")
+        .eq("provider_reference", providerReference)
+        .maybeSingle();
+      if (depErr) throw depErr;
+      if (depRow?.status === "success") {
+        return res.status(200).json({ ok: true });
+      }
+
+      const { data: upserted, error: upsertErr } = await sb
+        .from("deposits")
+        .upsert(
+          {
+            user_id: userId,
+            amount,
+            tier_at_deposit: tierAtDeposit,
+            status: "success",
+            provider: "Paystack",
+            provider_reference: providerReference,
+            created_at: new Date().toISOString(),
+            confirmed_at: new Date().toISOString()
+          },
+          { onConflict: "provider_reference" }
+        )
+        .select("deposit_id,status")
+        .maybeSingle();
+      if (upsertErr) throw upsertErr;
+      const depositId = upserted?.deposit_id || depRow?.deposit_id || null;
+
+      const { error: depTxErr } = await sb.rpc("apply_wallet_tx", {
+        p_user_id: userId,
+        p_type: "deposit",
+        p_amount: amount,
+        p_related_id: null,
+        p_reference: `dep:${providerReference}`
+      });
+      if (depTxErr) throw depTxErr;
+
+      const { data: refRow, error: refErr } = await sb
+        .from("users")
+        .select("referrer_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (refErr) throw refErr;
+      const referrerId = refRow?.referrer_id;
+      if (referrerId) {
+        const commission = Number((amount * 0.1).toFixed(2));
+        const { error: refInsErr } = await sb
+          .from("referrals")
+          .insert({
+            referrer_id: referrerId,
+            referred_user_id: userId,
+            deposit_id: depositId,
+            commission_amount: commission,
+            created_at: new Date().toISOString()
+          });
+        if (refInsErr) throw refInsErr;
+        const { error: refTxErr } = await sb.rpc("apply_wallet_tx", {
+          p_user_id: referrerId,
+          p_type: "referral",
+          p_amount: commission,
+          p_related_id: null,
+          p_reference: `ref:${providerReference}`
+        });
+        if (refTxErr) throw refTxErr;
+      }
+
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ ok: false });
+    }
   }
 
   const client = await pool.connect();

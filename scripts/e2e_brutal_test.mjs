@@ -37,6 +37,9 @@ const API_BASE = process.env.API_BASE || process.env.VITE_API_BASE;
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const BRUTAL_USERS = process.env.BRUTAL_USERS || "3";
 const BRUTAL_BATCHES = process.env.BRUTAL_BATCHES || "1";
+const BRUTAL_RETRIES = Number(process.env.BRUTAL_RETRIES || "4");
+const BRUTAL_RETRY_DELAY_MS = Number(process.env.BRUTAL_RETRY_DELAY_MS || "5000");
+const BRUTAL_FORCE_LOCAL = String(process.env.BRUTAL_FORCE_LOCAL || "") === "1";
 const TEST_PASSWORD = process.env.TEST_PASSWORD || "Passw0rd!";
 const CLEANUP = process.env.CLEANUP || "0";
 
@@ -62,7 +65,7 @@ const nowTag = () => Date.now().toString(36);
 const randEmail = (prefix) => `${prefix}+${nowTag()}_${Math.floor(Math.random() * 1e6)}@example.com`;
 
 async function startLocalServer() {
-  if (API_BASE) return { base: API_BASE, server: null };
+  if (API_BASE && !BRUTAL_FORCE_LOCAL) return { base: API_BASE, server: null };
   const { startServer } = require("../server/index.js");
   const server = startServer(0);
   await new Promise((r) => server.once("listening", r));
@@ -147,13 +150,26 @@ async function claimEarning(client, kind = "manual") {
 }
 
 async function depositAndWebhook(base, userId, email, amount, tier) {
-  const res = await fetch(`${base}/api/v1/deposit/create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount, user_id: userId, email, tier, method: "Paystack" })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`deposit/create failed: ${data?.error || data?.message || res.status}`);
+  let data = null;
+  let lastErr = null;
+  for (let attempt = 0; attempt <= BRUTAL_RETRIES; attempt++) {
+    const res = await fetch(`${base}/api/v1/deposit/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, user_id: userId, email, tier, method: "Paystack" })
+    });
+    data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      lastErr = null;
+      break;
+    }
+    const msg = data?.detail || data?.error || data?.message || res.status;
+    lastErr = `deposit/create failed: ${msg}`;
+    const isRateLimit = String(msg).toLowerCase().includes("rate limit");
+    if (!isRateLimit || attempt === BRUTAL_RETRIES) break;
+    await sleep(BRUTAL_RETRY_DELAY_MS);
+  }
+  if (lastErr) throw new Error(lastErr);
 
   const reference = data.reference;
   const payload = {
@@ -264,13 +280,12 @@ async function runBatch(batchIndex, base) {
     const session = await signIn(u.email, TEST_PASSWORD);
     const client = authedClient(session.access_token);
 
+    const reference = await depositAndWebhook(base, u.id, u.email, 1000, u.tier);
     await insertViews(client, u.id, u.tier, 2, u.tier === 2 ? 1 : 0);
     await claimEarning(client, "manual");
     if (u.tier === 2) {
       await claimEarning(client, "bonus");
     }
-
-    const reference = await depositAndWebhook(base, u.id, u.email, 1000, u.tier);
     const wallet = await getWallet(u.id);
 
     let payout = null;
