@@ -49,7 +49,7 @@ BEGIN
     RAISE EXCEPTION 'invalid claim kind';
   END IF;
 
-  SELECT tier INTO v_tier FROM users WHERE user_id = v_user_id;
+  SELECT u.tier INTO v_tier FROM users u WHERE u.user_id = v_user_id;
   IF v_tier IS NULL THEN
     RAISE EXCEPTION 'user not found';
   END IF;
