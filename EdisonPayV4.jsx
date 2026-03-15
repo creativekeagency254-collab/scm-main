@@ -1754,17 +1754,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     if (!Number.isFinite(amt) || amt <= 0) return;
 
     if (supabase && authUser?.id && !USE_LOCAL_WALLET) {
-      if (hasTierDeposit === false) {
-        addClientTx({
-          ic:"lock",
-          text:"Deposit required",
-          sub:`Deposit KES ${t.deposit.toLocaleString()} to unlock Tier ${t.id} earnings`,
-          time:"Just now",
-          c:"#DC2626",
-          amt: 0
-        });
-        return;
-      }
       try {
         const { data, error } = await supabase.rpc("claim_earning", {
           p_kind: isBonus ? "bonus" : "manual",
@@ -2546,7 +2535,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
             </div>
           )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady}/>}
-          {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} authUser={authUser} hasDeposit={hasTierDeposit} />}
+          {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} authUser={authUser} />}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} />}
           {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx} onBalanceUpdate={applyBalance} hasDeposit={hasTierDeposit}/>}
@@ -3730,7 +3719,7 @@ const YT_VIDEOS = [
 ];
 
 /* "" VIDEOS CONTENT "" */
-function VideosContent({ t, onEarning, authUser, hasDeposit }) {
+function VideosContent({ t, onEarning, authUser }) {
   const MANUAL_COUNT = Math.max(1, Number(t?.videos) || 0);
   const MANUAL_SECONDS = 45;
   const BONUS_COUNT = Math.max(0, Number(t?.bonus) || 0);
@@ -3764,7 +3753,6 @@ function VideosContent({ t, onEarning, authUser, hasDeposit }) {
   const [imgLoaded, setImgLoaded] = useState({});
   const prevWatchedRef = useRef(watched);
   const prevBotRef = useRef(bonusDone);
-  const depositLocked = hasDeposit === false;
 
   const recordView = async (videoId, isRequired) => {
     if (!supabase || !authUser?.id) return;
@@ -3913,12 +3901,6 @@ function VideosContent({ t, onEarning, authUser, hasDeposit }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
-      {depositLocked && (
-        <div style={{ display:"flex",alignItems:"center",gap:10,padding:"12px 18px",background:"#FFF7ED",border:"1.5px solid #FDBA74",borderRadius:12,fontSize:13,color:"#9A3412",fontWeight:700 }}>
-          <I n="lock" s={15} c="#EA580C"/>
-          Deposit required to unlock Tier {t?.id} earnings.
-        </div>
-      )}
 
       {showPlayer !== null && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -5870,13 +5852,6 @@ export default function App() {
     })();
     return () => { ignore = true; };
   }, [authUser?.id]);
-
-  useEffect(() => {
-    if (Number.isFinite(profileRow?.balance)) {
-      setWalletBalance(profileRow.balance);
-    }
-  }, [profileRow?.balance]);
-
 
   const handleSignOut = async () => {
     if (supabase) await supabase.auth.signOut();
