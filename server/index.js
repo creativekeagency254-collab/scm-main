@@ -145,6 +145,37 @@ app.post("/api/v1/deposit/create", async (req, res) => {
   }
 });
 
+app.get("/api/v1/deposit/status", async (req, res) => {
+  try {
+    const reference = String(req.query?.reference || "").trim();
+    if (!reference) return res.status(400).json({ error: "reference required" });
+    if (hasSupabase()) {
+      const sb = await getSupabase();
+      const { data, error } = await sb
+        .from("deposits")
+        .select("status, amount, user_id, tier_at_deposit, confirmed_at")
+        .eq("provider_reference", reference)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: "not found" });
+      return res.status(200).json(data);
+    }
+    const result = await pool.query(
+      "SELECT status, amount, user_id, tier_at_deposit, confirmed_at FROM deposits WHERE provider_reference = $1 LIMIT 1",
+      [reference]
+    );
+    if (!result?.rows?.length) return res.status(404).json({ error: "not found" });
+    return res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    const detail =
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : String(err?.message || err);
+    return res.status(500).json({ error: "server error", detail });
+  }
+});
+
 function startServer(portOverride) {
   const usePort =
     portOverride === undefined || portOverride === null ? port : portOverride;

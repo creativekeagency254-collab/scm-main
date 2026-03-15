@@ -558,6 +558,40 @@ const getRefFromUrl = () => {
     return "";
   }
     };
+const getPaymentReference = () => {
+  if (typeof window === "undefined") return "";
+  try {
+    const url = new URL(window.location.href);
+    const ref =
+      url.searchParams.get("reference") ||
+      url.searchParams.get("trxref") ||
+      url.searchParams.get("paystack") ||
+      url.searchParams.get("paystack_ref") ||
+      url.searchParams.get("ref");
+    if (ref) return String(ref);
+    if (url.hash && url.hash.length > 1) {
+      const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
+      return (
+        hash.get("reference") ||
+        hash.get("trxref") ||
+        hash.get("paystack_ref") ||
+        ""
+      );
+    }
+    return "";
+  } catch (e) {
+    return "";
+  }
+    };
+const clearPaymentReference = () => {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    ["reference","trxref","paystack","paystack_ref","ref"].forEach(k => url.searchParams.delete(k));
+    url.hash = "";
+    window.history.replaceState({}, document.title, url.pathname);
+  } catch (e) {}
+    };
 const getStoredRef = () => {
   if (typeof window === "undefined") return "";
   try { return normalizeRefCode(localStorage.getItem(REF_STORAGE_KEY)) || ""; } catch (e) { return ""; }
@@ -5715,6 +5749,43 @@ export default function App() {
       setPage("login");
     }
   }, []);
+
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !authReady) return;
+    const ref = getPaymentReference();
+    if (!ref) return;
+    let cancelled = false;
+    const poll = async () => {
+      if (!API_BASE) {
+        if (!cancelled) {
+          setAuthMessage("Payment received. Please sign in to continue.");
+          if (authUser?.id) go("dashboard"); else go("login");
+          clearPaymentReference();
+        }
+        return;
+      }
+      for (let i = 0; i < 10; i++) {
+        try {
+          const res = await fetch(`${API_BASE}/api/v1/deposit/status?reference=${encodeURIComponent(ref)}`);
+          const data = await res.json().catch(() => ({}));
+          if (!cancelled && res.ok && data?.status === "success") {
+            setAuthMessage("Payment confirmed. Welcome back.");
+            if (authUser?.id) go("dashboard"); else go("login");
+            clearPaymentReference();
+            return;
+          }
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      if (!cancelled) {
+        setAuthMessage("Payment pending. Please refresh in a moment.");
+        if (authUser?.id) go("dashboard"); else go("login");
+        clearPaymentReference();
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [SUPABASE_ENABLED, authReady, authUser?.id]);
 
   useEffect(() => {
     const ref = getRefFromUrl();
