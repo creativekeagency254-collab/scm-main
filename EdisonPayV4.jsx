@@ -5834,13 +5834,41 @@ export default function App() {
         }
         return;
       }
+      const tryVerify = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/api/v1/deposit/verify?reference=${encodeURIComponent(ref)}`);
+          const data = await res.json().catch(() => ({}));
+          return res.ok && data?.status === "success";
+        } catch (e) {
+          return false;
+        }
+      };
+      const verified = await tryVerify();
+      if (!cancelled && verified) {
+        setAuthMessage("Payment confirmed. Welcome back.");
+        if (authUser?.id) {
+          const refreshed = await loadProfileRow(authUser.id);
+          if (!cancelled && refreshed) setProfileRow(refreshed);
+          go("dashboard");
+        } else {
+          go("login");
+        }
+        clearPaymentReference();
+        return;
+      }
       for (let i = 0; i < 10; i++) {
         try {
           const res = await fetch(`${API_BASE}/api/v1/deposit/status?reference=${encodeURIComponent(ref)}`);
           const data = await res.json().catch(() => ({}));
           if (!cancelled && res.ok && data?.status === "success") {
             setAuthMessage("Payment confirmed. Welcome back.");
-            if (authUser?.id) go("dashboard"); else go("login");
+            if (authUser?.id) {
+              const refreshed = await loadProfileRow(authUser.id);
+              if (!cancelled && refreshed) setProfileRow(refreshed);
+              go("dashboard");
+            } else {
+              go("login");
+            }
             clearPaymentReference();
             return;
           }
