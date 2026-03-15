@@ -2233,6 +2233,32 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           </div>
         )}
 
+        {/* Logout button (bottom) */}
+        {open && (
+          <div style={{ padding:"12px 14px", borderTop:"1px solid #F0F0F0", flexShrink:0 }}>
+            <button
+              onClick={() => (onSignOut ? onSignOut() : go("landing"))}
+              style={{
+                width:"100%",
+                padding:"10px 12px",
+                borderRadius:10,
+                border:"1.5px solid #DC2626",
+                background:"#FEE2E2",
+                color:"#B91C1C",
+                fontWeight:800,
+                fontSize:12,
+                cursor:"pointer",
+                fontFamily:"Geist,sans-serif",
+                display:"flex",
+                alignItems:"center",
+                justifyContent:"center",
+                gap:8
+              }}>
+              <I n="logout" s={14} c="#B91C1C"/> Sign Out
+            </button>
+          </div>
+        )}
+
         {/* Icon-only: logout at bottom */}
         {!open && (
           <div style={{ padding:"10px 0", display:"flex", justifyContent:"center", borderTop:"1px solid #F0F0F0" }}>
