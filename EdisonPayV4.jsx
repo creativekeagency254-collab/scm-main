@@ -5751,43 +5751,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!SUPABASE_ENABLED || !authReady) return;
-    const ref = getPaymentReference();
-    if (!ref) return;
-    let cancelled = false;
-    const poll = async () => {
-      if (!API_BASE) {
-        if (!cancelled) {
-          setAuthMessage("Payment received. Please sign in to continue.");
-          if (authUser?.id) go("dashboard"); else go("login");
-          clearPaymentReference();
-        }
-        return;
-      }
-      for (let i = 0; i < 10; i++) {
-        try {
-          const res = await fetch(`${API_BASE}/api/v1/deposit/status?reference=${encodeURIComponent(ref)}`);
-          const data = await res.json().catch(() => ({}));
-          if (!cancelled && res.ok && data?.status === "success") {
-            setAuthMessage("Payment confirmed. Welcome back.");
-            if (authUser?.id) go("dashboard"); else go("login");
-            clearPaymentReference();
-            return;
-          }
-        } catch (e) {}
-        await new Promise(r => setTimeout(r, 1200));
-      }
-      if (!cancelled) {
-        setAuthMessage("Payment pending. Please refresh in a moment.");
-        if (authUser?.id) go("dashboard"); else go("login");
-        clearPaymentReference();
-      }
-    };
-    poll();
-    return () => { cancelled = true; };
-  }, [SUPABASE_ENABLED, authReady, authUser?.id]);
-
-  useEffect(() => {
     const ref = getRefFromUrl();
     if (ref) {
       storeRef(ref);
@@ -5857,6 +5820,42 @@ export default function App() {
 
   const go = (p) => { setPrevPage(page); setPage(p); };
   const authUser = session?.user || null;
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !authReady) return;
+    const ref = getPaymentReference();
+    if (!ref) return;
+    let cancelled = false;
+    const poll = async () => {
+      if (!API_BASE) {
+        if (!cancelled) {
+          setAuthMessage("Payment received. Please sign in to continue.");
+          if (authUser?.id) go("dashboard"); else go("login");
+          clearPaymentReference();
+        }
+        return;
+      }
+      for (let i = 0; i < 10; i++) {
+        try {
+          const res = await fetch(`${API_BASE}/api/v1/deposit/status?reference=${encodeURIComponent(ref)}`);
+          const data = await res.json().catch(() => ({}));
+          if (!cancelled && res.ok && data?.status === "success") {
+            setAuthMessage("Payment confirmed. Welcome back.");
+            if (authUser?.id) go("dashboard"); else go("login");
+            clearPaymentReference();
+            return;
+          }
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      if (!cancelled) {
+        setAuthMessage("Payment pending. Please refresh in a moment.");
+        if (authUser?.id) go("dashboard"); else go("login");
+        clearPaymentReference();
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [SUPABASE_ENABLED, authReady, authUser?.id]);
   const role = profileRow?.role || "client";
   const isAdmin = role === "admin";
   const showDevNav = !SUPABASE_ENABLED || import.meta.env.DEV;
