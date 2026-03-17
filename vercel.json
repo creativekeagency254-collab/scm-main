@@ -8,5 +8,9 @@
       "destination": "https://muchemi222.vercel.app/$1",
       "permanent": true
     }
+  ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
