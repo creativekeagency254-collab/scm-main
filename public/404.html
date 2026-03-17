@@ -1,0 +1,190 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EdisonPay — Page Not Found</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0f172a;
+      --blue: #1d4ed8;
+      --sky: #60a5fa;
+      --sand: #f8fafc;
+      --paper: #ffffff;
+      --border: rgba(15, 23, 42, 0.12);
+      --shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      font-family: "Geist", "IBM Plex Sans", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 20% 20%, rgba(96,165,250,0.18), transparent 48%),
+                  radial-gradient(circle at 80% 20%, rgba(29,78,216,0.15), transparent 50%),
+                  radial-gradient(circle at 50% 90%, rgba(14,165,233,0.12), transparent 55%),
+                  linear-gradient(180deg, #f9fbff 0%, #f0f5ff 100%);
+      display: grid;
+      place-items: center;
+      padding: 40px 18px;
+    }
+    .grid {
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(rgba(15,23,42,0.05) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(15,23,42,0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .card {
+      width: min(760px, 92vw);
+      background: var(--paper);
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 36px;
+      position: relative;
+      overflow: hidden;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(29,78,216,0.2);
+      background: rgba(59,130,246,0.1);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--blue);
+    }
+    .title {
+      font-size: clamp(36px, 4vw, 54px);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      margin: 18px 0 8px;
+    }
+    .title em {
+      font-family: "Instrument Serif", serif;
+      font-style: italic;
+      font-weight: 400;
+      color: var(--blue);
+    }
+    .sub {
+      font-size: 15px;
+      color: rgba(15,23,42,0.6);
+      line-height: 1.6;
+      max-width: 520px;
+    }
+    .hero {
+      margin-top: 24px;
+      padding: 22px;
+      border-radius: 18px;
+      border: 1px solid rgba(15,23,42,0.1);
+      background: linear-gradient(135deg, rgba(15,23,42,0.03), rgba(96,165,250,0.12));
+      display: grid;
+      gap: 16px;
+    }
+    .hero h2 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .hero p {
+      font-size: 13px;
+      color: rgba(15,23,42,0.6);
+    }
+    .actions {
+      margin-top: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .btn {
+      border-radius: 12px;
+      border: 1.5px solid #0f172a;
+      padding: 12px 18px;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: -0.01em;
+      text-decoration: none;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn.primary {
+      background: #0f172a;
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(15,23,42,0.2);
+    }
+    .btn.secondary {
+      background: #fff;
+      color: #0f172a;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .meta {
+      margin-top: 20px;
+      font-size: 11px;
+      color: rgba(15,23,42,0.5);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .orb {
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(59,130,246,0.25), transparent 65%);
+      right: -80px;
+      top: -80px;
+      filter: blur(2px);
+      opacity: 0.7;
+    }
+    .mark {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #111827 0%, #1d4ed8 100%);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 900;
+      font-size: 14px;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="card">
+    <div class="orb"></div>
+    <div class="badge">ERROR 404</div>
+    <div style="display:flex; align-items:center; gap:12px; margin-top:18px;">
+      <div class="mark">EP</div>
+      <div>
+        <div style="font-size:13px; font-weight:800; letter-spacing:0.14em; color:#1d4ed8;">EDISONPAY</div>
+        <div style="font-size:11px; color:rgba(15,23,42,0.5);">Secure Earnings Platform</div>
+      </div>
+    </div>
+    <div class="title">Page <em>not</em> found</div>
+    <div class="sub">We couldn’t locate that page. The link may be outdated or the page was moved. Use the buttons below to get back on track.</div>
+
+    <div class="hero">
+      <h2>Let’s get you back to earnings.</h2>
+      <p>Return to the EdisonPay home screen or open your dashboard to continue.</p>
+    </div>
+
+    <div class="actions">
+      <a class="btn primary" href="/">Go to Home</a>
+      <a class="btn secondary" href="/">Open Dashboard</a>
+    </div>
+
+    <div class="meta">
+      <span>Need help? Reach your admin team.</span>
+      <span>© 2026 EdisonPay Ltd.</span>
+    </div>
+  </div>
+</body>
+</html>
