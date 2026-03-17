@@ -29,6 +29,15 @@ const getAuthUser = async (supabaseAdmin, req) => {
   return { user: data.user, error: null };
 };
 
+const orderMessageFrom = (order, errorMessage, errorCode) => {
+  const base = String(errorMessage || order?.message || "").trim();
+  const code = String(errorCode || "").trim();
+  if (base && code) return `${base} (${code})`;
+  if (base) return base;
+  if (code) return `Pesapal rejected the order (${code}).`;
+  return "";
+};
+
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
@@ -146,9 +155,11 @@ export default async function handler(req, res) {
         }
       });
       const orderStatus = order?.status ? String(order.status) : "";
-      const orderError = order?.error || order?.error?.message || null;
-      const orderMessage = order?.message || "";
-      if (orderError || (orderStatus && orderStatus !== "200")) {
+      const orderErrorObj = order?.error || null;
+      const orderErrorMessage = order?.error?.message || order?.error?.error_message || "";
+      const orderErrorCode = order?.error?.code || "";
+      const orderMessage = orderMessageFrom(order, orderErrorMessage, orderErrorCode);
+      if (orderErrorObj || (orderStatus && orderStatus !== "200")) {
         await supabaseAdmin
           .from("deposits")
           .update({ status: "failed" })
