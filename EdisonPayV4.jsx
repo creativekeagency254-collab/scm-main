@@ -171,6 +171,22 @@ const getAccessToken = async () => {
   }
 };
 
+const formatDepositError = (msg) => {
+  const raw = String(msg || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower.includes("amount") && lower.includes("limit")) {
+    return "Payment limit reached for this account. Ask Pesapal to raise your limit or try a lower tier amount.";
+  }
+  if (lower.includes("ipn")) {
+    return "Payment gateway is not fully configured yet. Please contact support.";
+  }
+  if (lower.includes("not configured")) {
+    return "Payment gateway is not configured. Please contact support.";
+  }
+  return raw;
+};
+
 const normalizeRefCode = (input) => {
   const raw = String(input || "").trim().toUpperCase();
   const cleaned = raw.replace(/[^A-Z0-9-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
@@ -1520,7 +1536,9 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
   const [depDone, setDepDone] = useState(false);
+  const depErrorMsg = formatDepositError(depError);
   const [autoPrompted, setAutoPrompted] = useState(false);
+  const depErrorMsg = formatDepositError(depError);
   useEffect(() => {
     const intent = getTierIntent();
     if (!Number.isFinite(Number(profileRow?.tier)) && Number.isFinite(intent)) {
@@ -1797,15 +1815,31 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
 
                     {panel === "pay" && (
                       <div style={{ padding:"12px 14px", borderRadius:12, border:"1px solid #E2E8F0", background:"#FFFFFF" }}>
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
-                          <div style={{ fontSize:12, fontWeight:900, color:"#0F172A" }}>
-                            {MANUAL_PAYMENTS ? "Self Deposit Request" : `Self Deposit for ${tier.name}`}
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:12 }}>
+                          <div>
+                            <div style={{ fontSize:10, fontWeight:800, color:"#94A3B8", letterSpacing:"0.18em", textTransform:"uppercase" }}>
+                              Self Deposit Checkout
+                            </div>
+                            <div style={{ fontSize:13, fontWeight:900, color:"#0F172A", marginTop:4 }}>
+                              {MANUAL_PAYMENTS ? "Submit a self deposit request" : `Deposit for ${tier.name}`}
+                            </div>
                           </div>
-                          <div style={{ padding:"4px 8px", borderRadius:999, background:"#111827", color:"#fff", fontSize:10, fontWeight:800 }}>Fixed Amount</div>
+                          <div style={{ padding:"4px 8px", borderRadius:999, background:MANUAL_PAYMENTS ? "#F97316" : "#111827", color:"#fff", fontSize:10, fontWeight:800 }}>
+                            {MANUAL_PAYMENTS ? "MANUAL" : "LIVE"}
+                          </div>
                         </div>
-                        <div style={{ fontSize:20, fontWeight:900, color:"#0F172A" }}>KES {tier.deposit.toLocaleString()}</div>
+
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr auto", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:"#F8FAFC", border:"1px solid #E2E8F0", marginBottom:10 }}>
+                          <div>
+                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:800, letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
+                            <div style={{ fontSize:18, fontWeight:900, color:"#0F172A" }}>KES {tier.deposit.toLocaleString()}</div>
+                            <div style={{ fontSize:10, color:"#64748B", marginTop:2 }}>{tier.name} Tier</div>
+                          </div>
+                          <div style={{ padding:"6px 10px", borderRadius:999, background:"#111827", color:"#fff", fontSize:10, fontWeight:800 }}>FIXED</div>
+                        </div>
+
                         <div style={{ fontSize:11, color:"#64748B", marginTop:2 }}>
-                          {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Amount is locked to your selected tier."}
+                          {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Secure checkout will open in a new window."}
                         </div>
 
                         <div style={{ marginTop:12 }}>
@@ -1835,7 +1869,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                           </div>
                         </div>
 
-                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10 }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
                           <input
                             value={depPhone}
                             onChange={e=>setDepPhone(e.target.value)}
@@ -1862,7 +1896,11 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                                 ? `Submit ${depMethod} Request`
                                 : `Continue with ${depMethod}`))}
                         </button>
-                        {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
+                        {depErrorMsg && (
+                          <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
+                            {depErrorMsg}
+                          </div>
+                        )}
                         {!MANUAL_PAYMENTS && (
                           <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
                             You’ll complete the payment in a secure checkout and return here automatically.
@@ -5343,7 +5381,11 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
                 ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
                 : (!canDeposit ? "No Self Deposit Required" : (depDone ? "Self Deposit Submitted" : (MANUAL_PAYMENTS ? `Submit ${depMethod} Request` : `Continue with ${depMethod}`)))}
             </button>
-            {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
+            {depErrorMsg && (
+              <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
+                {depErrorMsg}
+              </div>
+            )}
             <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
               {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Processing time: typically under 60 seconds."}
             </div>
