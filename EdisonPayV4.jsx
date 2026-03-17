@@ -2655,14 +2655,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
             </div>
           )}
 
-          {/* Search */}
-          {!isMobile && (
-            <div className="ep-topbar-search" style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", background:"#FAFAFA", border:"1.5px solid #111", borderRadius:10, flex:1, maxWidth:280 }}>
-              <I n="search" s={13} c="#CCC"/>
-              <input placeholder="Search transactions, videos..." style={{ border:"none", background:"transparent", outline:"none", fontSize:13, color:"#111", width:"100%", fontFamily:"Geist,sans-serif" }}/>
-            </div>
-          )}
-
           <div style={{ flex:1, minWidth:0 }}/>
 
           {!isMobile && (
@@ -5579,11 +5571,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
           <button onClick={()=>setSideOpen(o=>!o)} style={{ width:34,height:34,borderRadius:8,border:"1.5px solid #111",background:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 3px 0 #111" }}>
             <I n="menu" s={15} c="#111"/>
           </button>
-          <div style={{ display:"flex",alignItems:"center",gap:7,padding:"6px 13px",background:"#fff",border:"1.5px solid #111",borderRadius:9,flex:1,maxWidth:280,boxShadow:"0 3px 0 #111" }}>
-            <I n="search" s={13} c="#111"/>
-            <input placeholder="Search users, transactions..." style={{ border:"none",background:"transparent",outline:"none",fontSize:12,color:"#111",width:"100%",fontFamily:"Geist,sans-serif" }}/>
-            <span style={{ fontSize:9,color:"#111",border:"1px solid #111",borderRadius:4,padding:"1px 5px",flexShrink:0 }}>K</span>
-          </div>
+          <div style={{ flex:1 }} />
           <div style={{ flex:1 }}/>
           <div style={{ display:"flex",alignItems:"center",gap:7,padding:"6px 12px",background:"#fff",border:"1.5px solid #111",borderRadius:8,flexShrink:0,boxShadow:"0 3px 0 #111" }}>
             <div style={{ width:6,height:6,borderRadius:"50%",background:ADMIN.green,animation:"pulse 2s infinite" }}/>
@@ -5731,10 +5719,6 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
             <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
               {/* Filters */}
               <div style={{ display:"flex",gap:10,flexWrap:"wrap",alignItems:"center" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:7,padding:"8px 14px",background:"#fff",border:"2px solid #111",borderRadius:9,flex:1,maxWidth:300 }}>
-                  <I n="search" s={13} c="#111"/>
-                  <input value={userSearch} onChange={e=>setUserSearch(e.target.value)} placeholder="Search name or email..." style={{ border:"none",background:"transparent",outline:"none",fontSize:13,color:"#111",width:"100%",fontFamily:"Geist,sans-serif" }}/>
-                </div>
                 <div style={{ display:"flex",gap:4,background:"#fff",border:"2px solid #111",borderRadius:9,padding:3 }}>
                   {["all","active","pending","suspended"].map(f=>(
                     <button key={f} onClick={()=>setUserFilter(f)} style={{ padding:"6px 14px",borderRadius:7,border:"1px solid #111",background:userFilter===f?"#111":"transparent",color:userFilter===f?"#fff":"#111",fontSize:12,fontWeight:userFilter===f?800:600,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
