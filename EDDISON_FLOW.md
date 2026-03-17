@@ -9,12 +9,12 @@ Source of truth: Current repository implementation and Supabase migrations.
 
 **1. Executive Summary**
 
-EdisonPay is a web and mobile-first app that rewards users for completing daily video tasks within a tiered deposit model. Users sign up (email or Google), choose a tier, complete two required videos each day, and earn tier-based rewards. Tier deposits unlock withdrawals and can also be used to gate earnings depending on the deployed database migration. Deposits are processed through Paystack in test mode, with wallet balances and a full ledger stored in Supabase Postgres. The system supports referrals with 10 percent direct-commission and includes an admin dashboard for payout review and reconciliation.
+EdisonPay is a web and mobile-first app that rewards users for completing daily video tasks within a tiered deposit model. Users sign up (email or Google), choose a tier, complete two required videos each day, and earn tier-based rewards. Tier deposits unlock withdrawals and can also be used to gate earnings depending on the deployed database migration. Deposits are processed through PesaPal in test mode, with wallet balances and a full ledger stored in Supabase Postgres. The system supports referrals with 10 percent direct-commission and includes an admin dashboard for payout review and reconciliation.
 
 Core commitments:
 1. Wallet math is authoritative and ledger-backed.
 2. Earnings are idempotent and tied to verified video completions.
-3. Deposits are idempotent and reconcile with Paystack.
+3. Deposits are idempotent and reconcile with PesaPal.
 4. Withdrawals are scheduled Tue and Fri only.
 5. Auth and access control are enforced by Supabase RLS policies.
 
@@ -29,7 +29,7 @@ flowchart LR
   U -->|API calls| API[Node API server]
   API -->|SQL RPC| SBDB[Supabase Postgres]
   U -->|Direct DB read via Supabase| SBDB
-  API -->|Paystack init/verify| PS[Paystack API]
+  API -->|PesaPal init/verify| PS[PesaPal API]
   PS -->|Webhook charge.success| API
   Admin[Admin UI] -->|RLS Admin| SBDB
   API -->|Ledger updates| SBDB
@@ -37,7 +37,7 @@ flowchart LR
 
 Components:
 1. Frontend: `EdisonPayV4.jsx` single-page app with landing, auth, tier selection, dashboard, and admin UI.
-2. Backend: `server/index.js` for deposit creation and verification, `server/paystack-webhook.js` for webhook processing.
+2. Backend: `server/index.js` for deposit creation and verification, `server/pesapal-webhook.js` for webhook processing.
 3. Data: Supabase Postgres (migrations in `supabase/migrations`).
 4. Auth: Supabase Auth (email and Google OAuth).
 
@@ -54,7 +54,7 @@ flowchart TD
   D --> E[Watch 2 Required Videos]
   E --> F[Claim Earnings]
   D --> G[Deposit Tier Amount]
-  G --> H[Paystack Checkout]
+  G --> H[PesaPal Checkout]
   H --> I[Return to App]
   I --> J[Verify Deposit and Update Wallet]
   D --> K[Withdraw Request]
@@ -116,29 +116,29 @@ sequenceDiagram
 
 ---
 
-**6. Deposit Flow (Paystack)**
+**6. Deposit Flow (PesaPal)**
 
 Two supported settlement paths:
-1. Webhook path: Paystack sends `charge.success` to the webhook.
-2. Return path: client calls `deposit/verify` after Paystack redirect.
+1. Webhook path: PesaPal sends an IPN notification to the webhook.
+2. Return path: client calls `deposit/verify` after PesaPal redirect.
 
 Mermaid diagram:
 ```mermaid
 sequenceDiagram
   participant Client
   participant API
-  participant Paystack
+  participant PesaPal
   participant DB
   Client->>API: POST /api/v1/deposit/create
-  API->>Paystack: initialize transaction
-  Paystack-->>Client: authorization_url
-  Client->>Paystack: complete payment
-  Paystack-->>Client: redirect with reference
+  API->>PesaPal: initialize transaction
+  PesaPal-->>Client: redirect_url
+  Client->>PesaPal: complete payment
+  PesaPal-->>Client: redirect with reference
   Client->>API: GET /api/v1/deposit/verify?reference=...
-  API->>Paystack: verify transaction
+  API->>PesaPal: verify transaction
   API->>DB: upsert deposit + apply_wallet_tx
   API-->>Client: success + updated wallet
-  Paystack-->>API: webhook charge.success (optional)
+  PesaPal-->>API: IPN notification (optional)
 ```
 
 Idempotency points:
@@ -181,10 +181,10 @@ Rules:
 Mermaid diagram:
 ```mermaid
 sequenceDiagram
-  participant Paystack
+  participant PesaPal
   participant API
   participant DB
-  Paystack-->>API: charge.success
+  PesaPal-->>API: IPN notification
   API->>DB: mark deposit success
   API->>DB: apply_wallet_tx(deposit)
   API->>DB: create referrals row
@@ -222,7 +222,7 @@ Tables:
 1. `users` (app profile): tier, referral_code, status, profile_data.
 2. `wallets`: balance, available_for_withdrawal, hold.
 3. `transactions`: ledger for every balance move.
-4. `deposits`: Paystack references and status.
+4. `deposits`: PesaPal references and status.
 5. `video_views`: required and optional watches.
 6. `referrals`: commission tracking.
 7. `payout_requests`: withdrawal queue.
@@ -259,10 +259,10 @@ RLS policy highlights:
 **12. Backend API (Node/Express)**
 
 Endpoints:
-1. `POST /api/v1/deposit/create`: initializes Paystack checkout and stores pending deposit.
+1. `POST /api/v1/deposit/create`: initializes PesaPal checkout and stores pending deposit.
 2. `GET /api/v1/deposit/status`: read deposit status by reference.
-3. `GET /api/v1/deposit/verify`: verify Paystack transaction and update wallet immediately.
-4. `POST /api/v1/webhook/paystack`: webhook handler for Paystack events.
+3. `GET /api/v1/deposit/verify`: verify PesaPal transaction and update wallet immediately.
+4. `POST /api/v1/webhook/pesapal`: webhook handler for PesaPal events.
 5. `GET /health`: health check.
 
 Behavior summary:
@@ -298,7 +298,7 @@ Capabilities:
 4. Track referral activity.
 
 Future-ready:
-1. Add reconciliation panel for Paystack vs internal ledger.
+1. Add reconciliation panel for PesaPal vs internal ledger.
 2. Add payout automation or integration with M-PESA.
 
 ---
@@ -335,7 +335,7 @@ Caching opportunities:
 
 Recommended monitoring:
 1. Log all webhook attempts.
-2. Daily reconciliation of Paystack transaction list vs `deposits`.
+2. Daily reconciliation of PesaPal transaction list vs `deposits`.
 3. Alerts for mismatches greater than 0.1 percent.
 
 ---
@@ -359,13 +359,13 @@ Required environment values:
 2. `VITE_SUPABASE_ANON_KEY`
 3. `VITE_API_BASE`
 4. `SUPABASE_SERVICE_ROLE_KEY` for server only
-5. `PAYSTACK_SECRET_KEY` for server only
-6. `PAYSTACK_CALLBACK_URL` for Paystack redirect
+5. `PESAPAL_CONSUMER_KEY` and `PESAPAL_CONSUMER_SECRET` for server only
+6. `PESAPAL_CALLBACK_URL` for PesaPal redirect
 7. `CORS_ORIGIN` list for API
 
 Deployment notes:
 1. Never expose service role key in frontend.
-2. Use HTTPS domains for Paystack callbacks.
+2. Use HTTPS domains for PesaPal callbacks.
 3. Set Supabase site URL and OAuth redirect URLs correctly.
 
 ---
@@ -390,7 +390,7 @@ Notes:
 These are the main implementation sources:
 1. `C:\Users\user\scm\scm-main\EdisonPayV4.jsx`
 2. `C:\Users\user\scm\scm-main\server\index.js`
-3. `C:\Users\user\scm\scm-main\server\paystack-webhook.js`
+3. `C:\Users\user\scm\scm-main\server\pesapal-webhook.js`
 4. `C:\Users\user\scm\scm-main\supabase\migrations\20260314_mvp.sql`
 5. `C:\Users\user\scm\scm-main\supabase\migrations\20260314_claim_earning.sql`
 6. `C:\Users\user\scm\scm-main\supabase\migrations\20260315_rls_and_functions.sql`
@@ -409,4 +409,5 @@ These are the main implementation sources:
 5. Claim: A daily earnings request after required videos are verified.
 6. Payout request: A queued withdrawal scheduled for Tue or Fri.
 7. Referral: A direct commission paid to a referrer when a deposit succeeds.
+
 

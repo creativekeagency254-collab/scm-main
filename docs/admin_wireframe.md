@@ -13,7 +13,7 @@
 | - Referrals          | - User | Amount | Method | Scheduled | Status | Actions  |
 | - Reconciliation     |                                                         |
 | - Settings           | RECONCILIATION                                          |
-|                      | - Paystack total vs ledger total                         |
+|                      | - PesaPal total vs ledger total                         |
 |                      | - Mismatch alerts (>=0.1%)                               |
 |                      |                                                         |
 |                      | RECENT EVENTS                                            |
@@ -30,4 +30,5 @@
 Notes
 1. Pending payouts list filters by scheduled date (Tue/Fri) and status.
 2. Actions: Approve, Mark Paid, Reject (with reason).
-3. Reconciliation view compares Paystack transactions vs `deposits` ledger.
+3. Reconciliation view compares PesaPal transactions vs `deposits` ledger.
+

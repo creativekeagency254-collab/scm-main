@@ -19,7 +19,8 @@ For E2E tests (optional):
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-PAYSTACK_SECRET_KEY=sk_test_...
+PESAPAL_CONSUMER_KEY=your_pesapal_key
+PESAPAL_CONSUMER_SECRET=your_pesapal_secret
 API_BASE=http://localhost:8787
 ```
 

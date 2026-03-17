@@ -128,6 +128,13 @@ const GlobalStyles = () => {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const API_BASE = import.meta.env.VITE_API_BASE || "";
+const PAYMENTS_MODE = String(import.meta.env.VITE_PAYMENTS_MODE || "live").toLowerCase();
+const MANUAL_PAYMENTS = PAYMENTS_MODE === "manual";
+const WITHDRAWALS_MODE = String(import.meta.env.VITE_WITHDRAWALS_MODE || PAYMENTS_MODE || "manual").toLowerCase();
+const MANUAL_WITHDRAWALS = WITHDRAWALS_MODE !== "auto";
+const DEPOSIT_INSTRUCTIONS =
+  import.meta.env.VITE_DEPOSIT_INSTRUCTIONS ||
+  "Submit your deposit request and our team will share payment instructions and confirm your wallet credit.";
 const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
     persistSession: true,
@@ -426,6 +433,8 @@ function PaymentLogo({ name }) {
       return <Wordmark text="Stripe" width={70} />;
     case "Alipay":
       return <Wordmark text="Alipay" width={70} />;
+    case "PesaPal":
+      return <Wordmark text="PesaPal" width={90} />;
     case "WeChat Pay":
       return (
         <svg viewBox="0 0 100 24" height="20" role="img" aria-label="WeChat Pay" style={{ display:"block" }}>
@@ -448,8 +457,6 @@ function PaymentLogo({ name }) {
       );
     case "Payoneer":
       return <Wordmark text="Payoneer" width={86} />;
-    case "Paystack":
-      return <Wordmark text="Paystack" width={86} />;
     case "Airtel Money":
       return <Wordmark text="Airtel Money" width={110} />;
     default:
@@ -558,36 +565,68 @@ const getRefFromUrl = () => {
     return "";
   }
     };
-const getPaymentReference = () => {
-  if (typeof window === "undefined") return "";
+const getPaymentParams = () => {
+  if (typeof window === "undefined") return { trackingId: "", merchantReference: "" };
   try {
     const url = new URL(window.location.href);
-    const ref =
+    const trackingId =
+      url.searchParams.get("OrderTrackingId") ||
+      url.searchParams.get("orderTrackingId") ||
+      url.searchParams.get("order_tracking_id") ||
+      url.searchParams.get("tracking_id") ||
+      "";
+    const merchantReference =
+      url.searchParams.get("OrderMerchantReference") ||
+      url.searchParams.get("orderMerchantReference") ||
+      url.searchParams.get("merchant_reference") ||
       url.searchParams.get("reference") ||
       url.searchParams.get("trxref") ||
-      url.searchParams.get("paystack") ||
-      url.searchParams.get("paystack_ref") ||
-      url.searchParams.get("ref");
-    if (ref) return String(ref);
+      url.searchParams.get("ref") ||
+      "";
     if (url.hash && url.hash.length > 1) {
       const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
-      return (
+      const hashTracking =
+        hash.get("OrderTrackingId") ||
+        hash.get("orderTrackingId") ||
+        hash.get("order_tracking_id") ||
+        hash.get("tracking_id") ||
+        "";
+      const hashRef =
+        hash.get("OrderMerchantReference") ||
+        hash.get("orderMerchantReference") ||
+        hash.get("merchant_reference") ||
         hash.get("reference") ||
         hash.get("trxref") ||
-        hash.get("paystack_ref") ||
-        ""
-      );
+        "";
+      return {
+        trackingId: String(trackingId || hashTracking || ""),
+        merchantReference: String(merchantReference || hashRef || "")
+      };
     }
-    return "";
+    return {
+      trackingId: String(trackingId || ""),
+      merchantReference: String(merchantReference || "")
+    };
   } catch (e) {
-    return "";
+    return { trackingId: "", merchantReference: "" };
   }
     };
-const clearPaymentReference = () => {
+const clearPaymentParams = () => {
   if (typeof window === "undefined") return;
   try {
     const url = new URL(window.location.href);
-    ["reference","trxref","paystack","paystack_ref","ref"].forEach(k => url.searchParams.delete(k));
+    [
+      "OrderTrackingId",
+      "orderTrackingId",
+      "order_tracking_id",
+      "tracking_id",
+      "OrderMerchantReference",
+      "orderMerchantReference",
+      "merchant_reference",
+      "reference",
+      "trxref",
+      "ref"
+    ].forEach(k => url.searchParams.delete(k));
     url.hash = "";
     window.history.replaceState({}, document.title, url.pathname);
   } catch (e) {}
@@ -733,7 +772,7 @@ function Landing({ go }) {
   const payments = [
     "Google Pay","USDT","Flutterwave","Binance Pay","M-Pesa","Visa","Mastercard","Bitcoin","BNB",
     "PayPal","Apple Pay","Samsung Pay","Stripe","Alipay","WeChat Pay","Skrill","Neteller","Ethereum","Litecoin","USDC","Cash App","Payoneer",
-    "Paystack","Airtel Money"
+    "PesaPal","Airtel Money"
   ];
 
   const anim = (delay = 0) => ({ animation: `fadeUp .55s ease both`, animationDelay: `${delay}ms`, opacity: heroVisible ? 1 : 0 });
@@ -1412,6 +1451,12 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [panel, setPanel] = useState("");
+  const [depPhone, setDepPhone] = useState("");
+  const [depName, setDepName] = useState("");
+  const [depLoading, setDepLoading] = useState(false);
+  const [depError, setDepError] = useState("");
+  const [depDone, setDepDone] = useState(false);
   useEffect(() => {
     const intent = getTierIntent();
     if (!Number.isFinite(Number(profileRow?.tier)) && Number.isFinite(intent)) {
@@ -1419,22 +1464,119 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     } else if (Number.isFinite(Number(profileRow?.tier))) {
       setSelected(Number(profileRow.tier));
     }
+    setPanel("");
   }, [profileRow?.tier]);
 
-  const handleChoose = async (tierId) => {
+  useEffect(() => {
+    if (profileRow?.phone && !depPhone) setDepPhone(String(profileRow.phone));
+    if ((profileRow?.name || profileRow?.full_name) && !depName) {
+      setDepName(String(profileRow?.name || profileRow?.full_name));
+    }
+  }, [profileRow?.phone, profileRow?.name, profileRow?.full_name]);
+
+  const handlePick = (tierId) => {
     if (!tierId) return;
     setSelected(tierId);
     setErr("");
-    if (!onSelectTier) return;
+    setDepError("");
+    setPanel("");
+    storeTierIntent(tierId);
+  };
+
+  const commitTier = async (tierId, { navigate = false } = {}) => {
+    if (!onSelectTier) {
+      if (navigate) go("dashboard");
+      return true;
+    }
     setSaving(true);
     const ok = await onSelectTier(tierId);
     setSaving(false);
     if (!ok) {
       setErr("Unable to save tier. Please try again.");
-      return;
+      return false;
     }
     clearTierIntent();
-    go("dashboard");
+    if (navigate) go("dashboard");
+    return true;
+  };
+
+  const togglePanel = (next) => {
+    setPanel((prev) => (prev === next ? "" : next));
+  };
+
+  const handlePayNow = async (tierId) => {
+    setErr("");
+    setDepError("");
+    const ok = await commitTier(tierId, { navigate: false });
+    if (!ok) return;
+    togglePanel("pay");
+  };
+
+  const handlePayLater = async (tierId) => {
+    setErr("");
+    setDepError("");
+    await commitTier(tierId, { navigate: true });
+  };
+
+  const submitTierDeposit = async (tier) => {
+    if (!tier) return;
+    if (!authUser?.id) {
+      setDepError("Please sign in to pay.");
+      return;
+    }
+    if (!API_BASE) {
+      setDepError("Payment service is not configured. Please contact support.");
+      return;
+    }
+    const email = authUser?.email || profileRow?.email || "";
+    if (!email) {
+      setDepError("Email is required for PesaPal checkout.");
+      return;
+    }
+    setDepError("");
+    setDepLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/deposit/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(tier.deposit),
+          user_id: authUser.id,
+          email,
+          tier: tier.id,
+          method: "PesaPal",
+          phone: depPhone || profileRow?.phone || "",
+          name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const rawMsg = data?.error || data?.message || "Failed to start PesaPal checkout.";
+        const msg =
+          String(rawMsg || "").toLowerCase().includes("ipn")
+            ? "Payment gateway not configured yet. Please contact support."
+            : rawMsg;
+        setDepError(msg);
+        return;
+      }
+      const url = data?.authorization_url || data?.redirect_url || data?.auth_url || data?.url;
+      if (data?.manual) {
+        setDepDone(true);
+        setTimeout(() => setDepDone(false), 2500);
+        return;
+      }
+      if (!url) {
+        setDepError("PesaPal did not return a checkout URL.");
+        return;
+      }
+      setDepDone(true);
+      setTimeout(() => setDepDone(false), 2500);
+      window.location.href = url;
+    } catch (e) {
+      setDepError("Network error. Please try again.");
+    } finally {
+      setDepLoading(false);
+    }
   };
 
   return (
@@ -1477,24 +1619,152 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                 <div style={{ fontSize:13, color:"#6B7280", marginBottom:16 }}>
                   Daily earning: <strong style={{ color:"#111" }}>KES {daily.toLocaleString()}</strong>
                 </div>
-                <button
-                  disabled={saving}
-                  onClick={() => handleChoose(tier.id)}
-                  style={{
-                    width:"100%",
-                    padding:"10px 14px",
-                    borderRadius:10,
-                    border:"1.5px solid #111",
-                    background:isActive ? "#111" : "#fff",
-                    color:isActive ? "#fff" : "#111",
-                    fontWeight:800,
-                    fontSize:13,
-                    cursor:saving ? "not-allowed" : "pointer",
-                    fontFamily:"Geist,sans-serif"
-                  }}
-                >
-                  {saving && isActive ? "Saving..." : isActive ? "Continue" : "Select Tier"}
-                </button>
+                {!isActive && (
+                  <button
+                    disabled={saving}
+                    onClick={() => handlePick(tier.id)}
+                    style={{
+                      width:"100%",
+                      padding:"10px 14px",
+                      borderRadius:10,
+                      border:"1.5px solid #111",
+                      background:"#fff",
+                      color:"#111",
+                      fontWeight:800,
+                      fontSize:13,
+                      cursor:saving ? "not-allowed" : "pointer",
+                      fontFamily:"Geist,sans-serif"
+                    }}
+                  >
+                    Select Tier
+                  </button>
+                )}
+                {isActive && (
+                  <>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
+                      <button
+                        disabled={saving}
+                        onClick={() => togglePanel("earn")}
+                        style={{
+                          padding:"9px 8px",
+                          borderRadius:9,
+                          border:`1.5px solid ${panel==="earn" ? "#111" : "#E2E8F0"}`,
+                          background:panel==="earn" ? "#111" : "#fff",
+                          color:panel==="earn" ? "#fff" : "#111",
+                          fontWeight:800,
+                          fontSize:12,
+                          cursor:saving ? "not-allowed" : "pointer",
+                          fontFamily:"Geist,sans-serif"
+                        }}
+                      >
+                        Earnings
+                      </button>
+                      <button
+                        disabled={saving}
+                        onClick={() => handlePayNow(tier.id)}
+                        style={{
+                          padding:"9px 8px",
+                          borderRadius:9,
+                          border:`1.5px solid ${panel==="pay" ? "#111" : "#E2E8F0"}`,
+                          background:panel==="pay" ? "#111" : "#fff",
+                          color:panel==="pay" ? "#fff" : "#111",
+                          fontWeight:800,
+                          fontSize:12,
+                          cursor:saving ? "not-allowed" : "pointer",
+                          fontFamily:"Geist,sans-serif"
+                        }}
+                      >
+                        {saving ? "Saving..." : "Pay Now"}
+                      </button>
+                      <button
+                        disabled={saving}
+                        onClick={() => handlePayLater(tier.id)}
+                        style={{
+                          padding:"9px 8px",
+                          borderRadius:9,
+                          border:"1.5px solid #E2E8F0",
+                          background:"#F8FAFC",
+                          color:"#475569",
+                          fontWeight:800,
+                          fontSize:12,
+                          cursor:saving ? "not-allowed" : "pointer",
+                          fontFamily:"Geist,sans-serif"
+                        }}
+                      >
+                        Pay Later
+                      </button>
+                    </div>
+
+                    {panel === "earn" && (
+                      <div style={{ padding:"12px 14px", borderRadius:12, border:"1px solid #E2E8F0", background:"#F8FAFC", marginBottom:10 }}>
+                        <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:10 }}>Earnings Breakdown</div>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
+                          <div>
+                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Required videos</div>
+                            <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>{tier.videos} per day</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Per video</div>
+                            <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>KES {V_PRICE}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Bonus</div>
+                            <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>
+                              {tier.bonusType === "none" ? "No bonus" : `KES ${tier.bonusAmount}`}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Daily total</div>
+                            <div style={{ fontSize:13, fontWeight:900, color:"#0F172A" }}>KES {daily.toLocaleString()}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {panel === "pay" && (
+                      <div style={{ padding:"12px 14px", borderRadius:12, border:"1px solid #E2E8F0", background:"#FFFFFF" }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
+                          <div style={{ fontSize:12, fontWeight:900, color:"#0F172A" }}>
+                            {MANUAL_PAYMENTS ? "Manual Deposit Request" : `Deposit for ${tier.name}`}
+                          </div>
+                          <div style={{ padding:"4px 8px", borderRadius:999, background:"#111827", color:"#fff", fontSize:10, fontWeight:800 }}>Fixed Amount</div>
+                        </div>
+                        <div style={{ fontSize:20, fontWeight:900, color:"#0F172A" }}>KES {tier.deposit.toLocaleString()}</div>
+                        <div style={{ fontSize:11, color:"#64748B", marginTop:2 }}>
+                          {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Amount is locked to your selected tier."}
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10 }}>
+                          <input
+                            value={depPhone}
+                            onChange={e=>setDepPhone(e.target.value)}
+                            placeholder="Phone (M‑Pesa, optional)"
+                            style={{ width:"100%",padding:"9px 10px",borderRadius:9,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+                          />
+                          <input
+                            value={depName}
+                            onChange={e=>setDepName(e.target.value)}
+                            placeholder="Full name (optional)"
+                            style={{ width:"100%",padding:"9px 10px",borderRadius:9,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+                          />
+                        </div>
+                        <button
+                          onClick={() => submitTierDeposit(tier)}
+                          disabled={depLoading}
+                          style={{ width:"100%",marginTop:10,padding:"11px 12px",background:depLoading?"#334155":"linear-gradient(135deg,#111827 0%, #0F172A 100%)",color:"#fff",border:"none",borderRadius:10,fontWeight:900,fontSize:12,cursor:depLoading?"not-allowed":"pointer",fontFamily:"Geist,sans-serif" }}
+                        >
+                          {depLoading
+                            ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
+                            : (depDone
+                              ? "Deposit Submitted"
+                              : (MANUAL_PAYMENTS
+                                ? `Submit Request — KES ${tier.deposit.toLocaleString()}`
+                                : `Pay KES ${tier.deposit.toLocaleString()} with PesaPal`))}
+                        </button>
+                        {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             );
           })}
@@ -4568,24 +4838,13 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
 function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx, onBalanceUpdate, hasDeposit }) {
   const [wdAmt,setWdAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
   const [wdError, setWdError] = useState("");
-  const [depMethod, setDepMethod] = useState("M-Pesa");
   const [depAmt, setDepAmt] = useState("");
   const [depPhone, setDepPhone] = useState("");
   const [depName, setDepName] = useState("");
-  const [depCard, setDepCard] = useState("");
-  const [depExp, setDepExp] = useState("");
-  const [depCvv, setDepCvv] = useState("");
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
   const [depDone, setDepDone] = useState(false);
   const depositRef = useRef(null);
-  const [cryptoNet, setCryptoNet] = useState("USDT-TRC20");
-  const [cryptoAmt, setCryptoAmt] = useState("");
-  const [cryptoWdAmt, setCryptoWdAmt] = useState("");
-  const [cryptoWallet, setCryptoWallet] = useState("");
-  const [cryptoCopied, setCryptoCopied] = useState(false);
-  const [cryptoWdDone, setCryptoWdDone] = useState(false);
-  const [cryptoTopupDone, setCryptoTopupDone] = useState(false);
   const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
   const can=["Tuesday","Friday"].includes(today);
   const nextTier = TIERS[t.id];
@@ -4594,26 +4853,6 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const needsUnlock = hasDeposit === false;
   const unlockNeed = needsUnlock ? t.deposit : 0;
   const primaryNeed = needsUnlock ? unlockNeed : upgradeNeed;
-  const accountRef = String(profileRow?.name || authUser?.email || authUser?.id || "EDISONPAY").slice(0, 18);
-  const depMethods = ["M-Pesa","Airtel Money","Tigo Pesa","HaloPesa","MTN MoMo","Card","Crypto"];
-  const mobileMoneyMeta = {
-    "M-Pesa": { label:"PAYBILL", code:"247247" },
-    "Airtel Money": { label:"BUSINESS", code:"509999" },
-    "Tigo Pesa": { label:"MERCHANT", code:"555555" },
-    "HaloPesa": { label:"BUSINESS", code:"777777" },
-    "MTN MoMo": { label:"MERCHANT", code:"890000" },
-  };
-  const isMobileMoney = Object.prototype.hasOwnProperty.call(mobileMoneyMeta, depMethod);
-  const mobileMeta = mobileMoneyMeta[depMethod] || mobileMoneyMeta["M-Pesa"];
-  const cryptoAddresses = {
-    "USDT-TRC20": "TV4bY7fK7yFQJt9iWcQk2L3S8P2Vw7HcJ9",
-    "USDT-ERC20": "0x7a7b9C2e6C4B9cA2cB7e0a1d9A8BfF3C2D4E5F6a",
-    "BTC": "bc1q9v4r6k0d9g2w4f5t7p8m0q1r3s5u6v7x8y9z0",
-    "ETH": "0x2f1aB4cD5e6F7a8B9c0D1e2F3a4B5c6D7e8F9a0B",
-    "BNB": "bnb1grpf0955h0ykj3m0w6t2k7fsf2gj2p0u3y4a5b",
-  };
-  const curAddress = cryptoAddresses[cryptoNet];
-  const copyCrypto = () => { try { navigator.clipboard?.writeText(curAddress); } catch(e){} setCryptoCopied(true); setTimeout(()=>setCryptoCopied(false), 2000); };
   useEffect(() => {
     if (!focusDeposit) return;
     if (depositRef.current) depositRef.current.scrollIntoView({ behavior:"smooth", block:"start" });
@@ -4623,17 +4862,17 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const submitDeposit = async () => {
     const amt = Number(depAmt);
     if (!Number.isFinite(amt) || amt <= 0) return;
-    if (depMethod === "Crypto") {
-      setDepError("Use the Crypto Top Up section below for crypto deposits.");
-      return;
-    }
     if (!authUser?.id) {
       setDepError("Please log in to deposit.");
       return;
     }
+    if (!API_BASE) {
+      setDepError("Payment service is not configured. Please contact support.");
+      return;
+    }
     const email = authUser?.email || profileRow?.email || "";
     if (!email) {
-      setDepError("Email is required for Paystack checkout.");
+      setDepError("Email is required for PesaPal checkout.");
       return;
     }
     setDepError("");
@@ -4647,17 +4886,37 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
           user_id: authUser.id,
           email,
           tier: t.id,
-          method: depMethod
+          method: "PesaPal",
+          phone: depPhone || profileRow?.phone || "",
+          name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
         })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setDepError(data?.error || data?.message || "Failed to start Paystack checkout.");
+        const rawMsg = data?.error || data?.message || "Failed to start PesaPal checkout.";
+        const msg =
+          String(rawMsg || "").toLowerCase().includes("ipn")
+            ? "Payment gateway not configured yet. Please contact support."
+            : rawMsg;
+        setDepError(msg);
         return;
       }
-      const url = data?.authorization_url || data?.auth_url || data?.url;
+      const url = data?.authorization_url || data?.redirect_url || data?.auth_url || data?.url;
+      if (data?.manual) {
+        setDepDone(true);
+        setTimeout(() => setDepDone(false), 2500);
+        onNewTx?.({
+          ic:"wallet",
+          text:"Deposit requested",
+          sub:`KES ${amt.toLocaleString()} pending manual confirmation`,
+          time:"Just now",
+          c:"#0066FF",
+          amt
+        });
+        return;
+      }
       if (!url) {
-        setDepError("Paystack did not return a checkout URL.");
+        setDepError("PesaPal did not return a checkout URL.");
         return;
       }
       setDepDone(true);
@@ -4665,7 +4924,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       onNewTx?.({
         ic:"wallet",
         text:"Deposit initiated",
-        sub:`KES ${amt.toLocaleString()} via Paystack`,
+        sub:`KES ${amt.toLocaleString()} via PesaPal`,
         time:"Just now",
         c:"#0066FF",
         amt
@@ -4722,18 +4981,6 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
     setTimeout(()=>setDone(false), 3000);
   };
 
-  const submitCryptoWithdrawal = async () => {
-    setWdError("");
-    if (hasDeposit === false) {
-      setWdError(`Deposit KES ${t.deposit.toLocaleString()} to unlock withdrawals for Tier ${t.id}.`);
-      return;
-    }
-    if (!cryptoWdAmt || !cryptoWallet) return;
-    const ok = await requestWithdrawal(cryptoWdAmt, "Crypto", cryptoWallet);
-    if (!ok) return;
-    setCryptoWdDone(true);
-    setTimeout(()=>setCryptoWdDone(false), 2500);
-  };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
       <div style={{ padding:"14px 18px",borderRadius:10,border:`1px solid ${can?"#A7F3D0":"#FCA5A5"}`,background:can?"#ECFDF5":"#FFF0F0",display:"flex",alignItems:"center",gap:12 }}>
@@ -4743,6 +4990,9 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
           <div>
             <div style={{ fontWeight:800,fontSize:14,color:can?"#065F46":"#991B1B" }}>{can?"Withdrawals processing today":"Withdrawals queued today"}</div>
             <div style={{ fontSize:12,color:"#888",marginTop:2 }}>Processing: Tue & Fri - 08:30 - 17:30</div>
+            {MANUAL_WITHDRAWALS && (
+              <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>All withdrawals are manually approved by admin.</div>
+            )}
           </div>
         </div>
       {hasDeposit === false && (
@@ -4756,169 +5006,198 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         </div>
       )}
 
-      <div ref={depositRef} style={{ background:"#fff",borderRadius:14,padding:"20px 22px",border:"1px solid #111",boxShadow:"0 6px 18px rgba(0,0,0,0.08)" }}>
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:10 }}>
+      <div ref={depositRef} style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"18px 20px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.08)" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
           <div>
-            <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>{needsUnlock ? "Unlock Tier Deposit" : "Upgrade & Deposit"}</div>
-            <div style={{ fontSize:11,color:"#666",marginTop:2 }}>
+            <div style={{ fontSize:13,fontWeight:900,color:"#0F172A",letterSpacing:"0.02em" }}>{needsUnlock ? "Unlock Tier Deposit" : "Upgrade & Deposit"}</div>
+            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>
               {needsUnlock ? `Deposit required to unlock ${t.name} earnings.` : (nextTier ? `Next tier: ${nextTier.name}` : "You're already at the top tier.")}
             </div>
           </div>
           {needsUnlock ? (
-            <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:9,fontSize:11,color:"#9A3412",fontWeight:800 }}>
+            <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,fontSize:11,color:"#9A3412",fontWeight:800 }}>
               Deposit KES {unlockNeed.toLocaleString()} to unlock
             </div>
           ) : nextTier && (
-            <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:9,fontSize:11,color:"#9A3412",fontWeight:800 }}>
+            <div style={{ padding:"6px 10px",background:"#EEF2FF",border:"1px solid #C7D2FE",borderRadius:999,fontSize:11,color:"#3730A3",fontWeight:800 }}>
               Need KES {upgradeNeed.toLocaleString()} to upgrade
             </div>
           )}
         </div>
 
         {nextTier && (
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:12 }}>
-            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #E8E8E8",background:"#FAFAFA" }}>
-              <div style={{ fontSize:9,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:4 }}>BALANCE</div>
-              <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>KES {safeBalance.toLocaleString()}</div>
-              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>{t.name} Tier</div>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14 }}>
+            <div style={{ padding:"10px 12px",borderRadius:12,border:"1px solid #E5E7EB",background:"#FFFFFF" }}>
+              <div style={{ fontSize:9,color:"#94A3B8",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>BALANCE</div>
+              <div style={{ fontSize:13,fontWeight:900,color:"#0F172A" }}>KES {safeBalance.toLocaleString()}</div>
+              <div style={{ fontSize:10,color:"#94A3B8",marginTop:2 }}>{t.name} Tier</div>
             </div>
-            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #111",background:"#fff" }}>
-              <div style={{ fontSize:9,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:4 }}>NEXT</div>
-              <div style={{ fontSize:13,fontWeight:900,color:"#111" }}>{nextTier.name}</div>
-              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>KES {nextTier.deposit.toLocaleString()}</div>
+            <div style={{ padding:"10px 12px",borderRadius:12,border:"1px solid #111827",background:"#111827" }}>
+              <div style={{ fontSize:9,color:"rgba(255,255,255,0.6)",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>NEXT</div>
+              <div style={{ fontSize:13,fontWeight:900,color:"#FFFFFF" }}>{nextTier.name}</div>
+              <div style={{ fontSize:10,color:"rgba(255,255,255,0.65)",marginTop:2 }}>KES {nextTier.deposit.toLocaleString()}</div>
             </div>
-            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #E8E8E8",background:"#FAFAFA" }}>
-              <div style={{ fontSize:9,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:4 }}>TOP UP</div>
-              <div style={{ fontSize:13,fontWeight:900,color:"#059669" }}>KES {upgradeNeed.toLocaleString()}</div>
-              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>to upgrade</div>
-            </div>
-          </div>
-        )}
-
-        <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:12 }}>
-          {depMethods.map(m=>(
-            <button key={m} onClick={()=>setDepMethod(m)} style={{ padding:"7px 12px",borderRadius:9,border:`1.5px solid ${depMethod===m?"#111":"#E8E8E8"}`,background:depMethod===m?"#111":"#fff",color:depMethod===m?"#fff":"#666",fontWeight:800,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{m}</button>
-          ))}
-        </div>
-
-        {isMobileMoney && (
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
-            <div style={{ padding:"10px 12px",borderRadius:10,border:"1px solid #E8E8E8",background:"#FAFAFA" }}>
-              <div style={{ fontSize:10,color:"#999",fontWeight:800,letterSpacing:"0.08em",marginBottom:6 }}>{mobileMeta.label}</div>
-              <div style={{ fontSize:14,fontWeight:900,color:"#111" }}>{mobileMeta.code}</div>
-              <div style={{ fontSize:10,color:"#888",marginTop:2 }}>Account: {accountRef}</div>
-            </div>
-            <div>
-              <input value={depPhone} onChange={e=>setDepPhone(e.target.value)} placeholder="Mobile money number" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif",marginBottom:8 }}/>
-              <input value={depAmt} onChange={e=>setDepAmt(e.target.value)} placeholder={`Amount (e.g. ${upgradeNeed || 5000})`} style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
+            <div style={{ padding:"10px 12px",borderRadius:12,border:"1px solid #DCFCE7",background:"#ECFDF5" }}>
+              <div style={{ fontSize:9,color:"#10B981",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>TOP UP</div>
+              <div style={{ fontSize:13,fontWeight:900,color:"#047857" }}>KES {upgradeNeed.toLocaleString()}</div>
+              <div style={{ fontSize:10,color:"#059669",marginTop:2 }}>to upgrade</div>
             </div>
           </div>
         )}
 
-        {depMethod === "Card" && (
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
-            <input value={depName} onChange={e=>setDepName(e.target.value)} placeholder="Card holder name" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
-            <input value={depCard} onChange={e=>setDepCard(e.target.value)} placeholder="Card number" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
-            <input value={depExp} onChange={e=>setDepExp(e.target.value)} placeholder="MM/YY" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
-            <input value={depCvv} onChange={e=>setDepCvv(e.target.value)} placeholder="CVV" style={{ width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
-            <input value={depAmt} onChange={e=>setDepAmt(e.target.value)} placeholder={`Amount (e.g. ${upgradeNeed || 5000})`} style={{ gridColumn:"1 / -1",width:"100%",padding:"10px 12px",borderRadius:9,border:"1.5px solid #E8E8E8",fontSize:12,fontFamily:"Geist,sans-serif" }}/>
-          </div>
-        )}
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:14 }}>
+          {MANUAL_PAYMENTS ? (
+            <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#F8FAFC" }}>
+              <div style={{ padding:"12px 12px",borderRadius:12,background:"linear-gradient(135deg,#0F172A 0%, #1F2937 55%, #111827 100%)",color:"#fff",position:"relative",overflow:"hidden" }}>
+                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
+                  <div>
+                    <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Manual Confirmation</div>
+                    <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Submit request, pay offline, get verified.</div>
+                  </div>
+                  <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",fontSize:10,fontWeight:800,letterSpacing:"0.08em" }}>
+                    REVIEW
+                  </div>
+                </div>
+                <div style={{ position:"absolute",right:-30,top:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,0.08)" }}/>
+                <div style={{ position:"absolute",right:30,bottom:-40,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.06)" }}/>
+              </div>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:12 }}>
+                {[
+                  { label:"Manual Review", icon:"shield" },
+                  { label:"Wallet Credit", icon:"bolt" },
+                  { label:"Support Assisted", icon:"users" }
+                ].map((b) => (
+                  <div key={b.label} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:999,background:"#FFFFFF",border:"1px solid #E2E8F0",fontSize:10,fontWeight:700,color:"#0F172A" }}>
+                    <I n={b.icon} s={12} c="#0F172A" /> {b.label}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop:12,fontSize:11,color:"#64748B" }}>
+                {DEPOSIT_INSTRUCTIONS}
+              </div>
+            </div>
+          ) : (
+            <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#F8FAFC" }}>
+              <div style={{ padding:"12px 12px",borderRadius:12,background:"linear-gradient(135deg,#0F172A 0%, #1F2937 55%, #111827 100%)",color:"#fff",position:"relative",overflow:"hidden" }}>
+                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
+                  <div>
+                    <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>PesaPal Gateway</div>
+                    <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Secure checkout, instant wallet credit.</div>
+                  </div>
+                  <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",fontSize:10,fontWeight:800,letterSpacing:"0.08em" }}>
+                    VERIFIED
+                  </div>
+                </div>
+                <div style={{ position:"absolute",right:-30,top:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,0.08)" }}/>
+                <div style={{ position:"absolute",right:30,bottom:-40,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.06)" }}/>
+              </div>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:12 }}>
+                {[
+                  { label:"SSL Secured", icon:"lock" },
+                  { label:"Instant Confirmation", icon:"bolt" },
+                  { label:"Buyer Protection", icon:"shield" }
+                ].map((b) => (
+                  <div key={b.label} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:999,background:"#FFFFFF",border:"1px solid #E2E8F0",fontSize:10,fontWeight:700,color:"#0F172A" }}>
+                    <I n={b.icon} s={12} c="#0F172A" /> {b.label}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop:12,display:"flex",flexWrap:"wrap",gap:10 }}>
+                {[
+                  { name:"M-Pesa", logo:"M-Pesa" },
+                  { name:"Airtel Money", word:"Airtel Money" },
+                  { name:"Visa", logo:"Visa" },
+                  { name:"Mastercard", logo:"Mastercard" },
+                  { name:"Bank Transfer", word:"Bank Transfer" }
+                ].map((m) => (
+                  <div key={m.name} style={{ padding:"8px 10px",borderRadius:12,border:"1px solid #E5E7EB",background:"#FFFFFF",minWidth:110 }}>
+                    {m.logo ? <PaymentLogo name={m.logo} /> : <Wordmark text={m.word || m.name} width={96} />}
+                    <div style={{ marginTop:6,fontSize:10,color:"#64748B",fontWeight:700 }}>{m.name}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop:10,fontSize:11,color:"#64748B" }}>
+                Pay by mobile money or card. You’ll return here automatically after checkout.
+              </div>
+            </div>
+          )}
 
-        {depMethod === "Crypto" && (
-          <div style={{ marginBottom:12 }}>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
-              {Object.keys(cryptoAddresses).map(n=>(
-                <button key={n} onClick={()=>setCryptoNet(n)} style={{ padding:"5px 10px",borderRadius:8,border:`1px solid ${cryptoNet===n?"#111":"#E8E8E8"}`,background:cryptoNet===n?"#111":"#fff",color:cryptoNet===n?"#fff":"#777",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{n}</button>
-              ))}
+          <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#FFFFFF" }}>
+            <div style={{ fontSize:11,fontWeight:800,color:"#0F172A",letterSpacing:"0.18em",textTransform:"uppercase" }}>Deposit Details</div>
+            <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC" }}>
+                <div style={{ fontSize:10,fontWeight:800,color:"#64748B" }}>KES</div>
+                <input
+                  value={depAmt}
+                  onChange={e=>setDepAmt(e.target.value)}
+                  placeholder={`Amount (e.g. ${upgradeNeed || 5000})`}
+                  style={{ width:"100%",border:"none",background:"transparent",fontSize:12,fontFamily:"Geist,sans-serif",outline:"none",color:"#0F172A" }}
+                />
+              </div>
+              <input
+                value={depPhone}
+                onChange={e=>setDepPhone(e.target.value)}
+                placeholder="Phone (for M‑Pesa, optional)"
+                style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+              />
+              <input
+                value={depName}
+                onChange={e=>setDepName(e.target.value)}
+                placeholder="Full name (optional)"
+                style={{ gridColumn:"1 / -1",width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+              />
             </div>
-            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
-              <div style={{ flex:1, padding:"8px 10px",background:"#fff",border:"1px solid #E8E8E8",borderRadius:8,fontSize:11,color:"#444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{curAddress}</div>
-              <button onClick={copyCrypto} style={{ padding:"7px 10px",borderRadius:8,border:"none",background:cryptoCopied?"#059669":"#111",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{cryptoCopied?"Copied":"Copy"}</button>
-            </div>
-            <input type="number" value={depAmt} onChange={e=>setDepAmt(e.target.value)} placeholder={`Amount (e.g. ${upgradeNeed || 5000})`} style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box" }}/>
-          </div>
-        )}
-        <button onClick={submitDeposit} disabled={depLoading} style={{ width:"100%",padding:"12px 12px",background:depLoading?"#374151":"#111",color:"#fff",border:"none",borderRadius:10,fontWeight:900,fontSize:13,cursor:depLoading?"not-allowed":"pointer",fontFamily:"Geist,sans-serif" }}>
-          {depLoading ? "Redirecting..." : (depDone ? "Deposit Submitted" : "Continue to Paystack")}
-        </button>
-        {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
-        <div style={{ marginTop:8, fontSize:11, color:"#888" }}>Secure Paystack checkout. You will be redirected to complete payment.</div>
-      </div>
-      <div style={{ background:"#fff",borderRadius:14,padding:"20px 22px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
-          <div>
-            <div style={{ fontSize:12,fontWeight:800,color:"#111" }}>Crypto Top Up & Upgrade</div>
-            <div style={{ fontSize:11,color:"#888",marginTop:2 }}>Use crypto to top up your deposit and upgrade your tier.</div>
-          </div>
-          <div style={{ padding:"5px 10px",background:"#F7F7F7",border:"1px solid #EBEBEB",borderRadius:8,fontSize:11,color:"#888",fontWeight:700 }}>Instant credit</div>
-        </div>
-        <div className="ep-grid-2" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-          <div style={{ border:"1px solid #F0F0F0",borderRadius:12,padding:"14px 16px",background:"#FAFAFA" }}>
-            <div style={{ fontSize:11,fontWeight:800,color:"#111",marginBottom:10 }}>Top Up Wallet</div>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
-              {Object.keys(cryptoAddresses).map(n=>(
-                <button key={n} onClick={()=>setCryptoNet(n)} style={{ padding:"5px 10px",borderRadius:8,border:`1px solid ${cryptoNet===n?"#111":"#E8E8E8"}`,background:cryptoNet===n?"#111":"#fff",color:cryptoNet===n?"#fff":"#777",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{n}</button>
-              ))}
-            </div>
-            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
-              <div style={{ flex:1, padding:"8px 10px",background:"#fff",border:"1px solid #E8E8E8",borderRadius:8,fontSize:11,color:"#444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{curAddress}</div>
-              <button onClick={copyCrypto} style={{ padding:"7px 10px",borderRadius:8,border:"none",background:cryptoCopied?"#059669":"#111",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{cryptoCopied?"Copied":"Copy"}</button>
-            </div>
-            <input type="number" value={cryptoAmt} onChange={e=>setCryptoAmt(e.target.value)} placeholder={`Amount to top up (KES ${upgradeNeed || 5000})`} style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
-            <button onClick={()=>{if(cryptoAmt){setCryptoTopupDone(true);setTimeout(()=>setCryptoTopupDone(false),2500);}}} style={{ width:"100%",padding:"10px 12px",background:"#111",color:"#fff",border:"none",borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>
-              {cryptoTopupDone ? "Top Up Submitted" : "I Sent Crypto"}
+            <button onClick={submitDeposit} disabled={depLoading} style={{ width:"100%",marginTop:12,padding:"12px 12px",background:depLoading?"#334155":"linear-gradient(135deg,#111827 0%, #0F172A 100%)",color:"#fff",border:"none",borderRadius:11,fontWeight:900,fontSize:13,cursor:depLoading?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",boxShadow:"0 10px 20px rgba(15,23,42,0.18)" }}>
+              {depLoading
+                ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
+                : (depDone ? "Deposit Submitted" : (MANUAL_PAYMENTS ? "Submit Deposit Request" : "Pay with PesaPal"))}
             </button>
-          </div>
-          <div style={{ border:"1px solid #F0F0F0",borderRadius:12,padding:"14px 16px",background:"#FAFAFA" }}>
-            <div style={{ fontSize:11,fontWeight:800,color:"#111",marginBottom:10 }}>Crypto Withdrawal</div>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
-              {Object.keys(cryptoAddresses).map(n=>(
-                <button key={n} onClick={()=>setCryptoNet(n)} style={{ padding:"5px 10px",borderRadius:8,border:`1px solid ${cryptoNet===n?"#111":"#E8E8E8"}`,background:cryptoNet===n?"#111":"#fff",color:cryptoNet===n?"#fff":"#777",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>{n}</button>
-              ))}
+            {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
+            <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
+              {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Processing time: typically under 60 seconds."}
             </div>
-            <input type="text" value={cryptoWallet} onChange={e=>setCryptoWallet(e.target.value)} placeholder="Your wallet address" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
-            <input type="number" value={cryptoWdAmt} onChange={e=>setCryptoWdAmt(e.target.value)} placeholder="Amount to withdraw (KES)" style={{ width:"100%",padding:"9px 12px",background:"#fff",border:"1.5px solid #E8E8E8",borderRadius:8,fontSize:12,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:10 }}/>
-            <button onClick={submitCryptoWithdrawal} style={{ width:"100%",padding:"10px 12px",background:can?"#111":"#E8E8E8",color:can?"#fff":"#BBB",border:"none",borderRadius:8,fontWeight:800,fontSize:12,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif" }}>
-              {cryptoWdDone ? "Withdrawal Submitted" : "Withdraw to Crypto"}
-            </button>
           </div>
         </div>
       </div>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em",marginBottom:18 }}>Request Withdrawal</h3>
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:11,color:"#999",fontWeight:700,letterSpacing:"0.08em",marginBottom:5 }}>AVAILABLE EARNINGS</div>
-            <div style={{ fontSize:30,fontWeight:900,letterSpacing:"-0.04em",color:"#059669" }}>KES {earn.toLocaleString()}</div>
+        <div style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"20px 22px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.06)" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
+            <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A" }}>Request Withdrawal</div>
+            <div style={{ padding:"5px 10px",background:can?"#ECFDF5":"#FEF2F2",border:`1px solid ${can?"#BBF7D0":"#FECACA"}`,borderRadius:999,fontSize:10,color:can?"#166534":"#991B1B",fontWeight:800 }}>
+              {can ? "Payout window open" : "Payouts next Tue/Fri"}
+            </div>
           </div>
-          <label style={{ display:"block",fontSize:12,fontWeight:700,color:"#555",marginBottom:6 }}>Amount</label>
-          <input type="number" value={wdAmt} onChange={e=>setWdAmt(e.target.value)} placeholder="Enter amount..." style={{ width:"100%",padding:"11px 14px",background:"#FAFAFA",border:"1.5px solid #EBEBEB",borderRadius:9,fontSize:14,color:"#111",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:14 }}/>
-          <label style={{ display:"block",fontSize:12,fontWeight:700,color:"#555",marginBottom:8 }}>Method</label>
-          <div style={{ display:"flex",gap:7,marginBottom:18,flexWrap:"wrap" }}>
-            {["M-Pesa","Airtel","Bank","Crypto"].map(m=>(
-              <button key={m} onClick={()=>setMethod(m)} style={{ padding:"7px 14px",borderRadius:8,border:`1.5px solid ${method===m?"#111":"#EBEBEB"}`,background:method===m?"#111":"#fff",color:method===m?"#fff":"#888",fontWeight:method===m?700:500,cursor:"pointer",fontSize:12,fontFamily:"Geist,sans-serif",transition:"all .15s" }}>{m}</button>
+          <div style={{ marginBottom:14,padding:"12px 14px",borderRadius:12,background:"#0F172A",color:"#fff" }}>
+            <div style={{ fontSize:10,opacity:0.6,letterSpacing:"0.18em",textTransform:"uppercase",fontWeight:700 }}>Available Earnings</div>
+            <div style={{ fontSize:28,fontWeight:900,letterSpacing:"-0.03em",marginTop:4 }}>KES {earn.toLocaleString()}</div>
+          </div>
+          <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6,letterSpacing:"0.08em" }}>Amount</label>
+          <input type="number" value={wdAmt} onChange={e=>setWdAmt(e.target.value)} placeholder="Enter amount..." style={{ width:"100%",padding:"11px 12px",background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:14,color:"#0F172A",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:12 }}/>
+          <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8,letterSpacing:"0.08em" }}>Method</label>
+          <div style={{ display:"flex",gap:7,marginBottom:16,flexWrap:"wrap" }}>
+            {["M-Pesa","Airtel","Bank"].map(m=>(
+              <button key={m} onClick={()=>setMethod(m)} style={{ padding:"7px 14px",borderRadius:10,border:`1.5px solid ${method===m?"#111827":"#E2E8F0"}`,background:method===m?"#111827":"#fff",color:method===m?"#fff":"#64748B",fontWeight:method===m?800:600,cursor:"pointer",fontSize:12,fontFamily:"Geist,sans-serif",transition:"all .15s" }}>{m}</button>
             ))}
           </div>
-          {method==="Crypto" && (
-            <div style={{ marginBottom:12,padding:"8px 12px",background:"#F7F9FF",border:"1px solid #DBEAFE",borderRadius:8,fontSize:11,color:"#3B82F6",fontWeight:600 }}>
-              Use the Crypto Withdrawal panel above for wallet-based payouts.
-            </div>
-          )}
-          <button onClick={submitWithdrawal} style={{ width:"100%",padding:"13px",background:can?"#111":"#EBEBEB",color:can?"#fff":"#BBB",border:"none",borderRadius:9,fontWeight:800,fontSize:14,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s" }}>
-            <I n={done?"check":"wallet"} s={14} c={can?"#fff":"#BBB"}/>{done?"Submitted!":"Submit Withdrawal"}
+          <button onClick={submitWithdrawal} style={{ width:"100%",padding:"13px",background:can?"linear-gradient(135deg,#111827 0%, #0F172A 100%)":"#E2E8F0",color:can?"#fff":"#94A3B8",border:"none",borderRadius:11,fontWeight:800,fontSize:14,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s",boxShadow:can?"0 10px 20px rgba(15,23,42,0.18)":"none" }}>
+            <I n={done?"check":"wallet"} s={14} c={can?"#fff":"#94A3B8"}/>{done?"Submitted!":"Submit Withdrawal"}
           </button>
         </div>
-        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #EBEBEB",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em",marginBottom:16 }}>History</h3>
+        <div style={{ background:"#FFFFFF",borderRadius:16,padding:"20px 22px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.06)" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+            <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A" }}>History</div>
+            <div style={{ fontSize:11,color:"#94A3B8",fontWeight:700 }}>Last 5 payouts</div>
+          </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8 }}>
-            {["Date","Amount","Status"].map(h=><span key={h} style={{ fontSize:10,color:"#BBB",fontWeight:700,letterSpacing:"0.08em" }}>{h.toUpperCase()}</span>)}
+            {["Date","Amount","Status"].map(h=>(
+              <span key={h} style={{ fontSize:9,color:"#94A3B8",fontWeight:800,letterSpacing:"0.14em" }}>{h.toUpperCase()}</span>
+            ))}
           </div>
           {[{d:"Mar 7",a:1200,s:"Paid"},{d:"Feb 28",a:3400,s:"Paid"},{d:"Feb 21",a:800,s:"Paid"},{d:"Feb 14",a:2100,s:"Pending"},{d:"Feb 7",a:950,s:"Paid"}].map((w,i)=>(
-            <div key={i} style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,padding:"10px 0",borderTop:"1px solid #F5F5F5",alignItems:"center" }}>
-              <span style={{ fontSize:12,color:"#999" }}>{w.d}</span>
-              <span style={{ fontSize:13,fontWeight:800,letterSpacing:"-0.02em" }}>KES {w.a.toLocaleString()}</span>
-              <span style={{ fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:50,background:w.s==="Paid"?"#ECFDF5":"#FEF3C7",color:w.s==="Paid"?"#059669":"#D97706",display:"inline-block",width:"fit-content" }}>{w.s}</span>
+            <div key={i} style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,padding:"10px 0",borderTop:"1px solid #F1F5F9",alignItems:"center" }}>
+              <span style={{ fontSize:12,color:"#64748B" }}>{w.d}</span>
+              <span style={{ fontSize:13,fontWeight:800,letterSpacing:"-0.02em",color:"#0F172A" }}>KES {w.a.toLocaleString()}</span>
+              <span style={{ fontSize:10,fontWeight:800,padding:"4px 10px",borderRadius:999,background:w.s==="Paid"?"#ECFDF5":"#FEF3C7",color:w.s==="Paid"?"#059669":"#D97706",display:"inline-block",width:"fit-content" }}>{w.s}</span>
             </div>
           ))}
         </div>
@@ -4989,7 +5268,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   const [wdDays, setWdDays] = useState({ tue:true, wed:false, fri:true });
   const [videoPrice, setVideoPrice] = useState(50);
   const [maintenance, setMaintenance] = useState(false);
-  const [payoutMode, setPayoutMode] = useState("manual");
+  const [payoutMode, setPayoutMode] = useState(MANUAL_WITHDRAWALS ? "manual" : "auto");
   const [notifOpen, setNotifOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const adminHeadingFont = "Sora, Geist, sans-serif";
@@ -5658,20 +5937,34 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
               <div style={CARD}>
                 <h3 style={{ fontSize:14,fontWeight:900,color:"#111",marginBottom:4 }}>Payout Mode</h3>
                 <p style={{ fontSize:12,color:ADMIN.muted,marginBottom:18 }}>How withdrawals are processed.</p>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-                  {[["manual","Manual Review","Admin approves each withdrawal before payment."],["auto","Auto-Approve","All withdrawals are automatically approved and paid."]].map(([val,label,desc])=>(
-                    <div key={val} onClick={()=>setPayoutMode(val)}
-                      style={{ padding:"16px",background:"#fff",borderRadius:10,border:"1.5px solid #111",cursor:"pointer",transition:"border-color .15s",boxShadow:payoutMode===val?"0 4px 0 #111":"none" }}>
-                      <div style={{ display:"flex",alignItems:"center",gap:9,marginBottom:6 }}>
-                        <div style={{ width:16,height:16,borderRadius:"50%",border:"2px solid #111",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                          {payoutMode===val&&<div style={{ width:8,height:8,borderRadius:"50%",background:ADMIN.blue }}/>}
-                        </div>
-                        <span style={{ fontSize:13,fontWeight:900,color:"#111" }}>{label}</span>
+                {MANUAL_WITHDRAWALS ? (
+                  <div style={{ padding:"16px",background:"#fff",borderRadius:10,border:"1.5px solid #111",boxShadow:"0 4px 0 #111" }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:9,marginBottom:6 }}>
+                      <div style={{ width:16,height:16,borderRadius:"50%",border:"2px solid #111",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                        <div style={{ width:8,height:8,borderRadius:"50%",background:ADMIN.blue }} />
                       </div>
-                      <div style={{ fontSize:12,color:ADMIN.muted,lineHeight:1.5 }}>{desc}</div>
+                      <span style={{ fontSize:13,fontWeight:900,color:"#111" }}>Manual Review (Locked)</span>
                     </div>
-                  ))}
-                </div>
+                    <div style={{ fontSize:12,color:ADMIN.muted,lineHeight:1.5 }}>
+                      Admin approves each withdrawal before payment.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                    {[["manual","Manual Review","Admin approves each withdrawal before payment."],["auto","Auto-Approve","All withdrawals are automatically approved and paid."]].map(([val,label,desc])=>(
+                      <div key={val} onClick={()=>setPayoutMode(val)}
+                        style={{ padding:"16px",background:"#fff",borderRadius:10,border:"1.5px solid #111",cursor:"pointer",transition:"border-color .15s",boxShadow:payoutMode===val?"0 4px 0 #111":"none" }}>
+                        <div style={{ display:"flex",alignItems:"center",gap:9,marginBottom:6 }}>
+                          <div style={{ width:16,height:16,borderRadius:"50%",border:"2px solid #111",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                            {payoutMode===val&&<div style={{ width:8,height:8,borderRadius:"50%",background:ADMIN.blue }}/>}
+                          </div>
+                          <span style={{ fontSize:13,fontWeight:900,color:"#111" }}>{label}</span>
+                        </div>
+                        <div style={{ fontSize:12,color:ADMIN.muted,lineHeight:1.5 }}>{desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Maintenance mode */}
@@ -5822,21 +6115,24 @@ export default function App() {
   const authUser = session?.user || null;
   useEffect(() => {
     if (!SUPABASE_ENABLED || !authReady) return;
-    const ref = getPaymentReference();
-    if (!ref) return;
+    const { trackingId, merchantReference } = getPaymentParams();
+    if (!trackingId && !merchantReference) return;
     let cancelled = false;
     const poll = async () => {
       if (!API_BASE) {
         if (!cancelled) {
           setAuthMessage("Payment received. Please sign in to continue.");
           if (authUser?.id) go("dashboard"); else go("login");
-          clearPaymentReference();
+          clearPaymentParams();
         }
         return;
       }
       const tryVerify = async () => {
         try {
-          const res = await fetch(`${API_BASE}/api/v1/deposit/verify?reference=${encodeURIComponent(ref)}`);
+          if (!trackingId) return false;
+          const qs = new URLSearchParams({ tracking_id: trackingId });
+          if (merchantReference) qs.set("merchant_reference", merchantReference);
+          const res = await fetch(`${API_BASE}/api/v1/deposit/verify?${qs.toString()}`);
           const data = await res.json().catch(() => ({}));
           return res.ok && data?.status === "success";
         } catch (e) {
@@ -5853,12 +6149,20 @@ export default function App() {
         } else {
           go("login");
         }
-        clearPaymentReference();
+        clearPaymentParams();
+        return;
+      }
+      if (!merchantReference) {
+        if (!cancelled) {
+          setAuthMessage("Payment pending. Please refresh in a moment.");
+          if (authUser?.id) go("dashboard"); else go("login");
+          clearPaymentParams();
+        }
         return;
       }
       for (let i = 0; i < 10; i++) {
         try {
-          const res = await fetch(`${API_BASE}/api/v1/deposit/status?reference=${encodeURIComponent(ref)}`);
+          const res = await fetch(`${API_BASE}/api/v1/deposit/status?reference=${encodeURIComponent(merchantReference)}`);
           const data = await res.json().catch(() => ({}));
           if (!cancelled && res.ok && data?.status === "success") {
             setAuthMessage("Payment confirmed. Welcome back.");
@@ -5869,7 +6173,7 @@ export default function App() {
             } else {
               go("login");
             }
-            clearPaymentReference();
+            clearPaymentParams();
             return;
           }
         } catch (e) {}
@@ -5878,7 +6182,7 @@ export default function App() {
       if (!cancelled) {
         setAuthMessage("Payment pending. Please refresh in a moment.");
         if (authUser?.id) go("dashboard"); else go("login");
-        clearPaymentReference();
+        clearPaymentParams();
       }
     };
     poll();
@@ -5886,7 +6190,7 @@ export default function App() {
   }, [SUPABASE_ENABLED, authReady, authUser?.id]);
   const role = profileRow?.role || "client";
   const isAdmin = role === "admin";
-  const showDevNav = !SUPABASE_ENABLED || import.meta.env.DEV;
+  // showDevNav defined above (dev override / localhost / dev mode)
   const profileReady = !SUPABASE_ENABLED || !authUser || profileRow !== null;
   const tierSelected = profileRow?.tier_selected === true;
 
@@ -5983,9 +6287,31 @@ export default function App() {
     setPage("landing");
   };
 
-  const route = !SUPABASE_ENABLED
+  const devNavOverride = (() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const url = new URL(window.location.href);
+      const qp = url.searchParams.get("devnav");
+      if (qp === "1") localStorage.setItem("ep:devnav", "1");
+      if (qp === "0") localStorage.removeItem("ep:devnav");
+      return localStorage.getItem("ep:devnav") === "1";
+    } catch (e) {
+      return false;
+    }
+  })();
+  const isLocalHost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1");
+  const showDevNav = devNavOverride || isLocalHost || !SUPABASE_ENABLED || import.meta.env.DEV;
+
+  const route = showDevNav
     ? page
-    : (authUser ? (isAdmin ? "admin" : (tierSelected ? "dashboard" : "tier-select")) : (page==="login" || page==="signup" ? page : "landing"));
+    : (!SUPABASE_ENABLED
+        ? page
+        : (authUser
+            ? (isAdmin ? "admin" : (tierSelected ? "dashboard" : "tier-select"))
+            : (page==="login" || page==="signup" ? page : "landing")));
 
   const handleTierSelect = async (tierId) => {
     if (!supabase || !authUser?.id) return false;

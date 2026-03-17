@@ -34,7 +34,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const API_BASE = process.env.API_BASE || process.env.VITE_API_BASE;
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const BRUTAL_USERS = process.env.BRUTAL_USERS || "3";
 const BRUTAL_BATCHES = process.env.BRUTAL_BATCHES || "1";
 const BRUTAL_RETRIES = Number(process.env.BRUTAL_RETRIES || "4");
@@ -51,7 +50,6 @@ function must(name, value) {
 const url = must("SUPABASE_URL", SUPABASE_URL);
 const anonKey = must("SUPABASE_ANON_KEY", SUPABASE_ANON_KEY);
 const serviceKey = must("SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY);
-const paystackSecret = must("PAYSTACK_SECRET_KEY", PAYSTACK_SECRET_KEY);
 
 const admin = createClient(url, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -149,14 +147,14 @@ async function claimEarning(client, kind = "manual") {
   return data;
 }
 
-async function depositAndWebhook(base, userId, email, amount, tier) {
+async function depositAndVerify(base, userId, email, amount, tier) {
   let data = null;
   let lastErr = null;
   for (let attempt = 0; attempt <= BRUTAL_RETRIES; attempt++) {
     const res = await fetch(`${base}/api/v1/deposit/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, user_id: userId, email, tier, method: "Paystack" })
+      body: JSON.stringify({ amount, user_id: userId, email, tier, method: "PesaPal" })
     });
     data = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -171,40 +169,29 @@ async function depositAndWebhook(base, userId, email, amount, tier) {
   }
   if (lastErr) throw new Error(lastErr);
 
-  const reference = data.reference;
-  const payload = {
-    event: "charge.success",
-    data: {
-      reference,
-      amount: Math.round(amount * 100),
-      metadata: { user_id: userId, tier }
-    }
-  };
-  const raw = JSON.stringify(payload);
-  const sig = crypto.createHmac("sha512", paystackSecret).update(raw).digest("hex");
+  const trackingId =
+    data.order_tracking_id || data.orderTrackingId || data.order_trackingId;
+  const merchantRef =
+    data.merchant_reference || data.merchantReference || data.reference;
+  if (!trackingId) throw new Error("Missing order_tracking_id");
 
-  const whRes = await fetch(`${base}/api/v1/webhook/paystack`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-paystack-signature": sig
-    },
-    body: raw
-  });
-  if (!whRes.ok) throw new Error(`webhook failed: ${whRes.status}`);
+  const qs = new URLSearchParams({ tracking_id: trackingId });
+  if (merchantRef) qs.set("merchant_reference", merchantRef);
 
-  // Idempotency check (send again, should not double credit)
-  const whRes2 = await fetch(`${base}/api/v1/webhook/paystack`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-paystack-signature": sig
-    },
-    body: raw
-  });
-  if (!whRes2.ok) throw new Error(`webhook second try failed: ${whRes2.status}`);
+  const verifyRes = await fetch(`${base}/api/v1/deposit/verify?${qs.toString()}`);
+  const verifyJson = await verifyRes.json().catch(() => ({}));
+  if (!verifyRes.ok || verifyJson?.status !== "success") {
+    throw new Error(`verify failed: ${verifyJson?.status || verifyRes.status}`);
+  }
 
-  return reference;
+  // Idempotency check (verify again, should not double credit)
+  const verifyRes2 = await fetch(`${base}/api/v1/deposit/verify?${qs.toString()}`);
+  const verifyJson2 = await verifyRes2.json().catch(() => ({}));
+  if (!verifyRes2.ok || verifyJson2?.status !== "success") {
+    throw new Error(`verify second try failed: ${verifyJson2?.status || verifyRes2.status}`);
+  }
+
+  return merchantRef;
 }
 
 async function getWallet(userId) {
@@ -280,7 +267,7 @@ async function runBatch(batchIndex, base) {
     const session = await signIn(u.email, TEST_PASSWORD);
     const client = authedClient(session.access_token);
 
-    const reference = await depositAndWebhook(base, u.id, u.email, 1000, u.tier);
+    const reference = await depositAndVerify(base, u.id, u.email, 1000, u.tier);
     await insertViews(client, u.id, u.tier, 2, u.tier === 2 ? 1 : 0);
     await claimEarning(client, "manual");
     if (u.tier === 2) {
@@ -334,3 +321,4 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+

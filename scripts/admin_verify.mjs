@@ -32,7 +32,6 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPA
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const API_BASE = process.env.API_BASE || process.env.VITE_API_BASE;
 const TEST_PASSWORD = process.env.TEST_PASSWORD || "Passw0rd!";
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
 function must(name, value) {
   if (!value) throw new Error(`Missing ${name}`);
@@ -42,7 +41,6 @@ function must(name, value) {
 const url = must("SUPABASE_URL", SUPABASE_URL);
 const anonKey = must("SUPABASE_ANON_KEY", SUPABASE_ANON_KEY);
 const serviceKey = must("SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY);
-const paystackSecret = must("PAYSTACK_SECRET_KEY", PAYSTACK_SECRET_KEY);
 
 const admin = createClient(url, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -151,37 +149,28 @@ async function updatePayout(client, payoutId, status) {
   return data;
 }
 
-async function depositAndWebhook(userId, email, amount, tier) {
+async function depositAndVerify(userId, email, amount, tier) {
   if (!API_BASE) throw new Error("API_BASE not set");
   const res = await fetch(`${API_BASE}/api/v1/deposit/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount, user_id: userId, email, tier, method: "Paystack" })
+    body: JSON.stringify({ amount, user_id: userId, email, tier, method: "PesaPal" })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.detail || data?.error || data?.message || res.status);
-  const reference = data.reference;
-
-  const payload = {
-    event: "charge.success",
-    data: {
-      reference,
-      amount: Math.round(amount * 100),
-      metadata: { user_id: userId, tier }
-    }
-  };
-  const raw = JSON.stringify(payload);
-  const sig = crypto.createHmac("sha512", paystackSecret).update(raw).digest("hex");
-  const whRes = await fetch(`${API_BASE}/api/v1/webhook/paystack`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-paystack-signature": sig
-    },
-    body: raw
-  });
-  if (!whRes.ok) throw new Error(`webhook failed: ${whRes.status}`);
-  return reference;
+  const trackingId =
+    data.order_tracking_id || data.orderTrackingId || data.order_trackingId;
+  const merchantRef =
+    data.merchant_reference || data.merchantReference || data.reference;
+  if (!trackingId) throw new Error("Missing order_tracking_id");
+  const qs = new URLSearchParams({ tracking_id: trackingId });
+  if (merchantRef) qs.set("merchant_reference", merchantRef);
+  const verifyRes = await fetch(`${API_BASE}/api/v1/deposit/verify?${qs.toString()}`);
+  const verifyJson = await verifyRes.json().catch(() => ({}));
+  if (!verifyRes.ok || verifyJson?.status !== "success") {
+    throw new Error(`verify failed: ${verifyJson?.status || verifyRes.status}`);
+  }
+  return merchantRef;
 }
 
 async function depositInit(userId, email) {
@@ -189,12 +178,12 @@ async function depositInit(userId, email) {
   const res = await fetch(`${API_BASE}/api/v1/deposit/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount: 1000, user_id: userId, email, tier: 1, method: "Paystack" })
+    body: JSON.stringify({ amount: 1000, user_id: userId, email, tier: 1, method: "PesaPal" })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.detail || data?.error || data?.message || res.status);
-  if (!data?.authorization_url) throw new Error("Missing authorization_url");
-  return data.authorization_url;
+  if (!data?.redirect_url && !data?.authorization_url) throw new Error("Missing redirect_url");
+  return data.redirect_url || data.authorization_url;
 }
 
 async function main() {
@@ -207,7 +196,7 @@ async function main() {
   await ensureUserRow(adminUser, "admin");
   await ensureUserRow(normalUser, "client");
 
-  await depositAndWebhook(normalUser.id, userEmail, 1000, 1);
+  await depositAndVerify(normalUser.id, userEmail, 1000, 1);
   await creditBalance(normalUser.id, 200);
   const userSession = await signIn(userEmail, TEST_PASSWORD);
   const userClient = authedClient(userSession.access_token);
@@ -235,10 +224,11 @@ async function main() {
   console.log(`Admin user: ${adminEmail}`);
   console.log(`Normal user: ${userEmail}`);
   console.log(`Payout status: completed`);
-  console.log(`Paystack auth URL: ${authUrl}`);
+  console.log(`PesaPal auth URL: ${authUrl}`);
 }
 
 main().catch((err) => {
   console.error("ADMIN VERIFY FAILED:", err.message);
   process.exit(1);
 });
+

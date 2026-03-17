@@ -8,7 +8,13 @@ const dotenv = require("dotenv");
 dotenv.config({ path: path.join(__dirname, ".env") });
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
-const webhookApp = require("./paystack-webhook");
+const webhookApp = require("./pesapal-webhook");
+const {
+  isPesapalConfigured,
+  getIpnId,
+  submitOrder,
+  getTransactionStatus
+} = require("./pesapal");
 
 const app = express();
 const port = process.env.PORT || 8787;
@@ -35,12 +41,7 @@ async function getSupabase() {
   return supabaseClient;
 }
 
-const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
-const paystackBase = process.env.PAYSTACK_BASE_URL || "https://api.paystack.co";
-const callbackUrl = process.env.PAYSTACK_CALLBACK_URL || undefined;
-const paystackMock = String(process.env.PAYSTACK_MOCK || "").toLowerCase() === "1";
-
-async function applyPaystackSuccess({ providerReference, amount, userId, tierAtDeposit }) {
+async function applyDepositSuccess({ providerReference, amount, userId, tierAtDeposit }) {
   if (!providerReference || !userId || !Number.isFinite(amount) || amount <= 0) {
     throw new Error("invalid deposit payload");
   }
@@ -66,7 +67,7 @@ async function applyPaystackSuccess({ providerReference, amount, userId, tierAtD
           amount,
           tier_at_deposit: tierVal,
           status: "success",
-          provider: "Paystack",
+          provider: "PesaPal",
           provider_reference: providerReference,
           created_at: new Date().toISOString(),
           confirmed_at: new Date().toISOString()
@@ -144,7 +145,7 @@ async function applyPaystackSuccess({ providerReference, amount, userId, tierAtD
     }
     if (dep.rowCount === 0) {
       await client.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','Paystack',$4,now(),now())",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','PesaPal',$4,now(),now())",
         [userId, amount, tierVal, providerReference]
       );
     } else {
@@ -212,15 +213,22 @@ app.get("/health", (_req, res) => {
 
 app.post("/api/v1/deposit/create", async (req, res) => {
   try {
-    if (!paystackSecret && !paystackMock) {
-      return res.status(500).json({ error: "PAYSTACK_SECRET_KEY not set" });
-    }
     const amount = Number(req.body?.amount);
     const email = String(req.body?.email || "").trim();
     const userId = String(req.body?.user_id || "").trim();
     const tier = Number(req.body?.tier || 1);
-    const method = String(req.body?.method || "Paystack");
+    const method = String(req.body?.method || "PesaPal");
     const currency = String(req.body?.currency || "KES");
+    const phone = String(req.body?.phone || "").trim();
+    const name = String(req.body?.name || "").trim();
+    const manualMode = String(process.env.PAYMENTS_MODE || "").toLowerCase() === "manual";
+    const manualRequested = ["manual", "true", "1"].includes(
+      String(req.body?.payment_mode || req.body?.mode || "").toLowerCase()
+    );
+    const mockPesapal = String(process.env.PESAPAL_MOCK || "").toLowerCase() === "1";
+    const callbackUrl =
+      process.env.PESAPAL_CALLBACK_URL ||
+      (mockPesapal ? process.env.PESAPAL_MOCK_REDIRECT_URL || "http://localhost:5000/" : "");
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ error: "invalid amount" });
@@ -231,32 +239,79 @@ app.post("/api/v1/deposit/create", async (req, res) => {
 
     const reference = `ep_${crypto.randomUUID().replace(/-/g, "")}`;
 
-    let authUrl = null;
-    if (!paystackMock) {
-      const initPayload = {
-        email,
-        amount: Math.round(amount * 100),
-        currency,
-        reference,
-        metadata: { user_id: userId, tier, method }
-      };
-      if (callbackUrl) initPayload.callback_url = callbackUrl;
-
-      const psRes = await fetch(`${paystackBase}/transaction/initialize`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${paystackSecret}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(initPayload)
-      });
-      const psJson = await psRes.json().catch(() => ({}));
-      if (!psRes.ok || !psJson?.status) {
-        return res.status(400).json({ error: psJson?.message || "Paystack init failed" });
+    if (manualMode || manualRequested) {
+      if (hasSupabase()) {
+        const sb = await getSupabase();
+        const { error } = await sb
+          .from("deposits")
+          .upsert(
+            {
+              user_id: userId,
+              amount,
+              tier_at_deposit: tier,
+              status: "pending",
+              provider: "Manual",
+              provider_reference: reference,
+              created_at: new Date().toISOString()
+            },
+            { onConflict: "provider_reference" }
+          );
+        if (error) throw error;
+      } else {
+        await pool.query(
+          "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at) VALUES ($1,$2,$3,'pending','Manual',$4,now()) ON CONFLICT (provider_reference) DO NOTHING",
+          [userId, amount, tier, reference]
+        );
       }
-      authUrl = psJson?.data?.authorization_url;
-    } else {
-      authUrl = `https://checkout.paystack.com/mock-${reference}`;
+      return res.status(200).json({
+        manual: true,
+        reference,
+        message: "Deposit request submitted for manual confirmation."
+      });
+    }
+
+    if (!isPesapalConfigured()) {
+      return res
+        .status(500)
+        .json({ error: "PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET not set" });
+    }
+    if (!callbackUrl) {
+      return res.status(500).json({ error: "PESAPAL_CALLBACK_URL not set" });
+    }
+
+    const ipnId = await getIpnId();
+    if (!ipnId) {
+      return res.status(500).json({ error: "PESAPAL_IPN_ID not set" });
+    }
+
+    const billingAddress = {
+      email_address: email
+    };
+    if (phone) billingAddress.phone_number = phone;
+    if (name) {
+      const parts = name.split(" ").filter(Boolean);
+      billingAddress.first_name = parts[0] || name;
+      if (parts.length > 1) billingAddress.last_name = parts.slice(1).join(" ");
+    }
+
+    const description = `Tier ${tier} deposit via ${method}`;
+    const submitRes = await submitOrder({
+      reference,
+      amount: Number(amount.toFixed(2)),
+      currency,
+      description,
+      callbackUrl,
+      notificationId: ipnId,
+      billingAddress,
+      redirectMode: "TOP_WINDOW"
+    });
+    const authUrl = submitRes?.redirect_url || submitRes?.redirectUrl || null;
+    const orderTrackingId =
+      submitRes?.order_tracking_id || submitRes?.orderTrackingId || null;
+    const merchantReference =
+      submitRes?.merchant_reference || submitRes?.merchantReference || reference;
+    if (!authUrl) {
+      return res.status(400).json({ error: "PesaPal did not return a checkout URL." });
     }
 
     // Persist pending deposit
@@ -270,7 +325,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
             amount,
             tier_at_deposit: tier,
             status: "pending",
-            provider: "Paystack",
+            provider: "PesaPal",
             provider_reference: reference,
             created_at: new Date().toISOString()
           },
@@ -279,14 +334,16 @@ app.post("/api/v1/deposit/create", async (req, res) => {
       if (error) throw error;
     } else {
       await pool.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at) VALUES ($1,$2,$3,'pending','Paystack',$4,now()) ON CONFLICT (provider_reference) DO NOTHING",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at) VALUES ($1,$2,$3,'pending','PesaPal',$4,now()) ON CONFLICT (provider_reference) DO NOTHING",
         [userId, amount, tier, reference]
       );
     }
 
     return res.status(200).json({
       authorization_url: authUrl,
-      reference
+      reference: merchantReference,
+      merchant_reference: merchantReference,
+      order_tracking_id: orderTrackingId
     });
   } catch (err) {
     console.error(err);
@@ -331,100 +388,88 @@ app.get("/api/v1/deposit/status", async (req, res) => {
 
 app.get("/api/v1/deposit/verify", async (req, res) => {
   try {
-    const reference = String(req.query?.reference || "").trim();
-    if (!reference) return res.status(400).json({ error: "reference required" });
+    const manualMode = String(process.env.PAYMENTS_MODE || "").toLowerCase() === "manual";
+    if (manualMode) {
+      return res.status(400).json({ error: "manual payments enabled" });
+    }
+    const trackingId = String(
+      req.query?.tracking_id ||
+        req.query?.orderTrackingId ||
+        req.query?.OrderTrackingId ||
+        ""
+    ).trim();
+    const merchantReference = String(
+      req.query?.merchant_reference ||
+        req.query?.orderMerchantReference ||
+        req.query?.OrderMerchantReference ||
+        req.query?.reference ||
+        ""
+    ).trim();
 
-    let amount = null;
+    if (!trackingId) {
+      return res.status(400).json({ error: "orderTrackingId required" });
+    }
+    if (!isPesapalConfigured()) {
+      return res
+        .status(500)
+        .json({ error: "PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET not set" });
+    }
+
+    const statusPayload = await getTransactionStatus(trackingId);
+    const statusCode = Number(
+      statusPayload?.status_code ?? statusPayload?.payment_status_code ?? NaN
+    );
+    const statusDesc = String(
+      statusPayload?.payment_status_description ||
+        statusPayload?.payment_status ||
+        statusPayload?.status ||
+        ""
+    ).toLowerCase();
+    const isSuccess = Number.isFinite(statusCode)
+      ? statusCode === 1
+      : statusDesc === "completed" || statusDesc === "complete" || statusDesc === "success";
+
+    if (!isSuccess) {
+      return res.status(200).json({ status: statusDesc || "pending" });
+    }
+
+    const refFromStatus =
+      statusPayload?.merchant_reference ||
+      statusPayload?.merchantReference ||
+      merchantReference;
+    if (!refFromStatus) {
+      return res.status(400).json({ error: "merchant reference required" });
+    }
+
+    let amount = Number(statusPayload?.amount || 0);
     let userId = null;
     let tierAtDeposit = null;
 
-    if (paystackMock) {
-      if (hasSupabase()) {
-        const sb = await getSupabase();
-        const { data, error } = await sb
-          .from("deposits")
-          .select("user_id,amount,tier_at_deposit")
-          .eq("provider_reference", reference)
-          .maybeSingle();
-        if (error) throw error;
-        if (!data) return res.status(404).json({ error: "not found" });
-        amount = Number(data.amount || 0);
-        userId = data.user_id;
-        tierAtDeposit = data.tier_at_deposit;
-      } else {
-        const result = await pool.query(
-          "SELECT user_id, amount, tier_at_deposit FROM deposits WHERE provider_reference = $1 LIMIT 1",
-          [reference]
-        );
-        if (!result?.rows?.length) return res.status(404).json({ error: "not found" });
-        amount = Number(result.rows[0].amount || 0);
-        userId = result.rows[0].user_id;
-        tierAtDeposit = result.rows[0].tier_at_deposit;
-      }
-      await applyPaystackSuccess({
-        providerReference: reference,
-        amount,
-        userId,
-        tierAtDeposit
-      });
-      return res.status(200).json({ status: "success", source: "mock" });
+    if (hasSupabase()) {
+      const sb = await getSupabase();
+      const { data, error } = await sb
+        .from("deposits")
+        .select("user_id,amount,tier_at_deposit")
+        .eq("provider_reference", refFromStatus)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: "deposit not found" });
+      userId = data.user_id;
+      tierAtDeposit = data.tier_at_deposit;
+      if (!Number.isFinite(amount) || amount <= 0) amount = Number(data.amount || 0);
+    } else {
+      const result = await pool.query(
+        "SELECT user_id, amount, tier_at_deposit FROM deposits WHERE provider_reference = $1 LIMIT 1",
+        [refFromStatus]
+      );
+      if (!result?.rows?.length) return res.status(404).json({ error: "deposit not found" });
+      userId = result.rows[0].user_id;
+      tierAtDeposit = result.rows[0].tier_at_deposit;
+      if (!Number.isFinite(amount) || amount <= 0) amount = Number(result.rows[0].amount || 0);
     }
 
-    if (!paystackSecret) {
-      return res.status(500).json({ error: "PAYSTACK_SECRET_KEY not set" });
-    }
-
-    const verifyRes = await fetch(
-      `${paystackBase}/transaction/verify/${encodeURIComponent(reference)}`,
-      {
-        method: "GET",
-        headers: { Authorization: `Bearer ${paystackSecret}` }
-      }
-    );
-    const verifyJson = await verifyRes.json().catch(() => ({}));
-    if (!verifyRes.ok || !verifyJson?.status) {
-      return res
-        .status(400)
-        .json({ error: verifyJson?.message || "Paystack verify failed" });
-    }
-    const data = verifyJson?.data || {};
-    const status = String(data.status || "").toLowerCase() || "pending";
-    if (status !== "success") {
-      return res.status(200).json({ status });
-    }
-    amount = Number(data.amount || 0) / 100;
-    userId = data.metadata?.user_id || null;
-    tierAtDeposit = Number(data.metadata?.tier || 1);
-
-    if (!userId || !Number.isFinite(amount) || amount <= 0) {
-      if (hasSupabase()) {
-        const sb = await getSupabase();
-        const { data: dep, error } = await sb
-          .from("deposits")
-          .select("user_id,amount,tier_at_deposit")
-          .eq("provider_reference", reference)
-          .maybeSingle();
-        if (error) throw error;
-        if (dep) {
-          userId = userId || dep.user_id;
-          amount = Number.isFinite(amount) && amount > 0 ? amount : Number(dep.amount || 0);
-          tierAtDeposit = tierAtDeposit || dep.tier_at_deposit;
-        }
-      } else {
-        const result = await pool.query(
-          "SELECT user_id, amount, tier_at_deposit FROM deposits WHERE provider_reference = $1 LIMIT 1",
-          [reference]
-        );
-        if (result?.rows?.length) {
-          userId = userId || result.rows[0].user_id;
-          amount = Number.isFinite(amount) && amount > 0 ? amount : Number(result.rows[0].amount || 0);
-          tierAtDeposit = tierAtDeposit || result.rows[0].tier_at_deposit;
-        }
-      }
-    }
-
-    await applyPaystackSuccess({
-      providerReference: reference,
+    await applyDepositSuccess({
+      providerReference: refFromStatus,
       amount,
       userId,
       tierAtDeposit
