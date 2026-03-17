@@ -1,10 +1,15 @@
-const PESAPAL_ENV = String(process.env.PESAPAL_ENV || "live").toLowerCase();
+const cleanEnv = (val) => String(val || "").trim().replace(/^['"]|['"]$/g, "");
+const PESAPAL_ENV = cleanEnv(process.env.PESAPAL_ENV || "live").toLowerCase();
 const PESAPAL_BASE =
   PESAPAL_ENV === "sandbox" || PESAPAL_ENV === "demo"
     ? "https://cybqa.pesapal.com/pesapalv3/api"
     : "https://pay.pesapal.com/v3/api";
-const PESAPAL_CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY;
-const PESAPAL_CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET;
+const PESAPAL_CONSUMER_KEY = cleanEnv(
+  process.env.PESAPAL_CONSUMER_KEY || process.env.PESAPAL_KEY || process.env.VITE_PESAPAL_CONSUMER_KEY
+);
+const PESAPAL_CONSUMER_SECRET = cleanEnv(
+  process.env.PESAPAL_CONSUMER_SECRET || process.env.PESAPAL_SECRET || process.env.VITE_PESAPAL_CONSUMER_SECRET
+);
 
 let cachedToken = "";
 let cachedExpiry = 0;
@@ -43,7 +48,12 @@ export const getPesapalToken = async () => {
       consumer_secret: PESAPAL_CONSUMER_SECRET
     })
   });
-  cachedToken = data?.token || "";
+  const nextToken = cleanEnv(data?.token || data?.access_token || "");
+  if (!nextToken) {
+    const msg = data?.message || data?.error?.message || "Pesapal token missing from response.";
+    throw new Error(msg);
+  }
+  cachedToken = nextToken;
   const expiry = data?.expiryDate ? Date.parse(data.expiryDate) : 0;
   cachedExpiry = Number.isFinite(expiry) && expiry > 0 ? expiry : nowMs() + 4 * 60 * 1000;
   return cachedToken;
