@@ -149,9 +149,17 @@ const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPA
     }) : null;
 const SUPABASE_ENABLED = !!supabase;
 const getApiBase = () => {
-  if (API_BASE) return API_BASE;
-  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
-  return "";
+  const origin = typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
+  if (!API_BASE) return origin;
+  if (origin) {
+    try {
+      const apiOrigin = new URL(API_BASE, origin).origin;
+      if (apiOrigin !== origin) return origin;
+    } catch (e) {
+      // fall back to API_BASE as-is
+    }
+  }
+  return API_BASE;
 };
 const getAccessToken = async () => {
   if (!supabase) return "";
@@ -5082,6 +5090,25 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       {wdError && (
         <div style={{ padding:"10px 14px", background:"#FFF0F0", border:"1px solid #FCA5A5", borderRadius:9, fontSize:13, color:"#DC2626", fontWeight:600, display:"flex", alignItems:"center", gap:8 }}>
           <I n="xmark" s={14} c="#DC2626" /> {wdError}
+        </div>
+      )}
+
+      {nextTier && (
+        <div style={{ padding:"12px 16px",borderRadius:12,border:"1px solid #E2E8F0",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" }}>
+          <div>
+            <div style={{ fontSize:12,fontWeight:900,color:"#0F172A" }}>
+              {needsUnlock ? `Unlock ${t.name} Tier` : `Upgrade to ${nextTier.name}`}
+            </div>
+            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>
+              {needsUnlock
+                ? `Deposit KES ${unlockNeed.toLocaleString()} to activate earnings.`
+                : `Top up KES ${upgradeNeed.toLocaleString()} to move to ${nextTier.name}.`}
+            </div>
+          </div>
+          <button onClick={() => depositRef.current?.scrollIntoView({ behavior:"smooth", block:"start" })}
+            style={{ padding:"9px 14px",borderRadius:10,border:"1.5px solid #111",background:"#111",color:"#fff",fontSize:12,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>
+            {needsUnlock ? "Unlock Now" : "Upgrade Now"}
+          </button>
         </div>
       )}
 
