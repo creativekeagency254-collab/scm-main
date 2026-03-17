@@ -135,6 +135,11 @@ const MANUAL_WITHDRAWALS = WITHDRAWALS_MODE !== "auto";
 const DEPOSIT_INSTRUCTIONS =
   import.meta.env.VITE_DEPOSIT_INSTRUCTIONS ||
   "Submit your deposit request and our team will share payment instructions and confirm your wallet credit.";
+const DEPOSIT_METHODS = [
+  { id: "mpesa", label: "M-Pesa", desc: "Mobile money" },
+  { id: "card", label: "Card", desc: "Visa / Mastercard" },
+  { id: "crypto", label: "Crypto", desc: "USDT / BTC" }
+];
 const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
     persistSession: true,
@@ -786,7 +791,7 @@ function Landing({ go }) {
   const payments = [
     "Google Pay","USDT","Flutterwave","Binance Pay","M-Pesa","Visa","Mastercard","Bitcoin","BNB",
     "PayPal","Apple Pay","Samsung Pay","Stripe","Alipay","WeChat Pay","Skrill","Neteller","Ethereum","Litecoin","USDC","Cash App","Payoneer",
-    "PesaPal","Airtel Money"
+    "Airtel Money"
   ];
 
   const anim = (delay = 0) => ({ animation: `fadeUp .55s ease both`, animationDelay: `${delay}ms`, opacity: heroVisible ? 1 : 0 });
@@ -1468,6 +1473,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
   const [panel, setPanel] = useState("");
   const [depPhone, setDepPhone] = useState("");
   const [depName, setDepName] = useState("");
+  const [depMethod, setDepMethod] = useState("M-Pesa");
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
   const [depDone, setDepDone] = useState(false);
@@ -1545,7 +1551,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     }
     const email = authUser?.email || profileRow?.email || "";
     if (!email) {
-      setDepError("Email is required for PesaPal checkout.");
+      setDepError("Email is required for checkout.");
       return;
     }
     setDepError("");
@@ -1562,7 +1568,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
           user_id: authUser.id,
           email,
           tier: tier.id,
-          method: "PesaPal",
+          method: depMethod || "M-Pesa",
           payment_mode: MANUAL_PAYMENTS ? "manual" : "live",
           phone: depPhone || profileRow?.phone || "",
           name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
@@ -1570,7 +1576,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const rawMsg = data?.error || data?.message || "Failed to start PesaPal checkout.";
+        const rawMsg = data?.error || data?.message || "Failed to start checkout.";
         const msg =
           String(rawMsg || "").toLowerCase().includes("ipn")
             ? "Payment gateway not configured yet. Please contact support."
@@ -1585,7 +1591,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
         return;
       }
       if (!url) {
-        setDepError("PesaPal did not return a checkout URL.");
+        setDepError("Payment gateway did not return a checkout URL.");
         return;
       }
       setDepDone(true);
@@ -1744,7 +1750,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                       <div style={{ padding:"12px 14px", borderRadius:12, border:"1px solid #E2E8F0", background:"#FFFFFF" }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
                           <div style={{ fontSize:12, fontWeight:900, color:"#0F172A" }}>
-                            {MANUAL_PAYMENTS ? "Manual Deposit Request" : `Deposit for ${tier.name}`}
+                            {MANUAL_PAYMENTS ? "Deposit Request" : `Deposit for ${tier.name}`}
                           </div>
                           <div style={{ padding:"4px 8px", borderRadius:999, background:"#111827", color:"#fff", fontSize:10, fontWeight:800 }}>Fixed Amount</div>
                         </div>
@@ -1752,11 +1758,39 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                         <div style={{ fontSize:11, color:"#64748B", marginTop:2 }}>
                           {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Amount is locked to your selected tier."}
                         </div>
+
+                        <div style={{ marginTop:12 }}>
+                          <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:8 }}>Choose Method</div>
+                          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8 }}>
+                            {DEPOSIT_METHODS.map((m) => {
+                              const active = depMethod === m.label;
+                              return (
+                                <button key={m.id} onClick={() => setDepMethod(m.label)}
+                                  style={{
+                                    padding:"10px 10px",
+                                    borderRadius:10,
+                                    border:active ? "1.5px solid #111" : "1.5px solid #E2E8F0",
+                                    background:active ? "#111" : "#F8FAFC",
+                                    color:active ? "#fff" : "#111",
+                                    fontWeight:800,
+                                    fontSize:12,
+                                    cursor:"pointer",
+                                    fontFamily:"Geist,sans-serif",
+                                    textAlign:"left"
+                                  }}>
+                                  <div style={{ fontSize:12, fontWeight:900 }}>{m.label}</div>
+                                  <div style={{ fontSize:10, opacity:active ? 0.8 : 0.6 }}>{m.desc}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10 }}>
                           <input
                             value={depPhone}
                             onChange={e=>setDepPhone(e.target.value)}
-                            placeholder="Phone (M‑Pesa, optional)"
+                            placeholder="Phone (M‑Pesa only, optional)"
                             style={{ width:"100%",padding:"9px 10px",borderRadius:9,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
                           />
                           <input
@@ -1776,10 +1810,15 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                             : (depDone
                               ? "Deposit Submitted"
                               : (MANUAL_PAYMENTS
-                                ? `Submit Request — KES ${tier.deposit.toLocaleString()}`
-                                : `Pay KES ${tier.deposit.toLocaleString()} with PesaPal`))}
+                                ? `Submit ${depMethod} Request`
+                                : `Continue with ${depMethod}`))}
                         </button>
                         {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
+                        {!MANUAL_PAYMENTS && (
+                          <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
+                            You’ll complete the payment in a secure checkout and return here automatically.
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
@@ -4870,6 +4909,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const [depAmt, setDepAmt] = useState("");
   const [depPhone, setDepPhone] = useState("");
   const [depName, setDepName] = useState("");
+  const [depMethod, setDepMethod] = useState("M-Pesa");
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
   const [depDone, setDepDone] = useState(false);
@@ -4882,15 +4922,20 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const needsUnlock = hasDeposit === false;
   const unlockNeed = needsUnlock ? t.deposit : 0;
   const primaryNeed = needsUnlock ? unlockNeed : upgradeNeed;
+  const canDeposit = primaryNeed > 0;
   useEffect(() => {
     if (!focusDeposit) return;
     if (depositRef.current) depositRef.current.scrollIntoView({ behavior:"smooth", block:"start" });
-    if (primaryNeed > 0 && !depAmt) setDepAmt(String(primaryNeed));
+    if (primaryNeed > 0 && String(primaryNeed) !== depAmt) setDepAmt(String(primaryNeed));
     if (onFocusDone) onFocusDone();
   }, [focusDeposit, primaryNeed]);
   const submitDeposit = async () => {
-    const amt = Number(depAmt);
-    if (!Number.isFinite(amt) || amt <= 0) return;
+    const requiredAmt = Number(primaryNeed);
+    if (!Number.isFinite(requiredAmt) || requiredAmt <= 0) {
+      setDepError("No deposit is required right now.");
+      return;
+    }
+    const amt = requiredAmt;
     if (!authUser?.id) {
       setDepError("Please log in to deposit.");
       return;
@@ -4902,7 +4947,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
     }
     const email = authUser?.email || profileRow?.email || "";
     if (!email) {
-      setDepError("Email is required for PesaPal checkout.");
+      setDepError("Email is required for checkout.");
       return;
     }
     setDepError("");
@@ -4919,7 +4964,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
           user_id: authUser.id,
           email,
           tier: t.id,
-          method: "PesaPal",
+          method: depMethod || "M-Pesa",
           payment_mode: MANUAL_PAYMENTS ? "manual" : "live",
           phone: depPhone || profileRow?.phone || "",
           name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
@@ -4927,7 +4972,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const rawMsg = data?.error || data?.message || "Failed to start PesaPal checkout.";
+        const rawMsg = data?.error || data?.message || "Failed to start checkout.";
         const msg =
           String(rawMsg || "").toLowerCase().includes("ipn")
             ? "Payment gateway not configured yet. Please contact support."
@@ -4950,7 +4995,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         return;
       }
       if (!url) {
-        setDepError("PesaPal did not return a checkout URL.");
+        setDepError("Payment gateway did not return a checkout URL.");
         return;
       }
       setDepDone(true);
@@ -4958,7 +5003,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       onNewTx?.({
         ic:"wallet",
         text:"Deposit initiated",
-        sub:`KES ${amt.toLocaleString()} via PesaPal`,
+        sub:`KES ${amt.toLocaleString()} via ${depMethod || "Payment Gateway"}`,
         time:"Just now",
         c:"#0066FF",
         amt
@@ -5115,7 +5160,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
               <div style={{ padding:"12px 12px",borderRadius:12,background:"linear-gradient(135deg,#0F172A 0%, #1F2937 55%, #111827 100%)",color:"#fff",position:"relative",overflow:"hidden" }}>
                 <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
                   <div>
-                    <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>PesaPal Gateway</div>
+                    <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Secure Payment Gateway</div>
                     <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Secure checkout, instant wallet credit.</div>
                   </div>
                   <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",fontSize:10,fontWeight:800,letterSpacing:"0.08em" }}>
@@ -5142,7 +5187,8 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
                   { name:"Airtel Money", word:"Airtel Money" },
                   { name:"Visa", logo:"Visa" },
                   { name:"Mastercard", logo:"Mastercard" },
-                  { name:"Bank Transfer", word:"Bank Transfer" }
+                  { name:"Bank Transfer", word:"Bank Transfer" },
+                  { name:"Crypto", word:"USDT / BTC" }
                 ].map((m) => (
                   <div key={m.name} style={{ padding:"8px 10px",borderRadius:12,border:"1px solid #E5E7EB",background:"#FFFFFF",minWidth:110 }}>
                     {m.logo ? <PaymentLogo name={m.logo} /> : <Wordmark text={m.word || m.name} width={96} />}
@@ -5151,40 +5197,66 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
                 ))}
               </div>
               <div style={{ marginTop:10,fontSize:11,color:"#64748B" }}>
-                Pay by mobile money or card. You’ll return here automatically after checkout.
+                Pay by mobile money, card, or crypto. You’ll return here automatically after checkout.
               </div>
             </div>
           )}
 
           <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#FFFFFF" }}>
             <div style={{ fontSize:11,fontWeight:800,color:"#0F172A",letterSpacing:"0.18em",textTransform:"uppercase" }}>Deposit Details</div>
-            <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-              <div style={{ display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC" }}>
-                <div style={{ fontSize:10,fontWeight:800,color:"#64748B" }}>KES</div>
-                <input
-                  value={depAmt}
-                  onChange={e=>setDepAmt(e.target.value)}
-                  placeholder={`Amount (e.g. ${upgradeNeed || 5000})`}
-                  style={{ width:"100%",border:"none",background:"transparent",fontSize:12,fontFamily:"Geist,sans-serif",outline:"none",color:"#0F172A" }}
-                />
+            <div style={{ marginTop:10,padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
+              <div>
+                <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
+                <div style={{ fontSize:15,fontWeight:900,color:"#0F172A" }}>KES {Math.max(primaryNeed, 0).toLocaleString()}</div>
               </div>
+              <div style={{ padding:"4px 8px",borderRadius:999,background:"#111827",color:"#fff",fontSize:10,fontWeight:800 }}>FIXED</div>
+            </div>
+
+            <div style={{ marginTop:10 }}>
+              <div style={{ fontSize:10,letterSpacing:"0.14em",fontWeight:800,color:"#64748B",textTransform:"uppercase",marginBottom:8 }}>Payment Method</div>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8 }}>
+                {DEPOSIT_METHODS.map((m) => {
+                  const active = depMethod === m.label;
+                  return (
+                    <button key={m.id} onClick={() => setDepMethod(m.label)}
+                      style={{
+                        padding:"10px 10px",
+                        borderRadius:10,
+                        border:active ? "1.5px solid #111" : "1.5px solid #E2E8F0",
+                        background:active ? "#111" : "#F8FAFC",
+                        color:active ? "#fff" : "#111",
+                        fontWeight:800,
+                        fontSize:12,
+                        cursor:"pointer",
+                        fontFamily:"Geist,sans-serif",
+                        textAlign:"left"
+                      }}>
+                      <div style={{ fontSize:12,fontWeight:900 }}>{m.label}</div>
+                      <div style={{ fontSize:10,opacity:active ? 0.8 : 0.6 }}>{m.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
               <input
                 value={depPhone}
                 onChange={e=>setDepPhone(e.target.value)}
-                placeholder="Phone (for M‑Pesa, optional)"
+                placeholder="Phone (M‑Pesa only, optional)"
                 style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
               />
               <input
                 value={depName}
                 onChange={e=>setDepName(e.target.value)}
                 placeholder="Full name (optional)"
-                style={{ gridColumn:"1 / -1",width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+                style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
               />
             </div>
-            <button onClick={submitDeposit} disabled={depLoading} style={{ width:"100%",marginTop:12,padding:"12px 12px",background:depLoading?"#334155":"linear-gradient(135deg,#111827 0%, #0F172A 100%)",color:"#fff",border:"none",borderRadius:11,fontWeight:900,fontSize:13,cursor:depLoading?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",boxShadow:"0 10px 20px rgba(15,23,42,0.18)" }}>
+            <button onClick={submitDeposit} disabled={depLoading || !canDeposit} style={{ width:"100%",marginTop:12,padding:"12px 12px",background:(depLoading || !canDeposit)?"#E2E8F0":"linear-gradient(135deg,#111827 0%, #0F172A 100%)",color:(depLoading || !canDeposit)?"#94A3B8":"#fff",border:"none",borderRadius:11,fontWeight:900,fontSize:13,cursor:(depLoading || !canDeposit)?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",boxShadow:(depLoading || !canDeposit)?"none":"0 10px 20px rgba(15,23,42,0.18)" }}>
               {depLoading
                 ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
-                : (depDone ? "Deposit Submitted" : (MANUAL_PAYMENTS ? "Submit Deposit Request" : "Pay with PesaPal"))}
+                : (!canDeposit ? "No Deposit Required" : (depDone ? "Deposit Submitted" : (MANUAL_PAYMENTS ? `Submit ${depMethod} Request` : `Continue with ${depMethod}`)))}
             </button>
             {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
             <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
