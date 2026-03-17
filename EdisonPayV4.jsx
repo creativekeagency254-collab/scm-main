@@ -134,7 +134,7 @@ const WITHDRAWALS_MODE = String(import.meta.env.VITE_WITHDRAWALS_MODE || PAYMENT
 const MANUAL_WITHDRAWALS = WITHDRAWALS_MODE !== "auto";
 const DEPOSIT_INSTRUCTIONS =
   import.meta.env.VITE_DEPOSIT_INSTRUCTIONS ||
-  "Submit your deposit request and our team will share payment instructions and confirm your wallet credit.";
+  "Submit your self deposit request and our team will share payment instructions and confirm your wallet credit.";
 const DEPOSIT_METHODS = [
   { id: "mpesa", label: "M-Pesa", desc: "Mobile money" },
   { id: "card", label: "Card", desc: "Visa / Mastercard" },
@@ -1520,6 +1520,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
   const [depDone, setDepDone] = useState(false);
+  const [autoPrompted, setAutoPrompted] = useState(false);
   useEffect(() => {
     const intent = getTierIntent();
     if (!Number.isFinite(Number(profileRow?.tier)) && Number.isFinite(intent)) {
@@ -1527,8 +1528,11 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     } else if (Number.isFinite(Number(profileRow?.tier))) {
       setSelected(Number(profileRow.tier));
     }
-    setPanel("");
-  }, [profileRow?.tier]);
+    if (!autoPrompted) {
+      setPanel("pay");
+      setAutoPrompted(true);
+    }
+  }, [profileRow?.tier, autoPrompted]);
 
   useEffect(() => {
     if (profileRow?.phone && !depPhone) setDepPhone(String(profileRow.phone));
@@ -1542,7 +1546,8 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     setSelected(tierId);
     setErr("");
     setDepError("");
-    setPanel("");
+    setPanel("pay");
+    setAutoPrompted(true);
     storeTierIntent(tierId);
   };
 
@@ -1572,7 +1577,8 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     setDepError("");
     const ok = await commitTier(tierId, { navigate: false });
     if (!ok) return;
-    togglePanel("pay");
+    setPanel("pay");
+    setAutoPrompted(true);
   };
 
   const handlePayLater = async (tierId) => {
@@ -1656,7 +1662,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
             Pick a tier to enter your dashboard
           </div>
           <div style={{ fontSize:14, color:"#6B7280", lineHeight:1.6 }}>
-            You can explore any tier. Earnings and withdrawals unlock after you deposit the tier amount.
+            You can explore any tier. Earnings and withdrawals unlock after your self deposit clears.
           </div>
         </div>
 
@@ -1682,7 +1688,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                   )}
                 </div>
                 <div style={{ fontSize:13, color:"#6B7280", marginBottom:12 }}>
-                  Deposit: <strong style={{ color:"#111" }}>KES {tier.deposit.toLocaleString()}</strong>
+                  Self deposit: <strong style={{ color:"#111" }}>KES {tier.deposit.toLocaleString()}</strong>
                 </div>
                 <div style={{ fontSize:13, color:"#6B7280", marginBottom:16 }}>
                   Daily earning: <strong style={{ color:"#111" }}>KES {daily.toLocaleString()}</strong>
@@ -1742,7 +1748,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                           fontFamily:"Geist,sans-serif"
                         }}
                       >
-                        {saving ? "Saving..." : "Pay Now"}
+                        {saving ? "Saving..." : "Self Deposit"}
                       </button>
                       <button
                         disabled={saving}
@@ -1793,7 +1799,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                       <div style={{ padding:"12px 14px", borderRadius:12, border:"1px solid #E2E8F0", background:"#FFFFFF" }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
                           <div style={{ fontSize:12, fontWeight:900, color:"#0F172A" }}>
-                            {MANUAL_PAYMENTS ? "Deposit Request" : `Deposit for ${tier.name}`}
+                            {MANUAL_PAYMENTS ? "Self Deposit Request" : `Self Deposit for ${tier.name}`}
                           </div>
                           <div style={{ padding:"4px 8px", borderRadius:999, background:"#111827", color:"#fff", fontSize:10, fontWeight:800 }}>Fixed Amount</div>
                         </div>
@@ -1851,7 +1857,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                           {depLoading
                             ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
                             : (depDone
-                              ? "Deposit Submitted"
+                              ? "Self Deposit Submitted"
                               : (MANUAL_PAYMENTS
                                 ? `Submit ${depMethod} Request`
                                 : `Continue with ${depMethod}`))}
@@ -2975,6 +2981,23 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
               </button>
             </div>
           )}
+          {depositRequired && (
+            <div style={{ padding:"14px 16px", background:"#EEF2FF", border:"1px solid #C7D2FE", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", marginBottom:16 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:34, height:34, borderRadius:10, background:"#4F46E5", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <I n="wallet" s={14} c="#fff"/>
+                </div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Self deposit required to unlock your tier</div>
+                  <div style={{ fontSize:11, color:"#4C51BF", marginTop:2 }}>Submit the fixed tier deposit to activate earnings and withdrawals.</div>
+                </div>
+              </div>
+              <button onClick={() => goDeposit(true)}
+                style={{ padding:"9px 14px", borderRadius:10, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap" }}>
+                Self Deposit Now
+              </button>
+            </div>
+          )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady}/>}
           {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} authUser={authUser} />}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
@@ -3065,7 +3088,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   <div style={{ background:"#F8FAFC", border:"1px solid #E5E7EB", borderRadius:12, padding:"12px" }}>
                     <div style={{ fontSize:10, fontWeight:800, color:"#94A3B8", letterSpacing:"0.08em" }}>CURRENT TIER</div>
                     <div style={{ fontSize:14, fontWeight:900, color:"#111", marginTop:6 }}>{t.name}</div>
-                    <div style={{ fontSize:11, color:"#94A3B8", marginTop:4 }}>Deposit KES {t.deposit.toLocaleString()}</div>
+                    <div style={{ fontSize:11, color:"#94A3B8", marginTop:4 }}>Self deposit KES {t.deposit.toLocaleString()}</div>
                   </div>
                   <div style={{ background:"#FFF7ED", border:"1px solid #F3E2C7", borderRadius:12, padding:"12px" }}>
                     <div style={{ fontSize:10, fontWeight:800, color:"#92400E", letterSpacing:"0.08em" }}>NEXT TIER</div>
@@ -5093,7 +5116,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const submitWithdrawal = async () => {
     setWdError("");
     if (hasDeposit === false) {
-      setWdError(`Deposit KES ${t.deposit.toLocaleString()} to unlock withdrawals for Tier ${t.id}.`);
+      setWdError(`Self deposit KES ${t.deposit.toLocaleString()} to unlock withdrawals for Tier ${t.id}.`);
       return;
     }
     if (!wdAmt) return;
@@ -5119,7 +5142,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         </div>
       {hasDeposit === false && (
         <div style={{ padding:"12px 16px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFF7ED",display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#9A3412",fontWeight:700 }}>
-          <I n="lock" s={13} c="#EA580C"/> Deposit KES {t.deposit.toLocaleString()} to unlock withdrawals for Tier {t.id}.
+          <I n="lock" s={13} c="#EA580C"/> Self deposit KES {t.deposit.toLocaleString()} to unlock withdrawals for Tier {t.id}.
         </div>
       )}
       {wdError && (
@@ -5132,17 +5155,17 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         <div style={{ padding:"12px 16px",borderRadius:12,border:"1px solid #E2E8F0",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" }}>
           <div>
             <div style={{ fontSize:12,fontWeight:900,color:"#0F172A" }}>
-              {needsUnlock ? `Unlock ${t.name} Tier` : `Upgrade to ${nextTier.name}`}
+              {needsUnlock ? `Self deposit to unlock ${t.name}` : `Upgrade to ${nextTier.name}`}
             </div>
             <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>
               {needsUnlock
-                ? `Deposit KES ${unlockNeed.toLocaleString()} to activate earnings.`
+                ? `Self deposit KES ${unlockNeed.toLocaleString()} to activate earnings.`
                 : `Top up KES ${upgradeNeed.toLocaleString()} to move to ${nextTier.name}.`}
             </div>
           </div>
           <button onClick={() => depositRef.current?.scrollIntoView({ behavior:"smooth", block:"start" })}
             style={{ padding:"9px 14px",borderRadius:10,border:"1.5px solid #111",background:"#111",color:"#fff",fontSize:12,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>
-            {needsUnlock ? "Unlock Now" : "Upgrade Now"}
+            {needsUnlock ? "Self Deposit Now" : "Upgrade Now"}
           </button>
         </div>
       )}
@@ -5150,14 +5173,14 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       <div ref={depositRef} style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"18px 20px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.08)" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
           <div>
-            <div style={{ fontSize:13,fontWeight:900,color:"#0F172A",letterSpacing:"0.02em" }}>{needsUnlock ? "Unlock Tier Deposit" : "Upgrade & Deposit"}</div>
+            <div style={{ fontSize:13,fontWeight:900,color:"#0F172A",letterSpacing:"0.02em" }}>{needsUnlock ? "Self Deposit to Unlock" : "Self Deposit & Upgrade"}</div>
             <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>
-              {needsUnlock ? `Deposit required to unlock ${t.name} earnings.` : (nextTier ? `Next tier: ${nextTier.name}` : "You're already at the top tier.")}
+              {needsUnlock ? `Self deposit required to unlock ${t.name} earnings.` : (nextTier ? `Next tier: ${nextTier.name}` : "You're already at the top tier.")}
             </div>
           </div>
           {needsUnlock ? (
             <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,fontSize:11,color:"#9A3412",fontWeight:800 }}>
-              Deposit KES {unlockNeed.toLocaleString()} to unlock
+              Self deposit KES {unlockNeed.toLocaleString()} to unlock
             </div>
           ) : nextTier && (
             <div style={{ padding:"6px 10px",background:"#EEF2FF",border:"1px solid #C7D2FE",borderRadius:999,fontSize:11,color:"#3730A3",fontWeight:800 }}>
@@ -5265,7 +5288,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
           )}
 
           <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#FFFFFF" }}>
-            <div style={{ fontSize:11,fontWeight:800,color:"#0F172A",letterSpacing:"0.18em",textTransform:"uppercase" }}>Deposit Details</div>
+            <div style={{ fontSize:11,fontWeight:800,color:"#0F172A",letterSpacing:"0.18em",textTransform:"uppercase" }}>Self Deposit Details</div>
             <div style={{ marginTop:10,padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
               <div>
                 <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
@@ -5318,7 +5341,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             <button onClick={submitDeposit} disabled={depLoading || !canDeposit} style={{ width:"100%",marginTop:12,padding:"12px 12px",background:(depLoading || !canDeposit)?"#E2E8F0":"linear-gradient(135deg,#111827 0%, #0F172A 100%)",color:(depLoading || !canDeposit)?"#94A3B8":"#fff",border:"none",borderRadius:11,fontWeight:900,fontSize:13,cursor:(depLoading || !canDeposit)?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",boxShadow:(depLoading || !canDeposit)?"none":"0 10px 20px rgba(15,23,42,0.18)" }}>
               {depLoading
                 ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
-                : (!canDeposit ? "No Deposit Required" : (depDone ? "Deposit Submitted" : (MANUAL_PAYMENTS ? `Submit ${depMethod} Request` : `Continue with ${depMethod}`)))}
+                : (!canDeposit ? "No Self Deposit Required" : (depDone ? "Self Deposit Submitted" : (MANUAL_PAYMENTS ? `Submit ${depMethod} Request` : `Continue with ${depMethod}`)))}
             </button>
             {depError && <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700 }}>{depError}</div>}
             <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
