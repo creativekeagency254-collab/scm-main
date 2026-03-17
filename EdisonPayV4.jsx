@@ -1898,6 +1898,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [stripToggleHidden, setStripToggleHidden] = useState(false);
   const lastScrollRef = useRef(0);
   const authId = authUser?.id || null;
+  const tierSelected = profileRow?.tier_selected === true;
   const [hasTierDeposit, setHasTierDeposit] = useState(null);
   const [depositCheckBusy, setDepositCheckBusy] = useState(false);
   const [profile, setProfile] = useState({
@@ -2861,6 +2862,23 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   <I n="chevR" s={12} c="#111"/>
                 </div>
                 {stripHidden ? "Show Summary" : "Hide Summary"}
+              </button>
+            </div>
+          )}
+          {!tierSelected && (
+            <div style={{ padding:"14px 16px", background:"#FFF7ED", border:"1px solid #FDBA74", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", marginBottom:16 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:34, height:34, borderRadius:10, background:"#F59E0B", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <I n="star" s={14} c="#fff"/>
+                </div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Choose your tier to activate your account</div>
+                  <div style={{ fontSize:11, color:"#9A3412", marginTop:2 }}>Select a tier to unlock earnings, deposits, and withdrawals.</div>
+                </div>
+              </div>
+              <button onClick={()=>go("tier-select")}
+                style={{ padding:"9px 14px", borderRadius:10, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap" }}>
+                Choose Tier
               </button>
             </div>
           )}
@@ -6310,7 +6328,7 @@ export default function App() {
     : (!SUPABASE_ENABLED
         ? page
         : (authUser
-            ? (isAdmin ? "admin" : (tierSelected ? "dashboard" : "tier-select"))
+            ? (isAdmin ? "admin" : (page==="tier-select" ? "tier-select" : "dashboard"))
             : (page==="login" || page==="signup" ? page : "landing")));
 
   const handleTierSelect = async (tierId) => {
