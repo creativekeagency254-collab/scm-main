@@ -532,7 +532,15 @@ const makeAvatarSvg = ({ bg1, bg2, hair, skin, shirt, accent, icon }) => {
     star: "M12 2l2.8 6 6.6.9-4.8 4.6 1.2 6.5L12 17.8 6.2 20l1.2-6.5-4.8-4.6 6.6-.9L12 2z",
     crown: "M3 9l4 4 5-7 5 7 4-4v9H3V9z",
     gift: "M4 9h16v4H4zM4 13h7v7H4zM13 13h7v7h-7zM12 9v11M6.8 7c0-2 2.2-3 3.7-1.7L12 6.5l1.5-1.2C15 4 17.2 5 17.2 7",
-    spark: "M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"
+    spark: "M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z",
+    diamond: "M12 2l8 8-8 12-8-12 8-8z",
+    leaf: "M4 16c6-10 16-10 16-10-1 8-8 15-16 10z M7 13l6-6",
+    wave: "M3 12c3-4 7-4 10 0s7 4 10 0",
+    compass: "M12 2l4 10-10 4 4-10 10-4z",
+    camera: "M4 8h4l2-2h4l2 2h4v10H4z M12 12a3 3 0 100 6 3 3 0 000-6z",
+    rocket: "M12 2c3 2 6 6 6 10v4l-4 4-4-4v-4c0-4 3-8 6-10z M9 14l-4 4 M15 14l4 4",
+    flame: "M12 2c3 4 5 6 5 9a5 5 0 11-10 0c0-3 2-5 5-9z",
+    code: "M8 6l-4 6 4 6 M16 6l4 6-4 6"
   };
   const iconPath = iconPaths[icon] || iconPaths.star;
   const svg = `
@@ -567,13 +575,14 @@ const makeAvatarSvg = ({ bg1, bg2, hair, skin, shirt, accent, icon }) => {
     };
 
 const AVATAR_PRESETS = [
-  makeAvatarSvg({ bg1:"#DBEAFE", bg2:"#93C5FD", hair:"#0F172A", skin:"#F5CBA7", shirt:"#2563EB", accent:"#0EA5E9", icon:"bolt" }),
-  makeAvatarSvg({ bg1:"#FFE4E6", bg2:"#FDBA74", hair:"#7C2D12", skin:"#F3C4B0", shirt:"#F97316", accent:"#EF4444", icon:"heart" }),
-  makeAvatarSvg({ bg1:"#ECFDF5", bg2:"#6EE7B7", hair:"#064E3B", skin:"#EABFA6", shirt:"#10B981", accent:"#22C55E", icon:"shield" }),
-  makeAvatarSvg({ bg1:"#EDE9FE", bg2:"#C4B5FD", hair:"#3F1D77", skin:"#F2C0A2", shirt:"#8B5CF6", accent:"#7C3AED", icon:"star" }),
-  makeAvatarSvg({ bg1:"#F1F5F9", bg2:"#94A3B8", hair:"#0F172A", skin:"#F5D0C5", shirt:"#334155", accent:"#111827", icon:"crown" }),
-  makeAvatarSvg({ bg1:"#ECFEFF", bg2:"#67E8F9", hair:"#164E63", skin:"#F3C4B0", shirt:"#06B6D4", accent:"#0E7490", icon:"gift" }),
-  makeAvatarSvg({ bg1:"#FFF1F2", bg2:"#FDA4AF", hair:"#7F1D1D", skin:"#F2C0A2", shirt:"#EF4444", accent:"#BE123C", icon:"spark" }),
+  makeAvatarSvg({ bg1:"#E0F2FE", bg2:"#38BDF8", hair:"#0F172A", skin:"#F5CBA7", shirt:"#0284C7", accent:"#0EA5E9", icon:"compass" }),
+  makeAvatarSvg({ bg1:"#FEE2E2", bg2:"#F97316", hair:"#7C2D12", skin:"#F0B49F", shirt:"#EA580C", accent:"#FB7185", icon:"flame" }),
+  makeAvatarSvg({ bg1:"#DCFCE7", bg2:"#34D399", hair:"#064E3B", skin:"#EABFA6", shirt:"#10B981", accent:"#22C55E", icon:"leaf" }),
+  makeAvatarSvg({ bg1:"#E0E7FF", bg2:"#818CF8", hair:"#312E81", skin:"#F0C4B1", shirt:"#6366F1", accent:"#4F46E5", icon:"diamond" }),
+  makeAvatarSvg({ bg1:"#F1F5F9", bg2:"#94A3B8", hair:"#1F2937", skin:"#F5D0C5", shirt:"#64748B", accent:"#0F172A", icon:"camera" }),
+  makeAvatarSvg({ bg1:"#ECFEFF", bg2:"#67E8F9", hair:"#164E63", skin:"#F3C4B0", shirt:"#0EA5E9", accent:"#0E7490", icon:"wave" }),
+  makeAvatarSvg({ bg1:"#FFF7ED", bg2:"#FDBA74", hair:"#7C2D12", skin:"#F2C0A2", shirt:"#F97316", accent:"#C2410C", icon:"rocket" }),
+  makeAvatarSvg({ bg1:"#FDF2F8", bg2:"#F472B6", hair:"#831843", skin:"#F6C1AE", shirt:"#EC4899", accent:"#BE185D", icon:"code" }),
 ];
 
 const REF_STORAGE_KEY = "ep:ref";
