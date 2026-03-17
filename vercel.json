@@ -1,0 +1,12 @@
+﻿{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        { "type": "host", "value": "scm-main.vercel.app" }
+      ],
+      "destination": "https://muchemi222.vercel.app/$1",
+      "permanent": true
+    }
+  ]
+}
