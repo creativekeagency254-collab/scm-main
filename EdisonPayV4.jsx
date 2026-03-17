@@ -5016,6 +5016,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
   const [depDone, setDepDone] = useState(false);
+  const depErrorMsg = formatDepositError(depError);
   const depositRef = useRef(null);
   const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
   const can=["Tuesday","Friday"].includes(today);
