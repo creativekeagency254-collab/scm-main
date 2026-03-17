@@ -1538,7 +1538,6 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
   const [depDone, setDepDone] = useState(false);
   const depErrorMsg = formatDepositError(depError);
   const [autoPrompted, setAutoPrompted] = useState(false);
-  const depErrorMsg = formatDepositError(depError);
   useEffect(() => {
     const intent = getTierIntent();
     if (!Number.isFinite(Number(profileRow?.tier)) && Number.isFinite(intent)) {
