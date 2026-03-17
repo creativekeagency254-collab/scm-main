@@ -143,6 +143,20 @@ const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPA
   }
     }) : null;
 const SUPABASE_ENABLED = !!supabase;
+const getApiBase = () => {
+  if (API_BASE) return API_BASE;
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  return "";
+};
+const getAccessToken = async () => {
+  if (!supabase) return "";
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || "";
+  } catch (e) {
+    return "";
+  }
+};
 
 const normalizeRefCode = (input) => {
   const raw = String(input || "").trim().toUpperCase();
@@ -1524,7 +1538,8 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
       setDepError("Please sign in to pay.");
       return;
     }
-    if (!API_BASE) {
+    const apiBase = getApiBase();
+    if (!apiBase) {
       setDepError("Payment service is not configured. Please contact support.");
       return;
     }
@@ -1536,15 +1551,19 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     setDepError("");
     setDepLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/deposit/create`, {
+      const token = await getAccessToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${apiBase}/api/v1/deposit/create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           amount: Number(tier.deposit),
           user_id: authUser.id,
           email,
           tier: tier.id,
           method: "PesaPal",
+          payment_mode: MANUAL_PAYMENTS ? "manual" : "live",
           phone: depPhone || profileRow?.phone || "",
           name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
         })
@@ -1803,7 +1822,7 @@ const CLIENT_NAV = [
   { id: "videos",    label: "Videos",    ic: "play"   },
   { id: "analytics", label: "Analytics", ic: "chart"  },
   { id: "referrals", label: "Referrals", ic: "gift"   },
-  { id: "withdraw",  label: "Withdraw",  ic: "wallet" },
+  { id: "withdraw",  label: "Wallet",  ic: "wallet" },
 ];
 
 const LIVE_SYMBOLS = [
@@ -2313,7 +2332,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     { id:"videos",    label:"Videos",    ic:"play",  badge: "2 left" },
     { id:"analytics", label:"Analytics", ic:"chart"  },
     { id:"referrals", label:"Referrals", ic:"gift",  badge: "8" },
-    { id:"withdraw",  label:"Withdraw",  ic:"wallet" },
+    { id:"withdraw",  label:"Wallet",  ic:"wallet" },
     { id:"settings",  label:"Settings",  ic:"settings" },
   ];
 
@@ -4884,7 +4903,8 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       setDepError("Please log in to deposit.");
       return;
     }
-    if (!API_BASE) {
+    const apiBase = getApiBase();
+    if (!apiBase) {
       setDepError("Payment service is not configured. Please contact support.");
       return;
     }
@@ -4896,15 +4916,19 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
     setDepError("");
     setDepLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/deposit/create`, {
+      const token = await getAccessToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${apiBase}/api/v1/deposit/create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           amount: amt,
           user_id: authUser.id,
           email,
           tier: t.id,
           method: "PesaPal",
+          payment_mode: MANUAL_PAYMENTS ? "manual" : "live",
           phone: depPhone || profileRow?.phone || "",
           name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
         })
@@ -6137,7 +6161,8 @@ export default function App() {
     if (!trackingId && !merchantReference) return;
     let cancelled = false;
     const poll = async () => {
-      if (!API_BASE) {
+      const apiBase = getApiBase();
+      if (!apiBase) {
         if (!cancelled) {
           setAuthMessage("Payment received. Please sign in to continue.");
           if (authUser?.id) go("dashboard"); else go("login");
@@ -6150,7 +6175,7 @@ export default function App() {
           if (!trackingId) return false;
           const qs = new URLSearchParams({ tracking_id: trackingId });
           if (merchantReference) qs.set("merchant_reference", merchantReference);
-          const res = await fetch(`${API_BASE}/api/v1/deposit/verify?${qs.toString()}`);
+          const res = await fetch(`${apiBase}/api/v1/deposit/verify?${qs.toString()}`);
           const data = await res.json().catch(() => ({}));
           return res.ok && data?.status === "success";
         } catch (e) {
@@ -6180,7 +6205,7 @@ export default function App() {
       }
       for (let i = 0; i < 10; i++) {
         try {
-          const res = await fetch(`${API_BASE}/api/v1/deposit/status?reference=${encodeURIComponent(merchantReference)}`);
+          const res = await fetch(`${apiBase}/api/v1/deposit/status?reference=${encodeURIComponent(merchantReference)}`);
           const data = await res.json().catch(() => ({}));
           if (!cancelled && res.ok && data?.status === "success") {
             setAuthMessage("Payment confirmed. Welcome back.");
