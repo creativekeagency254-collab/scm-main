@@ -170,7 +170,7 @@ const normalizeRefCode = (input) => {
     };
 
 const makeRefCode = (seed) => {
-  const base = String(seed || "EDISONPAY");
+  const base = String(seed || "MuchemiDev222");
   let h = 0;
   for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) >>> 0;
   const tail = (h % 0xFFFFFFF).toString(36).toUpperCase().padStart(6, "0").slice(-6);
@@ -498,7 +498,8 @@ const BrandMark = ({ size = 34 }) => (
   />
 );
 
-/* "" TIERS "" */
+/* "" TIERS "" */
+
 const V_PRICE = 50;
 const TIERS = [
   { id:1, name:"Regular",      tag:"REG", deposit:5000,   videos:2, bonus:0, bonusType:"none",    bonusAmount:0,    dailyTotal:100,  acc:"#0066FF", rgb:"0,102,255",  lgt:"#EBF2FF", mid:"#99C2FF" },
@@ -571,7 +572,7 @@ const AVATAR_PRESETS = [
 const REF_STORAGE_KEY = "ep:ref";
 const TIER_INTENT_KEY = "ep:tier-intent";
 const getBaseUrl = () => {
-  if (typeof window === "undefined") return "https://edisonpay.co.ke";
+  if (typeof window === "undefined") return "https://MuchemiDev222.co.ke";
   return window.location.origin;
     };
 const getRefFromUrl = () => {
@@ -804,7 +805,7 @@ function Landing({ go }) {
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", flexShrink: 0 }} onClick={() => go("landing")}>
           <BrandMark size={32} />
-          <span style={{ fontWeight: 900, fontSize: 16, letterSpacing: "-0.04em", color: "#111" }}>EdisonPay</span>
+          <span style={{ fontWeight: 900, fontSize: 16, letterSpacing: "-0.04em", color: "#111" }}>MuchemiDev222</span>
         </div>
         {/* Divider */}
         <div style={{ width: 1, height: 20, background: "#E8E8E8" }} />
@@ -1047,7 +1048,7 @@ function Landing({ go }) {
           <div className="ep-footer-brand">
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18 }}>
               <BrandMark size={34} />
-              <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.04em" }}>EdisonPay</span>
+              <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.04em" }}>MuchemiDev222</span>
             </div>
             <p style={{ fontSize: 13, color: "#555", lineHeight: 1.8, maxWidth: 260, marginBottom: 24 }}>
               Kenya's leading video earnings platform. Watch, earn, refer, and grow your daily rewards.
@@ -1086,7 +1087,7 @@ function Landing({ go }) {
 
         {/* Bottom bar */}
         <div className="ep-footer-bottom" style={{ borderTop: "1px solid #1A1A1A", padding: "20px 5vw", maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "#3A3A3A" }}>(c) 2025 EdisonPay Ltd. All rights reserved. Nairobi, Kenya.</span>
+          <span style={{ fontSize: 12, color: "#3A3A3A" }}>(c) 2025 MuchemiDev222 Ltd. All rights reserved. Nairobi, Kenya.</span>
           <div className="ep-footer-bottom-links" style={{ display: "flex", gap: 20, fontSize: 12, color: "#3A3A3A" }}>
             {["Privacy","Terms","Cookies","Sitemap"].map(l => <span key={l} style={{ cursor: "pointer", transition: "color .12s" }} onMouseEnter={e => e.target.style.color = "#777"} onMouseLeave={e => e.target.style.color = "#3A3A3A"}>{l}</span>)}
           </div>
@@ -1338,7 +1339,7 @@ function Auth({ type, go, from, authMessage }) {
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 64, zIndex: 1 }}>
           <BrandMark size={34} />
-          <span style={{ fontWeight: 800, fontSize: 17, color: "#fff", letterSpacing: "-0.03em" }}>EdisonPay</span>
+          <span style={{ fontWeight: 800, fontSize: 17, color: "#fff", letterSpacing: "-0.03em" }}>MuchemiDev222</span>
         </div>
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", zIndex: 1 }}>
@@ -1360,7 +1361,7 @@ function Auth({ type, go, from, authMessage }) {
           </div>
         </div>
 
-        <div style={{ fontSize: 12, color: "#444", zIndex: 1 }}>(c) 2025 EdisonPay Ltd.</div>
+        <div style={{ fontSize: 12, color: "#444", zIndex: 1 }}>(c) 2025 MuchemiDev222 Ltd.</div>
       </div>
 
       {/* RIGHT - form */}
@@ -1375,7 +1376,7 @@ function Auth({ type, go, from, authMessage }) {
                 ? "Choose a new secure password for your account."
                 : resetMode
                   ? "We'll email you a secure reset link."
-                  : (isLogin ? "Sign in to your EdisonPay account" : "Start earning in under 2 minutes")}
+                  : (isLogin ? "Sign in to your MuchemiDev222 account" : "Start earning in under 2 minutes")}
             </p>
           </div>
 
@@ -2478,7 +2479,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
         <div style={{ height:62, display:"flex", alignItems:"center", padding: open?"0 18px":"0", justifyContent: open?"flex-start":"center", borderBottom:"1px solid #F0F0F0", flexShrink:0, gap:10 }}>
           <BrandMark size={34} />
           {open && <div style={{ overflow:"hidden", whiteSpace:"nowrap" }}>
-            <div style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.04em", color:"#111" }}>EdisonPay</div>
+            <div style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.04em", color:"#111" }}>MuchemiDev222</div>
             <div style={{ fontSize:10, color:t.acc, fontWeight:800, letterSpacing:"0.06em", marginTop:1 }}>{t.name.toUpperCase()}</div>
           </div>}
         </div>
@@ -3118,7 +3119,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 /* "" REFERRAL MINI CARD (shown in overview) "" */
 function ReferralMiniCard({ t, data, frame, refCode, compact }) {
   const [copied, setCopied] = useState(false);
-  const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
+  const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "MuchemiDev222");
   const link = `${getBaseUrl()}/?ref=${safeCode}`;
   const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
@@ -3713,7 +3714,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28, position:"relative", zIndex:1 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <BrandMark size={32} />
-            <span style={{ fontSize:14, fontWeight:900, color:"#111", letterSpacing:"-0.03em" }}>EdisonPay</span>
+            <span style={{ fontSize:14, fontWeight:900, color:"#111", letterSpacing:"-0.03em" }}>MuchemiDev222</span>
           </div>
           <div style={{ width:36, height:36, borderRadius:10, background:"rgba(255,255,255,0.7)", display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(8px)" }}>
             <I n="grid" s={16} c="#111"/>
@@ -4104,7 +4105,7 @@ const YT_VIDEOS = [
   { id:"OPf0YbXqDm0", title:"Why Referral Programs Actually Work", channel:"Growth Hacks", views:"512K", dur:"6:10", thumb:"https://img.youtube.com/vi/OPf0YbXqDm0/mqdefault.jpg" },
   { id:"60ItHLz5WEA", title:"Crypto vs Mobile Money in Africa 2025", channel:"Digital Finance", views:"1.8M", dur:"20:05", thumb:"https://img.youtube.com/vi/60ItHLz5WEA/mqdefault.jpg" },
   { id:"hT_nvWreIhg", title:"Daily Earning Systems That Actually Scale", channel:"Side Hustle Pro", views:"743K", dur:"9:58", thumb:"https://img.youtube.com/vi/hT_nvWreIhg/mqdefault.jpg" },
-  { id:"e-ORhEE9VVg", title:"EdisonPay Tutorial: Getting Started", channel:"EdisonPay Official", views:"220K", dur:"5:30", thumb:"https://img.youtube.com/vi/e-ORhEE9VVg/mqdefault.jpg" },
+  { id:"e-ORhEE9VVg", title:"MuchemiDev222 Tutorial: Getting Started", channel:"MuchemiDev222 Official", views:"220K", dur:"5:30", thumb:"https://img.youtube.com/vi/e-ORhEE9VVg/mqdefault.jpg" },
   { id:"YnopHCL1lbs", title:"Bot Trading vs Video Earning: Which Wins?", channel:"Income Decoded", views:"1.1M", dur:"11:47", thumb:"https://img.youtube.com/vi/YnopHCL1lbs/mqdefault.jpg" },
   { id:"tgbNymZ7vqY", title:"How Referral Networks Generate Compound Returns", channel:"Compound Theory", views:"675K", dur:"14:20", thumb:"https://img.youtube.com/vi/tgbNymZ7vqY/mqdefault.jpg" },
   { id:"CevxZvSJLk8", title:"Understanding Tier-Based Investment Platforms", channel:"Invest Smart KE", views:"430K", dur:"7:55", thumb:"https://img.youtube.com/vi/CevxZvSJLk8/mqdefault.jpg" },
@@ -4112,7 +4113,7 @@ const YT_VIDEOS = [
   { id:"a01QQZyl-_I", title:"Withdraw Smart: When & How to Cash Out", channel:"Cash Flow Kenya", views:"318K", dur:"6:44", thumb:"https://img.youtube.com/vi/a01QQZyl-_I/mqdefault.jpg" },
   { id:"pRpeEdMmmQ0", title:"5 Mistakes New Earners Make Online", channel:"Digital Hustle", views:"995K", dur:"10:02", thumb:"https://img.youtube.com/vi/pRpeEdMmmQ0/mqdefault.jpg" },
   { id:"Zi_XLOBDo_Y", title:"Airtel Money vs M-Pesa for Payouts", channel:"Mobile Finance", views:"567K", dur:"8:18", thumb:"https://img.youtube.com/vi/Zi_XLOBDo_Y/mqdefault.jpg" },
-  { id:"09R8_2nJtjg", title:"Executive Pro Tier: Is It Worth It?", channel:"EdisonPay Official", views:"184K", dur:"9:05", thumb:"https://img.youtube.com/vi/09R8_2nJtjg/mqdefault.jpg" },
+  { id:"09R8_2nJtjg", title:"Executive Pro Tier: Is It Worth It?", channel:"MuchemiDev222 Official", views:"184K", dur:"9:05", thumb:"https://img.youtube.com/vi/09R8_2nJtjg/mqdefault.jpg" },
   { id:"y6120QOlsfU", title:"Maximize Your Daily Video Earnings Strategy", channel:"Earn Daily Africa", views:"452K", dur:"7:33", thumb:"https://img.youtube.com/vi/y6120QOlsfU/mqdefault.jpg" },
 ];
 
@@ -4309,7 +4310,7 @@ function VideosContent({ t, onEarning, authUser }) {
             </div>
             <div style={{ position:"relative", paddingTop:"56.25%", background:"#000" }}>
               <iframe
-                title="EdisonPay Video"
+                title="MuchemiDev222 Video"
                 src={`https://www.youtube.com/embed/${YT_VIDEOS[showPlayer]?.id}?autoplay=1&controls=1&rel=0`}
                 style={{ position:"absolute", inset:0, width:"100%", height:"100%", border:"0" }}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -4647,10 +4648,10 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
   ];
   const chipBorder = isMobile ? "1px solid #111" : "1px solid #EBEBEB";
   const [copied, setCopied] = useState(false);
-  const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "EDISONPAY");
+  const safeCode = normalizeRefCode(refCode) || makeRefCode(t.tag || t.name || "MuchemiDev222");
   const link = `${getBaseUrl()}/?ref=${safeCode}`;
   const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2e3); };
-  const whatsappText = `Join me on EdisonPay with my referral link: ${link}`;
+  const whatsappText = `Join me on MuchemiDev222 with my referral link: ${link}`;
   const openWhatsApp = () => {
     const encoded = encodeURIComponent(whatsappText);
     const appUrl = `whatsapp://send?text=${encoded}`;
@@ -5392,7 +5393,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
   };
   const sideW = isMobile ? (isTiny ? 200 : 230) : 230;
   const adminName = profileRow?.name || (authUser?.email ? authUser.email.split("@")[0] : "Admin");
-  const adminEmail = profileRow?.email || authUser?.email || "admin@edisonpay.co.ke";
+  const adminEmail = profileRow?.email || authUser?.email || "admin@MuchemiDev222.co.ke";
   const symScale = isMobile ? 0.8 : 1;
   const liveSymbols = (isMobile ? LIVE_SYMBOLS.slice(0,6) : LIVE_SYMBOLS).map(s => ({
     ...s,
@@ -5596,7 +5597,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
         <div style={{ padding:"20px 18px 16px", borderBottom:"2px solid #111", display:"flex", alignItems:"center", gap:10 }}>
           <BrandMark size={34} />
           <div>
-            <div style={{ fontWeight:900,fontSize:15,color:"#111",letterSpacing:"-0.03em" }}>EdisonPay</div>
+            <div style={{ fontWeight:900,fontSize:15,color:"#111",letterSpacing:"-0.03em" }}>MuchemiDev222</div>
             <div style={{ display:"inline-flex",alignItems:"center",gap:4,marginTop:2 }}>
               <div style={{ width:5,height:5,borderRadius:"50%",background:"#DC2626" }}/>
               <span style={{ fontSize:9,color:"#DC2626",fontWeight:800,letterSpacing:"0.12em" }}>ADMIN</span>
@@ -5680,7 +5681,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut }) {
               <h2 style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:"#111",fontFamily:adminHeadingFont }}>
                 {adminNav.find(n=>n.id===tab)?.label}
               </h2>
-              <p style={{ fontSize:12,color:ADMIN.muted,marginTop:3 }}>{new Date().toDateString()}  -  EdisonPay Admin</p>
+              <p style={{ fontSize:12,color:ADMIN.muted,marginTop:3 }}>{new Date().toDateString()}  -  MuchemiDev222 Admin</p>
             </div>
             {tab==="users"&&(
               <button style={{ padding:"8px 18px",background:"#111",color:"#fff",border:"1.5px solid #111",boxShadow:"0 4px 0 #111",borderRadius:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:6 }}>
