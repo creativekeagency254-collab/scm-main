@@ -145,6 +145,17 @@ export default async function handler(req, res) {
           last_name: lastName
         }
       });
+      const orderStatus = order?.status ? String(order.status) : "";
+      const orderError = order?.error || order?.error?.message || null;
+      const orderMessage = order?.message || "";
+      if (orderError || (orderStatus && orderStatus !== "200")) {
+        await supabaseAdmin
+          .from("deposits")
+          .update({ status: "failed" })
+          .eq("provider_reference", reference);
+        return res.status(500).json({ error: orderMessage || "Pesapal rejected the order." });
+      }
+
       const redirectUrl =
         order?.redirect_url ||
         order?.redirectUrl ||
