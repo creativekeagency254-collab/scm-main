@@ -132,6 +132,8 @@ const PAYMENTS_MODE = String(import.meta.env.VITE_PAYMENTS_MODE || "live").toLow
 const MANUAL_PAYMENTS = PAYMENTS_MODE === "manual";
 const WITHDRAWALS_MODE = String(import.meta.env.VITE_WITHDRAWALS_MODE || PAYMENTS_MODE || "manual").toLowerCase();
 const MANUAL_WITHDRAWALS = WITHDRAWALS_MODE !== "auto";
+const TIER1_MOBILE_MIN = Number(import.meta.env.VITE_TIER1_MOBILE_MIN || 100);
+const TIER1_MOBILE_MAX = Number(import.meta.env.VITE_TIER1_MOBILE_MAX || 1000);
 const DEPOSIT_INSTRUCTIONS =
   import.meta.env.VITE_DEPOSIT_INSTRUCTIONS ||
   "Submit your self deposit request and our team will share payment instructions and confirm your wallet credit.";
@@ -185,6 +187,14 @@ const formatDepositError = (msg) => {
     return "Payment gateway is not configured. Please contact support.";
   }
   return raw;
+};
+
+const clampNumber = (value, minVal, maxVal) => {
+  const num = Number(value);
+  const min = Number.isFinite(minVal) ? minVal : 0;
+  const max = Number.isFinite(maxVal) ? maxVal : min;
+  if (!Number.isFinite(num)) return min;
+  return Math.min(Math.max(num, min), max);
 };
 
 const normalizeRefCode = (input) => {
@@ -1538,6 +1548,13 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
   const [depDone, setDepDone] = useState(false);
   const depErrorMsg = formatDepositError(depError);
   const [autoPrompted, setAutoPrompted] = useState(false);
+  const [depAmount, setDepAmount] = useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
+  const tier1Min = Number.isFinite(TIER1_MOBILE_MIN) ? TIER1_MOBILE_MIN : 100;
+  const tier1Max = Number.isFinite(TIER1_MOBILE_MAX) ? TIER1_MOBILE_MAX : 1000;
+  const tier1Cap = tier1Max >= tier1Min ? tier1Max : tier1Min;
+  const tier1Floor = tier1Min;
+  const isTier1Flex = isMobile && Number(selected) === 1;
   useEffect(() => {
     const intent = getTierIntent();
     if (!Number.isFinite(Number(profileRow?.tier)) && Number.isFinite(intent)) {
@@ -1550,6 +1567,18 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
       setAutoPrompted(true);
     }
   }, [profileRow?.tier, autoPrompted]);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 769);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  useEffect(() => {
+    if (isTier1Flex) {
+      setDepAmount((prev) => (prev ? prev : String(tier1Floor)));
+    } else {
+      setDepAmount("");
+    }
+  }, [isTier1Flex, tier1Floor]);
 
   useEffect(() => {
     if (profileRow?.phone && !depPhone) setDepPhone(String(profileRow.phone));
@@ -1620,6 +1649,15 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
       setDepError("Email is required for checkout.");
       return;
     }
+    let amount = Number(tier.deposit);
+    if (isTier1Flex && Number(tier.id) === 1) {
+      const nextAmt = clampNumber(depAmount, tier1Floor, tier1Cap);
+      if (!Number.isFinite(nextAmt) || nextAmt <= 0) {
+        setDepError(`Enter an amount between KES ${tier1Floor.toLocaleString()} and KES ${tier1Cap.toLocaleString()}.`);
+        return;
+      }
+      amount = nextAmt;
+    }
     setDepError("");
     setDepLoading(true);
     try {
@@ -1630,7 +1668,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
         method: "POST",
         headers,
         body: JSON.stringify({
-          amount: Number(tier.deposit),
+          amount,
           user_id: authUser.id,
           email,
           tier: tier.id,
@@ -1824,18 +1862,39 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                             </div>
                           </div>
                           <div style={{ padding:"4px 8px", borderRadius:999, background:MANUAL_PAYMENTS ? "#F97316" : "#111827", color:"#fff", fontSize:10, fontWeight:800 }}>
-                            {MANUAL_PAYMENTS ? "MANUAL" : "LIVE"}
+                            {MANUAL_PAYMENTS ? "MANUAL" : (isTier1Flex ? "MOBILE FLEX" : "LIVE")}
                           </div>
                         </div>
 
                         <div style={{ display:"grid", gridTemplateColumns:"1fr auto", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:"#F8FAFC", border:"1px solid #E2E8F0", marginBottom:10 }}>
                           <div>
-                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:800, letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
-                            <div style={{ fontSize:18, fontWeight:900, color:"#0F172A" }}>KES {tier.deposit.toLocaleString()}</div>
-                            <div style={{ fontSize:10, color:"#64748B", marginTop:2 }}>{tier.name} Tier</div>
+                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:800, letterSpacing:"0.12em" }}>
+                              {isTier1Flex ? "MOBILE LIMIT" : "LOCKED AMOUNT"}
+                            </div>
+                            <div style={{ fontSize:18, fontWeight:900, color:"#0F172A" }}>
+                              KES {(isTier1Flex ? clampNumber(depAmount || tier1Floor, tier1Floor, tier1Cap) : tier.deposit).toLocaleString()}
+                            </div>
+                            <div style={{ fontSize:10, color:"#64748B", marginTop:2 }}>
+                              {isTier1Flex ? `Limit KES ${tier1Floor.toLocaleString()} - ${tier1Cap.toLocaleString()}` : `${tier.name} Tier`}
+                            </div>
                           </div>
                           <div style={{ padding:"6px 10px", borderRadius:999, background:"#111827", color:"#fff", fontSize:10, fontWeight:800 }}>FIXED</div>
                         </div>
+
+                        {isTier1Flex && (
+                          <div style={{ marginBottom:10 }}>
+                            <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:6 }}>Enter Amount</div>
+                            <input
+                              type="number"
+                              min={tier1Floor}
+                              max={tier1Cap}
+                              value={depAmount}
+                              onChange={e=>setDepAmount(e.target.value)}
+                              placeholder={`KES ${tier1Floor.toLocaleString()} - ${tier1Cap.toLocaleString()}`}
+                              style={{ width:"100%",padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:13,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+                            />
+                          </div>
+                        )}
 
                         <div style={{ fontSize:11, color:"#64748B", marginTop:2 }}>
                           {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Secure checkout will open in a new window."}
@@ -5018,6 +5077,11 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const [depDone, setDepDone] = useState(false);
   const depErrorMsg = formatDepositError(depError);
   const depositRef = useRef(null);
+  const isMobile = window.innerWidth < 769;
+  const tier1Min = Number.isFinite(TIER1_MOBILE_MIN) ? TIER1_MOBILE_MIN : 100;
+  const tier1Max = Number.isFinite(TIER1_MOBILE_MAX) ? TIER1_MOBILE_MAX : 1000;
+  const tier1Cap = tier1Max >= tier1Min ? tier1Max : tier1Min;
+  const tier1Floor = tier1Min;
   const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
   const can=["Tuesday","Friday"].includes(today);
   const nextTier = TIERS[t.id];
@@ -5027,14 +5091,19 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const unlockNeed = needsUnlock ? t.deposit : 0;
   const primaryNeed = needsUnlock ? unlockNeed : upgradeNeed;
   const canDeposit = primaryNeed > 0;
+  const isTier1Flex = isMobile && Number(t?.id) === 1 && needsUnlock;
   useEffect(() => {
     if (!focusDeposit) return;
     if (depositRef.current) depositRef.current.scrollIntoView({ behavior:"smooth", block:"start" });
-    if (primaryNeed > 0 && String(primaryNeed) !== depAmt) setDepAmt(String(primaryNeed));
+    if (isTier1Flex) {
+      if (!depAmt) setDepAmt(String(tier1Floor));
+    } else if (primaryNeed > 0 && String(primaryNeed) !== depAmt) {
+      setDepAmt(String(primaryNeed));
+    }
     if (onFocusDone) onFocusDone();
-  }, [focusDeposit, primaryNeed]);
+  }, [focusDeposit, primaryNeed, isTier1Flex, tier1Floor, depAmt]);
   const submitDeposit = async () => {
-    const requiredAmt = Number(primaryNeed);
+    const requiredAmt = isTier1Flex ? clampNumber(depAmt, tier1Floor, tier1Cap) : Number(primaryNeed);
     if (!Number.isFinite(requiredAmt) || requiredAmt <= 0) {
       setDepError("No deposit is required right now.");
       return;
@@ -5329,11 +5398,30 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             <div style={{ fontSize:11,fontWeight:800,color:"#0F172A",letterSpacing:"0.18em",textTransform:"uppercase" }}>Self Deposit Details</div>
             <div style={{ marginTop:10,padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
               <div>
-                <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
-                <div style={{ fontSize:15,fontWeight:900,color:"#0F172A" }}>KES {Math.max(primaryNeed, 0).toLocaleString()}</div>
+                <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>
+                  {isTier1Flex ? "MOBILE LIMIT" : "LOCKED AMOUNT"}
+                </div>
+                <div style={{ fontSize:15,fontWeight:900,color:"#0F172A" }}>
+                  KES {Math.max(isTier1Flex ? clampNumber(depAmt || tier1Floor, tier1Floor, tier1Cap) : primaryNeed, 0).toLocaleString()}
+                </div>
               </div>
               <div style={{ padding:"4px 8px",borderRadius:999,background:"#111827",color:"#fff",fontSize:10,fontWeight:800 }}>FIXED</div>
             </div>
+
+            {isTier1Flex && (
+              <div style={{ marginTop:10 }}>
+                <div style={{ fontSize:10,letterSpacing:"0.14em",fontWeight:800,color:"#64748B",textTransform:"uppercase",marginBottom:6 }}>Enter Amount</div>
+                <input
+                  type="number"
+                  min={tier1Floor}
+                  max={tier1Cap}
+                  value={depAmt}
+                  onChange={e=>setDepAmt(e.target.value)}
+                  placeholder={`KES ${tier1Floor.toLocaleString()} - ${tier1Cap.toLocaleString()}`}
+                  style={{ width:"100%",padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+                />
+              </div>
+            )}
 
             <div style={{ marginTop:10 }}>
               <div style={{ fontSize:10,letterSpacing:"0.14em",fontWeight:800,color:"#64748B",textTransform:"uppercase",marginBottom:8 }}>Payment Method</div>
