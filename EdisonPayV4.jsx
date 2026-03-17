@@ -1319,17 +1319,43 @@ function Auth({ type, go, from, authMessage }) {
       return;
     }
     const refBy = normalizeRefCode(f.ref);
-    const { data, error } = await supabase.auth.signUp({
-      email: f.email,
-      password: f.password,
-      options: { data: { full_name: f.name || "", referred_by: refBy || "" } }
-    });
-    if (error) { setErr(error.message); setLoading(false); return; }
-    setLoading(false);
-    if (data?.session) {
-      go(from || "dashboard");
-    } else {
-      setInfo("Check your email to confirm your account, then sign in.");
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      setErr("Signup service is not configured.");
+      setLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${apiBase}/api/v1/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: f.email,
+          password: f.password,
+          full_name: f.name || "",
+          referred_by: refBy || ""
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data?.error || "Unable to create account.");
+        setLoading(false);
+        return;
+      }
+      if (data?.session?.access_token && data?.session?.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token
+        });
+        setLoading(false);
+        go(from || "dashboard");
+        return;
+      }
+      setLoading(false);
+      setInfo(data?.message || "Account created. Please sign in.");
+    } catch (e) {
+      setLoading(false);
+      setErr("Unable to create account. Please try again.");
     }
   };
   const handleGoogle = async () => {
