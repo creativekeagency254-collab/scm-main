@@ -1,152 +1,40 @@
 ﻿import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import React from "react";
 import { createClient } from "@supabase/supabase-js";
-
-/* "" FONTS "" */
-const Fonts = () => (
-  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-);
-
-/* "" CSS KEYFRAMES injected once "" */
-const GlobalStyles = () => {
-  useEffect(() => {
-    const id = "ep-styles";
-    if (document.getElementById(id)) return;
-    const s = document.createElement("style");
-    s.id = id;
-    s.textContent = `
-      @keyframes fadeUp   { from { opacity:0; transform:translateY(22px);} to { opacity:1; transform:translateY(0);} }
-      @keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
-      @keyframes slideRight { from { transform:translateX(-18px); opacity:0; } to { transform:translateX(0); opacity:1; } }
-      @keyframes ticker   { from { transform:translateX(0); } to { transform:translateX(-50%); } }
-      @keyframes countUp  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-      @keyframes floatA   { 0%,100%{transform:translateY(0px);} 50%{transform:translateY(-7px);} }
-      @keyframes floatB   { 0%,100%{transform:translateY(0px);} 50%{transform:translateY(7px);} }
-      @keyframes barGrow  { from{width:0;} to{width:var(--w);} }
-      @keyframes pulse    { 0%,100%{opacity:1;} 50%{opacity:.45;} }
-      @keyframes spin     { to{transform:rotate(360deg);} }
-      @keyframes scaleIn  { from{opacity:0;transform:scale(0.96);} to{opacity:1;transform:scale(1);} }
-      @keyframes shimmer  { from{background-position:-200% center;} to{background-position:200% center;} }
-      @keyframes borderBeam { 0%{opacity:0;transform:translateX(-100%);} 20%{opacity:1;} 80%{opacity:1;} 100%{opacity:0;transform:translateX(100%);} }
-      @keyframes slideUp  { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
-      @keyframes slideDown { from{opacity:0;transform:translateY(-8px);} to{opacity:1;transform:translateY(0);} }
-      @keyframes drawerIn { from{transform:translateX(-100%);} to{transform:translateX(0);} }
-      @keyframes upFloat  { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
-      @keyframes popPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.05);} }
-      @keyframes ep-symbol-float { 0%,100%{transform:translate3d(0,0,0) rotate(0deg);} 50%{transform:translate3d(12px,-18px,0) rotate(3deg);} }
-      @keyframes ep-ambient { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-18px,14px,0) scale(1.03);} }
-      @keyframes ep-ambient-alt { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-10px,0) scale(1.04);} }
-      @keyframes ep-upgrade-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.9;} 25%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
-      @keyframes ep-tier-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.85;} 28%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
-      @keyframes ep-neon-drift { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-18px,0) scale(1.04);} }
-      @keyframes ep-neon-pulse { 0%,100%{box-shadow:0 0 0 rgba(34,197,94,0);} 50%{box-shadow:0 0 24px rgba(34,197,94,0.45);} }
-      @keyframes ep-border-pop { 0%,100%{border-color:rgba(52,211,153,0.34);} 50%{border-color:rgba(132,204,22,0.86);} }
-      .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
-      .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
-      .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
-      .ep-skeleton { position:relative; overflow:hidden; background:#F5F5F5; border:1px solid #E5E7EB; box-shadow:inset 0 1px 0 rgba(255,255,255,0.7); }
-      .ep-skeleton::after { content:""; position:absolute; inset:-40%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.75) 45%, transparent 100%); animation:ep-shine 1.4s linear infinite; }
-      @keyframes ep-shine { 0%{ transform:translateX(-60%);} 100%{ transform:translateX(60%);} }
-      .ep-card { background:#fff; border-radius:16px; border:1px solid #111; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
-      .ep-upgrade-btn { position:relative; overflow:hidden; animation: popPulse 1.6s ease-in-out infinite; }
-      .ep-upgrade-btn::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.9) 48%, transparent 100%); transform:translateX(-120%); animation:ep-upgrade-glare 2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
-      .ep-upgrade-btn:disabled::after { animation:none; opacity:0; }
-      .ep-tier-glare { position:relative; overflow:hidden; }
-      .ep-tier-glare::after { content:""; position:absolute; top:-40%; left:-60%; width:60%; height:180%; background:linear-gradient(120deg, transparent 0%, var(--glare, rgba(255,255,255,0.85)) 48%, transparent 100%); transform:translateX(-120%); animation:ep-tier-glare 2.2s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
-      .ep-upgrade-arrow { animation: upFloat .9s ease-in-out infinite; }
-      .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
-      .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
-      .ep-help-fab { position: fixed; }
-      .ep-casino-glow { animation:ep-neon-pulse 3s ease-in-out infinite; }
-      .ep-casino-border { animation:ep-border-pop 2.4s ease-in-out infinite; }
-      .ep-casino-pop { animation:scaleIn .22s ease, ep-neon-pulse 3.4s ease-in-out infinite; }
-      * { box-sizing:border-box; margin:0; padding:0; }
-      ::-webkit-scrollbar { width:5px; height:5px; }
-      ::-webkit-scrollbar-track { background:transparent; }
-      ::-webkit-scrollbar-thumb { background:#e0e0e0; border-radius:3px; }
-      ::-webkit-scrollbar-thumb:hover { background:#c8c8c8; }
-
-      /* "" MOBILE RESPONSIVE "" */
-      @media (max-width:768px) {
-        .ep-grid-4 { grid-template-columns: 1fr 1fr !important; }
-        .ep-grid-2 { grid-template-columns: 1fr !important; }
-        .ep-grid-3 { grid-template-columns: 1fr !important; }
-        .ep-hide-mobile { display:none !important; }
-        .ep-hero-grid { grid-template-columns:1fr !important; }
-        .ep-tier-grid { grid-template-columns:1fr !important; }
-        .ep-nav-links { display:none !important; }
-        .ep-auth-grid { grid-template-columns:1fr !important; }
-        .ep-auth-left { display:none !important; }
-        .ep-dash-sidebar { position:fixed !important; z-index:200 !important; height:100vh !important; top:0 !important; left:0 !important; transform:translateX(-100%) !important; transition:transform .28s cubic-bezier(.4,0,.2,1) !important; }
-        .ep-dash-sidebar.open { transform:translateX(0) !important; animation:drawerIn .28s cubic-bezier(.4,0,.2,1) !important; }
-        .ep-dash-overlay { display:none !important; }
-        .ep-dash-overlay.open { display:block !important; }
-        .ep-topbar-search { display:none !important; }
-        .ep-topbar-date { display:none !important; }
-        .ep-page-actions { display:none !important; }
-        .ep-overview-chart-grid { grid-template-columns:1fr !important; }
-        .ep-admin-grid2 { grid-template-columns:1fr !important; }
-        .ep-admin-stats { grid-template-columns:1fr 1fr !important; }
-        .ep-footer-cta { flex-direction:column !important; align-items:flex-start !important; }
-        .ep-footer-cta-actions { width:100% !important; flex-wrap:wrap !important; }
-        .ep-footer-grid { grid-template-columns:1fr 1fr !important; gap:24px !important; }
-        .ep-footer-brand { grid-column: 1 / -1 !important; }
-        .ep-footer-bottom { flex-direction:column !important; align-items:flex-start !important; gap:10px !important; }
-        .ep-footer-bottom-links { flex-wrap:wrap !important; gap:10px !important; }
-        .ep-help-fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; right: 14px !important; }
-      }
-        @media (max-width:600px) {
-          .ep-footer-grid { grid-template-columns:1fr !important; gap:20px !important; }
-        }
-        @media (max-width:480px) {
-          .ep-grid-4 { grid-template-columns:1fr !important; }
-          .ep-admin-stats { grid-template-columns:1fr !important; }
-          .ep-footer-grid { grid-template-columns:1fr !important; }
-          .ep-footer-cta-actions button { width:100% !important; }
-        }
-      @media (max-width:420px) {
-        .ep-card { border-radius:14px !important; }
-        .ep-card, .ep-frame-dark, .ep-frame-light { padding:14px 14px !important; }
-        .ep-auth-grid > div { padding:32px !important; }
-        .ep-auth-grid h1 { font-size:24px !important; }
-        .ep-auth-grid h2 { font-size:30px !important; }
-        .ep-auth-grid p { font-size:13px !important; }
-      }
-      @media (max-width:380px) {
-        .ep-card, .ep-frame-dark, .ep-frame-light { padding:12px 12px !important; }
-        .ep-auth-grid > div { padding:26px !important; }
-      }
-      @media (min-width:769px) {
-        .ep-dash-overlay { display:none !important; }
-        .ep-dash-sidebar { transform:none !important; }
-        .ep-mobile-only { display:none !important; }
-      }
-      @media (max-width:768px) {
-        .ep-desktop-only { display:none !important; }
-      }
-    `;
-    document.head.appendChild(s);
-  }, []);
-  return null;
-    };
+import { Fonts, GlobalStyles } from "./src/features/layout/AppStyles.jsx";
+import { I, PaymentLogo, BrandMark, PAYMENT_ICON_SOURCES, AnimNum, LazyVideo, Donut } from "./src/features/shared/ui-primitives.jsx";
+import { TIERS, V_PRICE, getTierRequiredEarn, getTierDailyTotal, getTierBonusUnit } from "./src/features/config/tiers.js";
+import { AVATAR_PRESETS } from "./src/features/profile/avatar-presets.js";
 
 /* "" SUPABASE (optional) "" */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 const PAYMENTS_MODE = String(import.meta.env.VITE_PAYMENTS_MODE || "live").toLowerCase();
-const MANUAL_PAYMENTS = PAYMENTS_MODE === "manual";
 const WITHDRAWALS_MODE = String(import.meta.env.VITE_WITHDRAWALS_MODE || PAYMENTS_MODE || "auto").toLowerCase();
 const MANUAL_WITHDRAWALS = WITHDRAWALS_MODE !== "auto";
-const TIER1_MOBILE_MIN = Number(import.meta.env.VITE_TIER1_MOBILE_MIN || 100);
-const TIER1_MOBILE_MAX = Number(import.meta.env.VITE_TIER1_MOBILE_MAX || 1000);
-const DEPOSIT_INSTRUCTIONS =
-  import.meta.env.VITE_DEPOSIT_INSTRUCTIONS ||
-  "Submit your self deposit request and our team will share payment instructions and confirm your wallet credit.";
 const DEPOSIT_METHODS = [
-  { id: "mpesa", label: "M-Pesa", desc: "Mobile money" },
-  { id: "card", label: "Card", desc: "Visa / Mastercard" },
-  { id: "crypto", label: "Crypto", desc: "USDT / BTC" }
+  { id: "mpesa", value: "M-Pesa", title: "M-Pesa", subtitle: "M-Pesa", logo: "M-Pesa" },
+  { id: "airtel", value: "Airtel Money", title: "Airtel Money", subtitle: "Airtel Money", logo: "Airtel Money" },
+  { id: "visa", value: "Visa", title: "Visa", subtitle: "Visa", logo: "Visa" },
+  { id: "mastercard", value: "Mastercard", title: "Mastercard", subtitle: "Mastercard", logo: "Mastercard" },
+  { id: "bank", value: "Bank Transfer", title: "Bank Transfer", subtitle: "Bank Transfer" },
+  { id: "crypto", value: "USDT / BTC", title: "Crypto", subtitle: "USDT / BTC", logo: "USDT" }
+];
+const CLIENT_DASH_TAB_ITEMS = [
+  { id: "overview", label: "Overview", ic: "grid" },
+  { id: "videos", label: "Videos", ic: "play" },
+  { id: "analytics", label: "Analytics", ic: "chart" },
+  { id: "referrals", label: "Referrals", ic: "gift" },
+  { id: "withdraw", label: "Wallet", ic: "wallet" },
+  { id: "settings", label: "Settings", ic: "settings" }
+];
+const ADMIN_DASH_TAB_ITEMS = [
+  { id: "overview", label: "Overview", ic: "grid" },
+  { id: "users", label: "Users", ic: "users" },
+  { id: "transactions", label: "Transactions", ic: "wallet" },
+  { id: "withdrawals", label: "Withdrawals", ic: "up" },
+  { id: "settings", label: "Settings", ic: "settings" }
 ];
 const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
@@ -158,16 +46,9 @@ const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPA
 const SUPABASE_ENABLED = !!supabase;
 const getApiBase = () => {
   const origin = typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
-  if (!API_BASE) return origin;
-  if (origin) {
-    try {
-      const apiOrigin = new URL(API_BASE, origin).origin;
-      if (apiOrigin !== origin) return origin;
-    } catch (e) {
-      // fall back to API_BASE as-is
-    }
-  }
-  return API_BASE;
+  const configured = String(API_BASE || "").trim().replace(/\/+$/, "");
+  if (!configured) return origin;
+  return configured;
 };
 const getAccessToken = async () => {
   if (!supabase) return "";
@@ -193,14 +74,6 @@ const formatDepositError = (msg) => {
     return "Payment gateway is not configured. Please contact support.";
   }
   return raw;
-};
-
-const clampNumber = (value, minVal, maxVal) => {
-  const num = Number(value);
-  const min = Number.isFinite(minVal) ? minVal : 0;
-  const max = Number.isFinite(maxVal) ? maxVal : min;
-  if (!Number.isFinite(num)) return min;
-  return Math.min(Math.max(num, min), max);
 };
 
 const normalizeRefCode = (input) => {
@@ -338,287 +211,9 @@ async function upsertProfileRow(payload) {
   }
     };
 
-const I = ({ n, s = 16, c = "currentColor", w = 1.75 }) => {
-  const d = {
-    home:      <><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></>,
-    chart:     <><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></>,
-    play:      <><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16"/></>,
-    users:     <><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></>,
-    wallet:    <><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/><path d="M22 7l-4-4H7a2 2 0 00-2 2"/></>,
-    settings:  <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></>,
-    bell:      <><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></>,
-    logout:    <><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
-    up:        <><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></>,
-    down:      <><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19,12 12,19 5,12"/></>,
-    menu:      <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
-    link:      <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
-    copy:      <><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></>,
-    check:     <><polyline points="20,6 9,17 4,12"/></>,
-    lock:      <><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></>,
-    star:      <><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></>,
-    shield:    <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
-    gift:      <><polyline points="20,12 20,22 4,22 4,12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></>,
-    trendUp:   <><polyline points="23,6 13.5,15.5 8.5,10.5 1,18"/><polyline points="17,6 23,6 23,12"/></>,
-    trendDn:   <><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></>,
-    search:    <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
-    more:      <><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></>,
-    user:      <><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
-    calendar:  <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
-    grid:      <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></>,
-    xmark:     <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
-    chevR:     <><polyline points="9,18 15,12 9,6"/></>,
-    chevL:     <><polyline points="15,18 9,12 15,6"/></>,
-    sun:       <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>,
-    moon:      <><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></>,
-    bolt:      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>,
-    activity:  <><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></>,
-  };
-  return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round">
-      {d[n]}
-    </svg>
-  );
-    };
-
-/* PAYMENT LOGOS (monochrome) */
-const PAY_LOGO_GREY = "#B8B8B8";
-const Wordmark = ({ text, width = 90 }) => (
-  <svg viewBox={`0 0 ${width} 24`} height="20" role="img" aria-label={text} style={{ display:"block" }}>
-    <text x="0" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="700" fontFamily="Sora, Geist, sans-serif" letterSpacing="0.04em">
-      {text}
-    </text>
-  </svg>
-);
-function PaymentLogo({ name }) {
-  switch (name) {
-    case "Mastercard":
-      return (
-        <svg viewBox="0 0 64 24" height="20" role="img" aria-label="Mastercard" style={{ display:"block" }}>
-          <circle cx="26" cy="12" r="9" fill={PAY_LOGO_GREY} opacity="0.45" />
-          <circle cx="38" cy="12" r="9" fill={PAY_LOGO_GREY} opacity="0.45" />
-          <circle cx="26" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
-          <circle cx="38" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
-        </svg>
-      );
-    case "Visa":
-      return <Wordmark text="VISA" width={64} />;
-    case "M-Pesa":
-      return <Wordmark text="M-PESA" width={72} />;
-    case "Google Pay":
-      return <Wordmark text="Google Pay" width={110} />;
-    case "Binance Pay":
-      return (
-        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Binance Pay" style={{ display:"block" }}>
-          <g transform="translate(6 4)">
-            <rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)" fill={PAY_LOGO_GREY} opacity="0.6" />
-            <rect x="10" y="2" width="8" height="8" transform="rotate(45 14 6)" fill={PAY_LOGO_GREY} opacity="0.35" />
-          </g>
-          <text x="32" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif" letterSpacing="0.04em">Binance Pay</text>
-        </svg>
-      );
-    case "BNB":
-      return (
-        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="BNB" style={{ display:"block" }}>
-          <g transform="translate(10 4)" fill={PAY_LOGO_GREY}>
-            <rect x="8" y="0" width="6" height="6" transform="rotate(45 11 3)" />
-            <rect x="0" y="8" width="6" height="6" transform="rotate(45 3 11)" opacity="0.6" />
-            <rect x="16" y="8" width="6" height="6" transform="rotate(45 19 11)" opacity="0.6" />
-            <rect x="8" y="16" width="6" height="6" transform="rotate(45 11 19)" opacity="0.6" />
-          </g>
-        </svg>
-      );
-    case "Bitcoin":
-      return (
-        <svg viewBox="0 0 50 24" height="20" role="img" aria-label="Bitcoin" style={{ display:"block" }}>
-          <circle cx="14" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
-          <text x="10.5" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">B</text>
-          <line x1="11" y1="6" x2="11" y2="18" stroke={PAY_LOGO_GREY} strokeWidth="1" />
-          <line x1="14.5" y1="6" x2="14.5" y2="18" stroke={PAY_LOGO_GREY} strokeWidth="1" />
-        </svg>
-      );
-    case "USDT":
-      return (
-        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="USDT" style={{ display:"block" }}>
-          <circle cx="12" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
-          <text x="9" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">T</text>
-          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">USDT</text>
-        </svg>
-      );
-    case "USDC":
-      return (
-        <svg viewBox="0 0 58 24" height="20" role="img" aria-label="USDC" style={{ display:"block" }}>
-          <circle cx="12" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
-          <text x="9" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">$</text>
-          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">USDC</text>
-        </svg>
-      );
-    case "Ethereum":
-      return (
-        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="Ethereum" style={{ display:"block" }}>
-          <polygon points="12,2 18,12 12,22 6,12" fill={PAY_LOGO_GREY} opacity="0.6" />
-          <polygon points="12,2 18,12 12,12 6,12" fill={PAY_LOGO_GREY} />
-          <text x="28" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">ETH</text>
-        </svg>
-      );
-    case "Litecoin":
-      return (
-        <svg viewBox="0 0 54 24" height="20" role="img" aria-label="Litecoin" style={{ display:"block" }}>
-          <circle cx="12" cy="12" r="9" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
-          <text x="9.5" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">L</text>
-          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">LTC</text>
-        </svg>
-      );
-    case "Flutterwave":
-      return (
-        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Flutterwave" style={{ display:"block" }}>
-          <circle cx="12" cy="12" r="8" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
-          <path d="M6 12c2.5-3 6.5-3 12 0" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
-          <text x="30" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">Flutterwave</text>
-        </svg>
-      );
-    case "PayPal":
-      return <Wordmark text="PayPal" width={70} />;
-    case "Apple Pay":
-      return (
-        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Apple Pay" style={{ display:"block" }}>
-          <path d="M12 6c1-2 2.6-3 4.4-3-0.1 1.8-1.2 3.1-2.6 3.8-0.8 0.4-1.6 0.5-1.8 0.5 0-0.5 0-1.1 0-1.3z" fill={PAY_LOGO_GREY} />
-          <path d="M12 8c-2 0-4 1.6-4 4.7 0 2.7 1.5 5.3 3.4 5.3 0.8 0 1.4-0.3 2.2-0.3 0.9 0 1.4 0.3 2.4 0.3 1.7 0 3.2-2.2 3.2-4.4-0.9-0.4-2-1.4-2-3.1 0-1.7 1.1-2.6 1.8-3-0.4-0.6-1.7-1.5-3.2-1.5-1 0-1.8 0.4-2.4 0.4-0.6 0-1.4-0.4-2.4-0.4z" fill={PAY_LOGO_GREY} opacity="0.6" />
-          <text x="34" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">Apple Pay</text>
-        </svg>
-      );
-    case "Samsung Pay":
-      return <Wordmark text="Samsung Pay" width={120} />;
-    case "Stripe":
-      return <Wordmark text="Stripe" width={70} />;
-    case "Alipay":
-      return <Wordmark text="Alipay" width={70} />;
-    case "Kora":
-      return <Wordmark text="Kora" width={90} />;
-    case "WeChat Pay":
-      return (
-        <svg viewBox="0 0 100 24" height="20" role="img" aria-label="WeChat Pay" style={{ display:"block" }}>
-          <circle cx="12" cy="11" r="8" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
-          <circle cx="20" cy="13" r="6" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.4" />
-          <text x="34" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">WeChat Pay</text>
-        </svg>
-      );
-    case "Skrill":
-      return <Wordmark text="Skrill" width={60} />;
-    case "Neteller":
-      return <Wordmark text="Neteller" width={78} />;
-    case "Cash App":
-      return (
-        <svg viewBox="0 0 90 24" height="20" role="img" aria-label="Cash App" style={{ display:"block" }}>
-          <rect x="2" y="4" width="16" height="16" rx="4" fill="none" stroke={PAY_LOGO_GREY} strokeWidth="1.6" />
-          <text x="7" y="16" fill={PAY_LOGO_GREY} fontSize="12" fontWeight="800" fontFamily="Sora, Geist, sans-serif">$</text>
-          <text x="26" y="16" fill={PAY_LOGO_GREY} fontSize="11" fontWeight="700" fontFamily="Sora, Geist, sans-serif">Cash App</text>
-        </svg>
-      );
-    case "Payoneer":
-      return <Wordmark text="Payoneer" width={86} />;
-    case "Airtel Money":
-      return <Wordmark text="Airtel Money" width={110} />;
-    default:
-      return <Wordmark text={name} width={90} />;
-  }
-    }
-
-const BRAND_LOGO_SRC = "/brand/logo.png";
-const BrandMark = ({ size = 34 }) => (
-  <img
-    src={BRAND_LOGO_SRC}
-    alt="Dollar App"
-    style={{
-      width: size,
-      height: size,
-      objectFit: "contain",
-      display: "block",
-      flexShrink: 0
-    }}
-  />
-);
-
-/* "" TIERS "" */
-const V_PRICE = 50;
-const TIERS = [
-  { id:1, name:"Regular",      tag:"REG", deposit:5000,   videos:2, bonus:0, bonusType:"none",    bonusAmount:0,    dailyTotal:100,  acc:"#0066FF", rgb:"0,102,255",  lgt:"#EBF2FF", mid:"#99C2FF" },
-  { id:2, name:"Standard",     tag:"STD", deposit:10000,  videos:2, bonus:1, bonusType:"optional",bonusAmount:25,   dailyTotal:125,  acc:"#BFC5CC", rgb:"191,197,204", lgt:"#F4F6F8", mid:"#D1D5DB" },
-  { id:3, name:"Deluxe",       tag:"DLX", deposit:20000,  videos:2, bonus:1, bonusType:"auto",   bonusAmount:275,  dailyTotal:375,  acc:"#8A6A00", rgb:"138,106,0",  lgt:"#FFF5D1", mid:"#E3C56A" },
-  { id:4, name:"Executive",    tag:"EXC", deposit:50000,  videos:2, bonus:1, bonusType:"auto",   bonusAmount:1025, dailyTotal:1125, acc:"#7C3AED", rgb:"124,58,237", lgt:"#F5F0FF", mid:"#C4B5FD" },
-  { id:5, name:"Executive Pro",tag:"PRO", deposit:100000, videos:2, bonus:1, bonusType:"auto",   bonusAmount:2275, dailyTotal:2375, acc:"#DC2626", rgb:"220,38,38",  lgt:"#FFF0F0", mid:"#FCA5A5" },
-];
-const getTierRequiredEarn = (t) => (Number(t?.videos) || 0) * V_PRICE;
-const getTierDailyTotal = (t) => Number(t?.dailyTotal) || (getTierRequiredEarn(t) + (Number(t?.bonusAmount) || 0));
-const getTierBonusUnit = (t) => {
-  const bonus = Number(t?.bonusAmount) || 0;
-  const count = Math.max(0, Number(t?.bonus) || 0);
-  if (count <= 0) return 0;
-  return Math.round(bonus / count);
-};
-
-const makeAvatarSvg = ({ bg1, bg2, hair, skin, shirt, accent, icon }) => {
-  const iconPaths = {
-    bolt: "M13 2L3 14h7l-1 8 10-12h-7l1-8z",
-    heart: "M20.8 5.6a4.6 4.6 0 00-6.5 0L12 7.9 9.7 5.6a4.6 4.6 0 00-6.5 6.5L12 21l8.8-8.8a4.6 4.6 0 000-6.6z",
-    shield: "M12 2l7 3v6c0 5.2-3.2 9-7 11-3.8-2-7-5.8-7-11V5l7-3z",
-    star: "M12 2l2.8 6 6.6.9-4.8 4.6 1.2 6.5L12 17.8 6.2 20l1.2-6.5-4.8-4.6 6.6-.9L12 2z",
-    crown: "M3 9l4 4 5-7 5 7 4-4v9H3V9z",
-    gift: "M4 9h16v4H4zM4 13h7v7H4zM13 13h7v7h-7zM12 9v11M6.8 7c0-2 2.2-3 3.7-1.7L12 6.5l1.5-1.2C15 4 17.2 5 17.2 7",
-    spark: "M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z",
-    diamond: "M12 2l8 8-8 12-8-12 8-8z",
-    leaf: "M4 16c6-10 16-10 16-10-1 8-8 15-16 10z M7 13l6-6",
-    wave: "M3 12c3-4 7-4 10 0s7 4 10 0",
-    compass: "M12 2l4 10-10 4 4-10 10-4z",
-    camera: "M4 8h4l2-2h4l2 2h4v10H4z M12 12a3 3 0 100 6 3 3 0 000-6z",
-    rocket: "M12 2c3 2 6 6 6 10v4l-4 4-4-4v-4c0-4 3-8 6-10z M9 14l-4 4 M15 14l4 4",
-    flame: "M12 2c3 4 5 6 5 9a5 5 0 11-10 0c0-3 2-5 5-9z",
-    code: "M8 6l-4 6 4 6 M16 6l4 6-4 6"
-  };
-  const iconPath = iconPaths[icon] || iconPaths.star;
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${bg1}"/>
-          <stop offset="100%" stop-color="${bg2}"/>
-        </linearGradient>
-        <radialGradient id="glow" cx="30%" cy="20%" r="60%">
-          <stop offset="0%" stop-color="rgba(255,255,255,0.65)"/>
-          <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-        </radialGradient>
-      </defs>
-      <rect width="120" height="120" rx="26" fill="url(#bg)"/>
-      <circle cx="34" cy="24" r="38" fill="url(#glow)"/>
-      <circle cx="60" cy="52" r="28" fill="${skin}"/>
-      <path d="M20 120c10-30 30-40 40-40s30 10 40 40" fill="${shirt}"/>
-      <path d="M30 42c6-18 18-26 30-26s24 8 30 26" fill="${hair}"/>
-      <circle cx="50" cy="52" r="3" fill="#111"/>
-      <circle cx="70" cy="52" r="3" fill="#111"/>
-      <path d="M48 63c6 8 18 8 24 0" stroke="#111" stroke-width="3" stroke-linecap="round" fill="none"/>
-      <g transform="translate(74 10)">
-        <circle cx="18" cy="18" r="16" fill="rgba(255,255,255,0.9)" stroke="${accent}" stroke-width="2"/>
-        <g transform="translate(6 6)">
-          <path d="${iconPath}" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </g>
-      </g>
-    </svg>
-  `;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-    };
-
-const AVATAR_PRESETS = [
-  makeAvatarSvg({ bg1:"#E0F2FE", bg2:"#38BDF8", hair:"#0F172A", skin:"#F5CBA7", shirt:"#0284C7", accent:"#0EA5E9", icon:"compass" }),
-  makeAvatarSvg({ bg1:"#FEE2E2", bg2:"#F97316", hair:"#7C2D12", skin:"#F0B49F", shirt:"#EA580C", accent:"#FB7185", icon:"flame" }),
-  makeAvatarSvg({ bg1:"#DCFCE7", bg2:"#34D399", hair:"#064E3B", skin:"#EABFA6", shirt:"#10B981", accent:"#22C55E", icon:"leaf" }),
-  makeAvatarSvg({ bg1:"#E0E7FF", bg2:"#818CF8", hair:"#312E81", skin:"#F0C4B1", shirt:"#6366F1", accent:"#4F46E5", icon:"diamond" }),
-  makeAvatarSvg({ bg1:"#F1F5F9", bg2:"#94A3B8", hair:"#1F2937", skin:"#F5D0C5", shirt:"#64748B", accent:"#0F172A", icon:"camera" }),
-  makeAvatarSvg({ bg1:"#ECFEFF", bg2:"#67E8F9", hair:"#164E63", skin:"#F3C4B0", shirt:"#0EA5E9", accent:"#0E7490", icon:"wave" }),
-  makeAvatarSvg({ bg1:"#FFF7ED", bg2:"#FDBA74", hair:"#7C2D12", skin:"#F2C0A2", shirt:"#F97316", accent:"#C2410C", icon:"rocket" }),
-  makeAvatarSvg({ bg1:"#FDF2F8", bg2:"#F472B6", hair:"#831843", skin:"#F6C1AE", shirt:"#EC4899", accent:"#BE185D", icon:"code" }),
-];
-
 const REF_STORAGE_KEY = "ep:ref";
 const TIER_INTENT_KEY = "ep:tier-intent";
+let DEPOSIT_WALLET_BANNER_DISMISSED = false;
 const getBaseUrl = () => {
   if (typeof window === "undefined") return "https://edisonpay.co.ke";
   return window.location.origin;
@@ -746,85 +341,24 @@ const resolveTierIndex = (value) => {
   return idx >= 0 ? idx : null;
     };
 
-/* "" ANIMATED NUMBER "" */
-function AnimNum({ target, prefix = "", suffix = "" }) {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    let cur = 0, steps = 60, inc = target / steps;
-    const id = setInterval(() => {
-      cur = Math.min(cur + inc, target);
-      setVal(Math.round(cur));
-      if (cur >= target) clearInterval(id);
-    }, 16);
-    return () => clearInterval(id);
-  }, [target]);
-  return <>{prefix}{val.toLocaleString()}{suffix}</>;
-    }
+const getTierCardImage = (tierId) => {
+  const arts = [
+    LANDING_STICKER_TOP_IMAGE,
+    LANDING_STICKER_BOTTOM_IMAGE,
+    LANDING_STICKER_TIER_IMAGE,
+    HOME_BALANCE_SIDE_IMAGE,
+    DASH_BOT_GUIDE_IMAGE
+  ];
+  const num = Number(tierId);
+  const idx = Number.isFinite(num) ? Math.max(0, num - 1) : 0;
+  return arts[idx % arts.length] || arts[0];
+};
 
-function LazyVideo({ src, fallbackSrc = "", eager = false, ...props }) {
-  const ref = useRef(null);
-  const [shouldLoad, setShouldLoad] = useState(!!eager);
-  const [activeSrc, setActiveSrc] = useState(!!eager ? src : "");
-  useEffect(() => {
-    if (eager) return;
-    const el = ref.current;
-    if (!el) return;
-    if (!("IntersectionObserver" in window)) { setShouldLoad(true); return; }
-    const io = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setShouldLoad(true);
-        io.disconnect();
-      }
-    }, { rootMargin: "200px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [eager]);
-  useEffect(() => {
-    if (shouldLoad) setActiveSrc(src);
-  }, [shouldLoad, src]);
-
-  const handleError = () => {
-    if (fallbackSrc && activeSrc !== fallbackSrc) {
-      setActiveSrc(fallbackSrc);
-    }
-  };
-
-  return (
-    <video
-      ref={ref}
-      src={shouldLoad ? activeSrc || src : undefined}
-      preload={shouldLoad ? "auto" : "metadata"}
-      onError={handleError}
-      {...props}
-    />
-  );
-    }
-
-/* "" DONUT "" */
-function Donut({ pct, acc, size = 80, thickness = 8 }) {
-  const r = (size - thickness) / 2, cx = size / 2, cy = size / 2;
-  const circ = 2 * Math.PI * r, offset = circ - (pct / 100) * circ;
-  return (
-    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#EBEBEB" strokeWidth={thickness} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={acc} strokeWidth={thickness}
-        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
-        style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1)" }} />
-      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
-        style={{ fontSize: size / 5.5, fontWeight: 800, fill: "#111", fontFamily: "Geist,sans-serif", transform: "rotate(90deg)", transformOrigin: "center" }}>
-        {pct}%
-      </text>
-    </svg>
-  );
-    }
-
-/* 
-   LANDING PAGE
- */
 function Landing({ go }) {
   const [scrollPx, setScrollPx] = useState(0);
   const [heroVisible, setHeroVisible] = useState(false);
-  const [heroBotSrc, setHeroBotSrc] = useState(HOME_HERO_BOT_IMAGE);
+  const [isHeroMenuOpen, setIsHeroMenuOpen] = useState(false);
+  const heroMenuRef = useRef(null);
   const handleTierPick = (tierId) => {
     storeTierIntent(tierId);
     go("signup");
@@ -838,100 +372,201 @@ function Landing({ go }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  useEffect(() => {
+    if (!isHeroMenuOpen) return undefined;
+    const closeMenuOnOutside = (event) => {
+      if (heroMenuRef.current && !heroMenuRef.current.contains(event.target)) {
+        setIsHeroMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeMenuOnOutside);
+    document.addEventListener("touchstart", closeMenuOnOutside);
+    return () => {
+      document.removeEventListener("mousedown", closeMenuOnOutside);
+      document.removeEventListener("touchstart", closeMenuOnOutside);
+    };
+  }, [isHeroMenuOpen]);
+
   const payments = [
     "Google Pay","USDT","Flutterwave","Binance Pay","M-Pesa","Visa","Mastercard","Bitcoin","BNB",
     "PayPal","Apple Pay","Samsung Pay","Stripe","Alipay","WeChat Pay","Skrill","Neteller","Ethereum","Litecoin","USDC","Cash App","Payoneer",
     "Airtel Money"
   ];
+  const processSteps = [
+    { icon: "user", title: "Sign Up", desc: "Choose your tier and create your account.", timeline: "T+0 min" },
+    { icon: "wallet", title: "Deposit", desc: "Pay the fixed starting balance for your tier.", timeline: "T+2 min" },
+    { icon: "play", title: "Watch Videos", desc: "Earn KES 50 per video and unlock bonuses automatically.", timeline: "T+Same day" },
+    { icon: "gift", title: "Refer Friends", desc: "Get 10% bonus whenever someone joins using your code.", timeline: "T+Daily" },
+    { icon: "up", title: "Withdraw", desc: "Cash out every Tuesday and Friday to your phone.", timeline: "Tue / Fri" }
+  ];
+  const [activeProcessStep, setActiveProcessStep] = useState(0);
+  const processProgress = processSteps.length > 1
+    ? (activeProcessStep / (processSteps.length - 1)) * 100
+    : 100;
+  const activeProcessLabel = processSteps[activeProcessStep]?.title || "Sign Up";
+
+  useEffect(() => {
+    const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+    if (prefersReducedMotion) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveProcessStep((step) => (step + 1) % processSteps.length);
+    }, 2300);
+    return () => window.clearInterval(timer);
+  }, [processSteps.length]);
+  const landingNavLinks = [
+    { label: "Features", ic: "play", target: "landing-features" },
+    { label: "Tiers", ic: "star", target: "landing-tiers" },
+    { label: "How It Works", ic: "activity", target: "landing-how-it-works" },
+    { label: "Pricing", ic: "wallet", target: "landing-tiers" }
+  ];
+  const scrollToSection = useCallback((sectionId) => {
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const anim = (delay = 0) => ({ animation: `fadeUp .55s ease both`, animationDelay: `${delay}ms`, opacity: heroVisible ? 1 : 0 });
+  const footerBackground = "linear-gradient(140deg, #0b1120 0%, #111827 54%, #14532d 100%)";
+  const heroHighlights = [
+    "Choose your tier and activate your account in minutes.",
+    "Watch required videos and earn KES 50 per video.",
+    "Invite friends and receive 10% referral bonus automatically.",
+    "Withdraw every Tuesday and Friday straight to your phone."
+  ];
 
   return (
-    <div style={{ fontFamily: "Manrope, Sora, Geist, sans-serif", background: "radial-gradient(130% 90% at 10% -5%, #14532d 0%, #08130f 38%, #05070a 100%)", color: "#F1F5F9", minHeight: "100vh", position:"relative", overflowX:"hidden" }}>
-      <div style={{ position:"absolute", top:-120, left:-110, width:300, height:300, borderRadius:"50%", background:"radial-gradient(circle, rgba(132,204,22,0.32) 0%, rgba(132,204,22,0) 72%)", filter:"blur(2px)", animation:"ep-neon-drift 14s ease-in-out infinite", pointerEvents:"none" }} />
-      <div style={{ position:"absolute", right:-160, top:180, width:380, height:380, borderRadius:"50%", background:"radial-gradient(circle, rgba(16,185,129,0.22) 0%, rgba(16,185,129,0) 72%)", animation:"ep-neon-drift 17s ease-in-out infinite reverse", pointerEvents:"none" }} />
+    <div className="ep-landing-root" style={{ fontFamily: "Manrope, Sora, Geist, sans-serif", background: "#ffffff", color: "#0f172a", minHeight: "100vh", position:"relative", overflowX:"hidden" }}>
 
-      {/* "" NAV "" */}
-      <nav style={{ position: "sticky", top: 0, zIndex: 90, background: "rgba(5,11,8,0.84)", backdropFilter: "blur(18px)", borderBottom: "1px solid rgba(132,204,22,0.25)", boxShadow:"0 14px 24px rgba(0,0,0,0.3)", padding: "0 5vw", display: "flex", alignItems: "center", height: 64, gap: 32 }}>
-        {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", flexShrink: 0 }} onClick={() => go("landing")}>
-          <BrandMark size={32} />
-          <span style={{ fontWeight: 400, fontSize: 20, letterSpacing: "0.03em", color: "#bef264", fontFamily:"Bungee, Sora, sans-serif", textShadow:"0 0 18px rgba(190,242,100,0.45)" }}>EdisonPay</span>
-        </div>
-        {/* Divider */}
-        <div style={{ width: 1, height: 20, background: "rgba(132,204,22,0.26)" }} />
-        {/* Links */}
-        <div className="ep-nav-links" style={{ display: "flex", gap: 4, flex: 1 }}>
-          {[["Features","play"],["Tiers","star"],["How It Works","activity"],["Pricing","wallet"]].map(([l, ic]) => (
-            <button key={l} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "transparent", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, color: "rgba(226,232,240,0.72)", cursor: "pointer", fontFamily: "Sora, Geist, sans-serif", transition: "all .12s" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(132,204,22,0.14)"; e.currentTarget.style.color = "#d9f99d"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(226,232,240,0.72)"; }}>
-              <I n={ic} s={12} c="currentColor" />{l}
+      <div style={{ maxWidth:1300, margin:"0 auto", padding:"24px 5vw 24px", position:"relative", zIndex:3 }}>
+        <div ref={heroMenuRef} style={{ position:"relative", display:"flex", justifyContent:"center", marginBottom:24 }}>
+          <div className="ep-landing-pill-header">
+            <button
+              type="button"
+              className="ep-landing-pill-action ep-landing-pill-action-signin"
+              onClick={() => {
+                setIsHeroMenuOpen(false);
+                go("login");
+              }}
+            >
+              Sign In
             </button>
-          ))}
-        </div>
-        {/* Right actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <div className="ep-casino-glow" style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(15,23,42,0.72)", border: "1px solid rgba(132,204,22,0.36)", borderRadius: 999, fontSize: 11, color: "#bbf7d0", fontWeight: 700, letterSpacing:"0.03em" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", animation: "pulse 2s infinite" }} />
-            Live platform
+            <button
+              type="button"
+              className="ep-landing-pill-center"
+              aria-label="Open quick menu"
+              aria-expanded={isHeroMenuOpen}
+              onClick={() => setIsHeroMenuOpen((open) => !open)}
+            >
+              <I n="menu" s={16} c="#0f172a" />
+            </button>
+            <button
+              type="button"
+              className="ep-landing-pill-action ep-landing-pill-action-signup"
+              onClick={() => {
+                setIsHeroMenuOpen(false);
+                go("signup");
+              }}
+            >
+              Sign Up
+            </button>
           </div>
-          <button onClick={() => go("login")} style={{ padding: "8px 18px", background: "rgba(255,255,255,0.04)", border: "1.2px solid rgba(148,163,184,0.45)", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#e2e8f0", fontFamily: "Sora, Geist, sans-serif", transition: "border-color .15s" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "#bef264"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(148,163,184,0.45)"}>
-            Sign In
-          </button>
-          <button onClick={() => go("signup")} style={{ padding: "8px 18px", background: "linear-gradient(135deg,#bef264 0%, #84cc16 42%, #22c55e 100%)", border: "1px solid rgba(236,252,203,0.45)", borderRadius: 999, fontSize: 13, fontWeight: 800, cursor: "pointer", color: "#052e16", fontFamily: "Sora, Geist, sans-serif", display: "flex", alignItems: "center", gap: 6, boxShadow:"0 8px 18px rgba(132,204,22,0.35)" }}>
-            Get Started <I n="chevR" s={12} c="#052e16" />
-          </button>
-        </div>
-      </nav>
-
-      {/* "" HERO - split layout "" */}
-      <section className="ep-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "calc(100vh - 98px)", maxWidth: 1300, margin: "0 auto", padding: "0 5vw", position:"relative", zIndex:2 }}>
-
-        {/* LEFT */}
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", paddingRight: "6vw", paddingTop: 40, paddingBottom: 40 }}>
-          {/* Social proof */}
-          <div style={{ ...anim(0), display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 32, width: "fit-content", padding:"8px 14px", borderRadius:999, background:"rgba(132,204,22,0.12)", border:"1px solid rgba(163,230,53,0.4)" }}>
-            <div style={{ display: "flex", gap: -3 }}>
-              {["#FFD700","#FFD700","#FFD700","#FFD700","#FFD700"].map((c,i) => <I key={i} n="star" s={14} c={c} />)}
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#d9f99d" }}>4.9 - Trusted by 1,000+ earners</span>
-          </div>
-
-          {/* Headline */}
-          <h1 style={{ ...anim(80), fontSize: "clamp(40px,4.8vw,66px)", fontWeight: 800, lineHeight: 1.02, letterSpacing: "-0.03em", color: "#ffffff", marginBottom: 24, fontFamily:"Bungee, Sora, sans-serif", textShadow:"0 0 18px rgba(132,204,22,0.35)" }}>
-            Earn KES 50<br />
-            <span style={{ fontFamily: "Instrument Serif,serif", fontStyle: "italic", fontWeight: 400, color:"#bef264" }}>Per Video.</span><br />
-            Daily.
-          </h1>
-
-          <p style={{ ...anim(160), fontSize: 17, color: "rgba(226,232,240,0.84)", lineHeight: 1.7, maxWidth: 440, marginBottom: 36 }}>
-            Watch short videos, refer friends, and earn tiered daily rewards - with 5 tiers built for every budget.
-          </p>
-
-          <div style={{ ...anim(240), display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 44 }}>
-            <button className="ep-casino-border" onClick={() => go("signup")} style={{ padding: "14px 30px", background: "linear-gradient(135deg,#facc15 0%, #bef264 36%, #22c55e 100%)", color: "#052e16", border: "2px solid rgba(132,204,22,0.45)", borderRadius: 999, fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "Sora, Geist, sans-serif", boxShadow:"0 12px 28px rgba(132,204,22,0.35)" }}>Start Earning Free</button>
-            <button onClick={() => go("login")} style={{ padding: "14px 30px", background: "rgba(15,23,42,0.5)", color: "#e2e8f0", border: "1.5px solid rgba(148,163,184,0.5)", borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "Sora, Geist, sans-serif" }}>Sign In</button>
-          </div>
-
-          {/* 3 micro stats */}
-          <div style={{ ...anim(320), display: "flex", gap: 32, paddingTop: 32, borderTop: "1px solid rgba(132,204,22,0.3)" }}>
-            {[["KES 50", "per required video"], ["Daily", "tiered rewards"], ["Tue & Fri", "payouts"]].map(([v, l], i) => (
-              <div key={i}>
-                <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.04em", color: "#facc15" }}>{v}</div>
-                <div style={{ fontSize: 12, color: "rgba(203,213,225,0.78)", marginTop: 2 }}>{l}</div>
-              </div>
+          <div className={`ep-landing-pill-menu-panel ${isHeroMenuOpen ? "open" : ""}`}>
+            {landingNavLinks.map(({ label, ic, target }) => (
+              <button
+                key={label}
+                type="button"
+                className="ep-landing-pill-menu-link"
+                onClick={() => {
+                  scrollToSection(target);
+                  setIsHeroMenuOpen(false);
+                }}
+              >
+                <I n={ic} s={13} c="#0f766e" />
+                <span>{label}</span>
+              </button>
             ))}
           </div>
         </div>
 
-        {/* RIGHT - visual panel */}
-        <div style={{ ...anim(120), position: "relative", display: "flex", alignItems: "stretch", paddingTop: 28, paddingBottom: 28 }}>
-          {/* Main panel - dark gradient background simulating image */}
-          <div className="ep-casino-border" style={{ flex: 1, borderRadius: 24, background: "#0B1320", position: "relative", overflow: "hidden", minHeight: 480, border:"1px solid rgba(132,204,22,0.36)", boxShadow:"0 18px 40px rgba(3,7,18,0.7), 0 0 36px rgba(74,222,128,0.22)" }}>
-            {HOME_BALANCE_VIDEO && (
+        <section className="ep-landing-hero-clean">
+          <div className="ep-landing-hero-copy" style={{ display:"flex", flexDirection:"column", justifyContent:"center", minWidth:0 }}>
+            <div style={{ ...anim(0), display:"inline-flex", alignItems:"center", gap:8, width:"fit-content", padding:"8px 14px", borderRadius:999, border:"1px solid #bbf7d0", background:"#ecfdf5", color:"#047857", fontSize:12, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase" }}>
+              <BrandMark size={20} />
+              Smart Video Earnings
+            </div>
+            <h1 style={{ ...anim(60), marginTop:18, fontSize:"clamp(34px,4.8vw,60px)", lineHeight:1.03, letterSpacing:"-0.03em", color:"#0f172a", fontWeight:900 }}>
+              Earn KES 50 per video.
+              <span style={{ display:"block", marginTop:10, color:"#0f766e", fontFamily:"Instrument Serif, serif", fontStyle:"italic", fontWeight:400 }}>
+                Clean. Fast. Reliable.
+              </span>
+            </h1>
+            <p style={{ ...anim(120), marginTop:16, maxWidth:560, color:"#334155", fontSize:17, lineHeight:1.7 }}>
+              Watch short videos, refer friends, and earn tiered daily rewards with five plan options built for different budgets.
+            </p>
+            <div className="ep-landing-hero-highlights ep-landing-hero-highlights-desktop" style={anim(180)}>
+              {heroHighlights.map((line, index) => (
+                <div key={line} className={`ep-landing-hero-highlight ${index % 2 ? "is-right" : "is-left"}`}>
+                  {line}
+                </div>
+              ))}
+            </div>
+            <div style={{ ...anim(260), marginTop:24, display:"flex", flexWrap:"wrap", gap:10 }}>
+              <button
+                type="button"
+                className="ep-landing-hero-cta-btn ep-landing-hero-cta-btn-primary"
+                onClick={() => go("signup")}
+              >
+                Start Earning
+              </button>
+              <button
+                type="button"
+                className="ep-landing-hero-cta-btn ep-landing-hero-cta-btn-secondary"
+                onClick={() => go("login")}
+              >
+                Existing Account
+              </button>
+            </div>
+          </div>
+
+          <div className="ep-landing-hero-image-shell" style={anim(120)}>
+            <div className="ep-landing-hero-sentence-orbit" aria-hidden="true">
+              {heroHighlights.map((line, index) => (
+                <div key={`mobile-${line}`} className={`ep-landing-hero-sentence-chip chip-${index + 1}`}>
+                  {line}
+                </div>
+              ))}
+            </div>
+            <img
+              src={LANDING_STICKER_TIER_IMAGE.primary}
+              alt="EdisonPay hero"
+              referrerPolicy="no-referrer"
+              onError={(e) => setFallbackSrc(e, LANDING_STICKER_TIER_IMAGE)}
+              className="ep-landing-hero-image"
+            />
+          </div>
+        </section>
+      </div>
+
+      {/* "" SCROLLING LOGOS "" */}
+      <div style={{ borderTop: "1px solid rgba(148,163,184,0.3)", borderBottom: "1px solid rgba(148,163,184,0.3)", background: "rgba(255,255,255,0.72)", backdropFilter: "blur(8px)", padding: "14px 0 12px", overflow: "hidden" }}>
+        <div style={{ display: "flex", gap: 34, width: "max-content", animation: "ticker 30.8s linear infinite", alignItems:"flex-start" }}>
+          {[...payments, ...payments].map((p, i) => (
+            <div key={i} style={{ minWidth: 110, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <PaymentLogo name={p} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <section id="landing-features" className="ep-landing-balance-video-wrap">
+        <div className="ep-landing-balance-video-card">
+          <div className="ep-landing-balance-video-head">
+            <span>YOUR BALANCE TODAY</span>
+            <span style={{ color:"#86efac" }}>LIVE VIEW</span>
+          </div>
+          <div className="ep-landing-balance-video-frame">
+            {HOME_BALANCE_VIDEO ? (
               <LazyVideo
                 src={HOME_BALANCE_VIDEO}
                 fallbackSrc={HOME_BALANCE_VIDEO_FALLBACK}
@@ -940,109 +575,37 @@ function Landing({ go }) {
                 muted
                 loop
                 playsInline
-                style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.05) contrast(1.05)", zIndex:0 }}
+                style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"contain", background:"#020617", zIndex:1 }}
               />
+            ) : (
+              <div style={{ position:"absolute", inset:0, background:"linear-gradient(130deg, #0f172a 0%, #14532d 52%, #0f172a 100%)", zIndex:1 }} />
             )}
-            <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(8,20,15,0.65) 0%, rgba(10,28,37,0.58) 48%, rgba(22,63,24,0.72) 100%)", zIndex:1 }} />
-            <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none", zIndex:1 }} />
-
-            {/* Central graphic - big earnings number */}
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-55%)", textAlign: "center", zIndex: 2 }}>
-              <div style={{ fontSize: 13, color: "rgba(236,253,245,0.7)", letterSpacing: "0.18em", marginBottom: 12, fontWeight: 700 }}>YOUR BALANCE TODAY</div>
-              <div style={{ fontSize: 64, fontWeight: 900, color: "#f0fdf4", letterSpacing: "-0.04em", lineHeight: 1, animation: "fadeIn .8s ease .4s both", textShadow:"0 0 22px rgba(132,204,22,0.38)" }}>
-                KES 47,200
-              </div>
-              <div style={{ fontSize: 14, color: "rgba(187,247,208,0.88)", marginTop: 8 }}>+KES 2,000 from today's videos</div>
-              {/* Progress bar */}
-              <div style={{ marginTop: 20, width: 240, margin: "20px auto 0" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>
-                  <span>Progress to weekly target</span><span>47%</span>
-                </div>
-                <div style={{ height: 6, background: "rgba(255,255,255,0.1)", borderRadius: 99, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: "47%", background: "linear-gradient(90deg,#facc15 0%, #4ade80 100%)", borderRadius: 99, animation: "fadeIn 1.4s ease .6s both" }} />
-                </div>
-              </div>
-            </div>
-
-            {heroBotSrc && (
-              <div style={{ position:"absolute", top:24, right:20, width:"clamp(170px, 33%, 250px)", borderRadius:24, overflow:"hidden", border:"1px solid rgba(190,242,100,0.52)", boxShadow:"0 14px 28px rgba(2,6,23,0.58), 0 0 22px rgba(132,204,22,0.3)", zIndex:2 }}>
-                <img
-                  src={heroBotSrc}
-                  alt="EdisonPay reward bot"
-                  onError={() => {
-                    if (HOME_HERO_BOT_IMAGE_FALLBACK && heroBotSrc !== HOME_HERO_BOT_IMAGE_FALLBACK) {
-                      setHeroBotSrc(HOME_HERO_BOT_IMAGE_FALLBACK);
-                    } else {
-                      setHeroBotSrc("");
-                    }
-                  }}
-                  style={{ display:"block", width:"100%", aspectRatio:"1 / 1", objectFit:"cover" }}
-                />
-                <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(2,6,23,0.12) 0%, rgba(2,6,23,0.38) 100%)", pointerEvents:"none" }} />
-                <div style={{ position:"absolute", left:12, top:12, padding:"4px 9px", borderRadius:999, background:"rgba(2,6,23,0.72)", border:"1px solid rgba(190,242,100,0.5)", fontSize:10, fontWeight:800, letterSpacing:"0.08em", color:"#d9f99d" }}>
-                  HOT BONUS
-                </div>
-              </div>
-            )}
-
-            {/* Floating card 1 - earnings stat (top right) */}
-            <div style={{ position: "absolute", top: heroBotSrc ? 238 : 28, right: 24, background: "rgba(6,18,15,0.9)", borderRadius: 14, padding: "14px 16px", border:"1px solid rgba(74,222,128,0.34)", boxShadow: "0 8px 32px rgba(0,0,0,0.35)", animation: "floatA 4s ease-in-out infinite", minWidth: 190, zIndex:2 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#ecfdf5", letterSpacing: "0.03em" }}>Daily Earnings</span>
-                <span style={{ fontSize: 9, color: "#86efac", fontWeight: 700 }}>Live</span>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1, background: "linear-gradient(180deg,#16a34a 0%, #65a30d 100%)", borderRadius: 8, height: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                  <div style={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>82%</div>
-                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.7)", marginTop: 2 }}>Videos</div>
-                </div>
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ flex: 1, background: "#f59e0b", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>23%</div>
-                  </div>
-                  <div style={{ flex: 1, background: "#facc15bb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>76%</div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                <span style={{ fontSize: 10, color: "rgba(226,232,240,0.62)" }}>- Bonus</span>
-                <span style={{ fontSize: 10, color: "rgba(226,232,240,0.62)" }}>- Referrals</span>
-              </div>
-            </div>
-
-            {/* Floating card 2 - chat bubble (bottom left) */}
-            <div style={{ position: "absolute", bottom: 60, left: 24, background: "rgba(6,18,15,0.92)", borderRadius: 50, padding: "12px 18px 12px 14px", border:"1px solid rgba(74,222,128,0.36)", boxShadow: "0 8px 24px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", gap: 10, animation: "floatB 5s ease-in-out infinite", zIndex:2 }}>
-              <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <I n="check" s={14} c="#fff" />
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#ecfdf5", whiteSpace: "nowrap" }}>Withdrawal approved!</span>
-            </div>
-
-            {/* Floating card 3 - tier badge (bottom right) */}
-            <div style={{ position: "absolute", bottom: 28, right: 24, background: "rgba(132,204,22,0.18)", backdropFilter: "blur(12px)", border: "1px solid rgba(190,242,100,0.5)", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, animation: "floatA 6s ease-in-out infinite .5s", zIndex:2 }}>
-              <I n="bolt" s={14} c="#facc15" />
-              <span style={{ fontSize: 12, fontWeight: 800, color: "#f7fee7", letterSpacing: "0.06em" }}>Unlock 5 Earning Tiers</span>
-              <I n="chevR" s={14} c="rgba(247,254,231,0.7)" />
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(2,6,23,0.18) 0%, rgba(2,6,23,0.54) 100%)", zIndex:2 }} />
+            <img
+              className="ep-landing-balance-video-side-art"
+              src={HOME_BALANCE_SIDE_IMAGE.primary}
+              alt=""
+              referrerPolicy="no-referrer"
+              onError={(e) => setFallbackSrc(e, HOME_BALANCE_SIDE_IMAGE)}
+            />
+            <div style={{ position:"absolute", left:18, bottom:16, zIndex:4, color:"#f8fafc", fontSize:12, fontWeight:800, letterSpacing:"0.08em" }}>
+              WATCHED TODAY: 4 VIDEOS · BALANCE BOOSTED
             </div>
           </div>
         </div>
       </section>
 
-      {/* "" SCROLLING LOGOS "" */}
-      <div style={{ borderTop: "1px solid rgba(132,204,22,0.22)", borderBottom: "1px solid rgba(132,204,22,0.22)", background: "rgba(2,6,23,0.66)", padding: "16px 0", overflow: "hidden" }}>
-        <div style={{ display: "flex", gap: 48, width: "max-content", animation: "ticker 22s linear infinite", alignItems:"center" }}>
-          {[...payments, ...payments].map((p, i) => (
-            <div key={i} style={{ minWidth: 96, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <PaymentLogo name={p} />
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* "" TIERS SECTION "" */}
-      <section style={{ padding: "88px 5vw", background: "#fff" }}>
-        <div style={{ maxWidth: 1300, margin: "0 auto" }}>
+      <section id="landing-tiers" style={{ padding: "88px 5vw", background: "#fff" }}>
+        <div style={{ maxWidth: 1300, margin: "0 auto", position:"relative" }}>
+          <img
+            src={LANDING_STICKER_TIER_IMAGE.primary}
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={(e) => setFallbackSrc(e, LANDING_STICKER_TIER_IMAGE)}
+            className="ep-hide-mobile"
+            style={{ position:"absolute", right:-18, top:-24, width:130, height:130, objectFit:"contain", pointerEvents:"none", opacity:0.95 }}
+          />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 48, flexWrap: "wrap", gap: 20 }}>
             <div>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "#F0F4FF", border: "1px solid #C7D9FF", borderRadius: 50, marginBottom: 16 }}>
@@ -1075,63 +638,85 @@ function Landing({ go }) {
       </section>
 
       {/* "" HOW IT WORKS "" */}
-      <section style={{ padding: "80px 5vw", background: "#FAFAFA", borderTop: "1px solid #E8E8E8" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "#999", textTransform: "uppercase", marginBottom: 14 }}>Process</div>
-            <h2 style={{ fontSize: "clamp(28px,3vw,44px)", fontWeight: 900, letterSpacing: "-0.04em" }}>Up and running in minutes</h2>
+      <section id="landing-how-it-works" style={{ padding: "96px 5vw 104px", background: "#F8FAFC", borderTop: "1px solid #E2E8F0" }}>
+        <div style={{ maxWidth: 1220, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 64 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "#64748B", textTransform: "uppercase", marginBottom: 14 }}>Process</div>
+            <h2 style={{ fontSize: "clamp(28px,3vw,44px)", fontWeight: 900, letterSpacing: "-0.04em", color:"#111" }}>Up and running in minutes</h2>
+            <p style={{ marginTop: 12, fontSize: 14, color: "#64748B", lineHeight: 1.65 }}>
+              Follow this timeline from account setup to payout.
+            </p>
+            <div className="ep-process-auto-pill">
+              <span className="ep-process-auto-dot" />
+              <span>Auto timeline: {activeProcessLabel}</span>
+            </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 0, position: "relative" }}>
-            <div style={{ position: "absolute", top: 20, left: "10%", right: "10%", height: 1, background: "#E0E0E0", zIndex: 0 }} />
-            {[["user","Sign Up","Choose your tier and create your account."],["wallet","Deposit","Pay the fixed starting balance for your tier."],["play","Watch Videos","Earn KES 50 per video - bonus handles the rest."],["gift","Refer Friends","Get 10% bonus every time someone joins your link."],["up","Withdraw","Tuesday & Friday - straight to your phone."]].map(([icon, title, desc], i) => (
-              <div key={i} style={{ textAlign: "center", padding: "0 16px", position: "relative", zIndex: 1 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 12, background: "#fff", border: "1.5px solid #111", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-                  <I n={icon} s={18} c="#111" />
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: "#111", marginBottom: 6 }}>{title}</div>
-                <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6 }}>{desc}</div>
-              </div>
-            ))}
+          <div className="ep-process-wrap">
+            <div className="ep-process-grid" style={{ "--process-progress": `${processProgress}%` }}>
+              <div className="ep-process-line" />
+              {processSteps.map(({ icon, title, desc, timeline }, i) => {
+                const status = i < activeProcessStep ? "is-done" : i === activeProcessStep ? "is-active" : "is-pending";
+                return (
+                <article key={i} className={`ep-process-item ${status}`}>
+                  <div className="ep-process-node">
+                    <span className="ep-process-count">{String(i + 1).padStart(2, "0")}</span>
+                  </div>
+                  <div className="ep-process-card">
+                    <div className="ep-process-card-head">
+                      <div className="ep-process-icon">
+                        <I n={icon} s={15} c="#0F172A" />
+                      </div>
+                      <div>
+                        <div className="ep-process-title">{title}</div>
+                        <div className="ep-process-meta">Step {i + 1} of {processSteps.length}</div>
+                      </div>
+                    </div>
+                    <div className="ep-process-time">{timeline}</div>
+                    <div className="ep-process-desc">{desc}</div>
+                  </div>
+                </article>
+              )})}
+            </div>
           </div>
         </div>
       </section>
 
       {/* "" FOOTER "" */}
-      <footer style={{ background: "#0D0D0D", color: "#fff" }}>
+      <footer className="ep-footer" style={{ backgroundImage: footerBackground, backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", color: "#fff" }}>
         {/* Top CTA band */}
-        <div style={{ borderBottom: "1px solid #1F1F1F", padding: "48px 5vw" }}>
-          <div className="ep-footer-cta" style={{ maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 24 }}>
+        <div className="ep-footer-band" style={{ borderBottom: "1px solid #1F1F1F", padding: "26px 5vw" }}>
+          <div className="ep-footer-cta" style={{ maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
             <div>
-              <h3 style={{ fontSize: "clamp(22px,2.5vw,34px)", fontWeight: 900, letterSpacing: "-0.04em", marginBottom: 8 }}>
+              <h3 className="ep-footer-cta-title" style={{ fontSize: "clamp(19px,2.2vw,28px)", fontWeight: 900, letterSpacing: "-0.03em", marginBottom: 6 }}>
                 Ready to start earning?
               </h3>
-              <p style={{ fontSize: 15, color: "#666", lineHeight: 1.6 }}>Join 1,000+ Kenyans building passive income daily.</p>
+              <p className="ep-footer-cta-copy" style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.45 }}>Join 1,000+ Kenyans building passive income daily.</p>
             </div>
             <div className="ep-footer-cta-actions" style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => go("signup")} style={{ padding: "13px 28px", background: "#fff", color: "#111", border: "none", borderRadius: 50, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Create Free Account</button>
-              <button onClick={() => go("login")} style={{ padding: "13px 28px", background: "transparent", color: "#fff", border: "1.5px solid #333", borderRadius: 50, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Sign In</button>
+              <button className="ep-footer-cta-btn" onClick={() => go("signup")} style={{ padding: "10px 20px", background: "#fff", color: "#111", border: "none", borderRadius: 50, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Create Account</button>
+              <button className="ep-footer-cta-btn ep-footer-cta-btn-secondary" onClick={() => go("login")} style={{ padding: "10px 18px", background: "transparent", color: "#fff", border: "1.5px solid #334155", borderRadius: 50, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Sign In</button>
             </div>
           </div>
         </div>
 
         {/* Main footer grid */}
-        <div className="ep-footer-grid" style={{ padding: "56px 5vw 40px", maxWidth: 1300, margin: "0 auto", display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 1fr", gap: 40 }}>
+        <div className="ep-footer-grid ep-footer-main" style={{ padding: "30px 5vw 22px", maxWidth: 1300, margin: "0 auto", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 22 }}>
           {/* Brand col */}
           <div className="ep-footer-brand">
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18 }}>
-              <BrandMark size={34} />
-              <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.04em" }}>EdisonPay</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <BrandMark size={30} />
+              <span style={{ fontWeight: 900, fontSize: 17, letterSpacing: "-0.03em" }}>EdisonPay</span>
             </div>
-            <p style={{ fontSize: 13, color: "#555", lineHeight: 1.8, maxWidth: 260, marginBottom: 24 }}>
+            <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6, maxWidth: 300, marginBottom: 14 }}>
               Kenya's leading video earnings platform. Watch, earn, refer, and grow your daily rewards.
             </p>
             {/* Social links */}
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="ep-footer-social" style={{ display: "flex", gap: 10 }}>
               {[["Twitter/X","xmark"],["Instagram","star"],["YouTube","play"],["WhatsApp","users"]].map(([n, ic]) => (
-                <div key={n} title={n} style={{ width: 34, height: 34, borderRadius: 9, background: "#1A1A1A", border: "1px solid #2A2A2A", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "background .15s" }}
+                <div key={n} title={n} style={{ width: 30, height: 30, borderRadius: 8, background: "#1A1A1A", border: "1px solid #2A2A2A", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "background .15s" }}
                   onMouseEnter={e => e.currentTarget.style.background = "#2A2A2A"}
                   onMouseLeave={e => e.currentTarget.style.background = "#1A1A1A"}>
-                  <I n={ic} s={13} c="#666" />
+                  <I n={ic} s={12} c="#94a3b8" />
                 </div>
               ))}
             </div>
@@ -1139,17 +724,16 @@ function Landing({ go }) {
 
           {/* Link columns */}
           {[
-            { h: "Platform", ls: ["Overview","Tiers & Plans","Video Earnings","Bonus System","Referrals","Withdrawals"] },
-            { h: "Tiers", ls: ["Regular - 5K","Standard - 10K","Deluxe - 20K","Executive - 50K","Exec Pro - 100K"] },
-            { h: "Company", ls: ["About Us","Careers","Press","Blog","Contact","Partners"] },
-            { h: "Support", ls: ["Help Centre","FAQs","System Status","Privacy Policy","Terms of Service","Cookie Policy"] },
+            { h: "Platform", ls: ["Overview","Tiers & Plans","Video Earnings","Withdrawals"] },
+            { h: "Company", ls: ["About Us","Blog","Contact","Partners"] },
+            { h: "Support", ls: ["Help Centre","FAQs","Privacy Policy","Terms of Service"] },
           ].map((col, i) => (
-            <div key={i}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: "#fff", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 18 }}>{col.h}</div>
+            <div key={i} className="ep-footer-link-col">
+              <div className="ep-footer-col-title" style={{ fontSize: 10, fontWeight: 800, color: "#e2e8f0", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>{col.h}</div>
               {col.ls.map(l => (
-                <div key={l} style={{ fontSize: 13, color: "#555", marginBottom: 10, cursor: "pointer", transition: "color .12s" }}
-                  onMouseEnter={e => e.currentTarget.style.color = "#bbb"}
-                  onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+                <div key={l} className="ep-footer-link" style={{ fontSize: 12, color: "#94a3b8", marginBottom: 7, cursor: "pointer", transition: "color .12s" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "#e2e8f0"}
+                  onMouseLeave={e => e.currentTarget.style.color = "#94a3b8"}>
                   {l}
                 </div>
               ))}
@@ -1158,12 +742,12 @@ function Landing({ go }) {
         </div>
 
         {/* Bottom bar */}
-        <div className="ep-footer-bottom" style={{ borderTop: "1px solid #1A1A1A", padding: "20px 5vw", maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "#3A3A3A" }}>(c) 2025 EdisonPay Ltd. All rights reserved. Nairobi, Kenya.</span>
-          <div className="ep-footer-bottom-links" style={{ display: "flex", gap: 20, fontSize: 12, color: "#3A3A3A" }}>
-            {["Privacy","Terms","Cookies","Sitemap"].map(l => <span key={l} style={{ cursor: "pointer", transition: "color .12s" }} onMouseEnter={e => e.target.style.color = "#777"} onMouseLeave={e => e.target.style.color = "#3A3A3A"}>{l}</span>)}
+        <div className="ep-footer-bottom" style={{ borderTop: "1px solid #1A1A1A", padding: "14px 5vw", maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <span className="ep-footer-legal" style={{ fontSize: 11, color: "#64748b" }}>(c) 2025 EdisonPay Ltd. All rights reserved. Nairobi, Kenya.</span>
+          <div className="ep-footer-bottom-links" style={{ display: "flex", gap: 14, fontSize: 11, color: "#64748b" }}>
+            {["Privacy","Terms","Cookies","Sitemap"].map(l => <span key={l} style={{ cursor: "pointer", transition: "color .12s" }} onMouseEnter={e => e.target.style.color = "#cbd5e1"} onMouseLeave={e => e.target.style.color = "#64748b"}>{l}</span>)}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3A3A3A" }}>
+          <div className="ep-footer-system" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22C55E", animation: "pulse 2s infinite" }} />
             All systems operational
           </div>
@@ -1209,7 +793,7 @@ function TierCard({ t, go, featured, onSelectTier }) {
     borderRadius: 16,
     border: featured ? "2px solid #111" : `1.5px solid ${hov ? "#111" : "#E0E0E0"}`,
     background: hov ? "#FAFAFA" : "#fff",
-    padding: "26px 22px",
+    padding: "clamp(20px, 3.5vw, 30px) clamp(16px, 3vw, 24px)",
     cursor: "pointer",
     transition: "all .2s ease",
     transform: hov ? "translateY(-3px)" : "none",
@@ -1222,47 +806,59 @@ function TierCard({ t, go, featured, onSelectTier }) {
     if (onSelectTier) { onSelectTier(t?.id); return; }
     go("signup");
   };
+  const tierArt = getTierCardImage(t?.id);
+  const cardClasses = [hasGlare ? "ep-tier-glare" : "", "ep-tier-mobile-image-host", "ep-tier-mobile-image-host-landing"].filter(Boolean).join(" ");
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={handlePick}
-      className={hasGlare ? "ep-tier-glare" : undefined}
+      className={cardClasses}
       style={cardStyle}>
-      {featured && (
-        <div style={{ position: "absolute", top: 16, right: 16, padding: "3px 10px", background: "#111", borderRadius: 50, fontSize: 9, fontWeight: 900, color: "#fff", letterSpacing: "0.1em" }}>POPULAR</div>
-      )}
+      <div className="ep-tier-mobile-image-content ep-tier-mobile-image-content-landing">
+        {featured && (
+          <div style={{ position: "absolute", top: 16, right: 16, padding: "3px 10px", background: "#111", borderRadius: 50, fontSize: 9, fontWeight: 900, color: "#fff", letterSpacing: "0.1em" }}>POPULAR</div>
+        )}
 
-      {/* Tier badge + icon row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: hov ? "#111" : t.lgt, border: hov ? "none" : `1.5px solid ${t.mid}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s" }}>
-          <I n="bolt" s={17} c={hov ? "#fff" : t.acc} />
-        </div>
-        <div>
-          <div style={{ fontSize: 9, fontWeight: 800, color: hov ? "#999" : t.acc, letterSpacing: "0.12em" }}>TIER {t.id}</div>
-          <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em", color: "#111" }}>{t.name}</div>
-        </div>
-      </div>
-
-      {/* Price */}
-      <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #F0F0F0" }}>
-        <div style={{ fontSize: 28, fontWeight: 900, color: "#111", letterSpacing: "-0.05em", lineHeight: 1 }}>KES {(t.deposit/1000).toFixed(0)}K</div>
-        <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>starting deposit - daily rewards by tier</div>
-      </div>
-
-      {/* Features */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-        {[[`${t.videos} required videos/day`, "play"], [`${t.bonus} bonus rewards/day`, "activity"], [`KES ${daily.toLocaleString()} earned daily`, "trendUp"], [`~${days} days to weekly target`, "star"]].map(([label, icon], i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "#444" }}>
-            <div style={{ width: 20, height: 20, borderRadius: 6, background: "#F5F5F5", border: "1px solid #E8E8E8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <I n={icon} s={11} c="#888" />
-            </div>
-            {label}
+        {/* Tier badge + icon row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: hov ? "#111" : t.lgt, border: hov ? "none" : `1.5px solid ${t.mid}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s" }}>
+            <I n="bolt" s={17} c={hov ? "#fff" : t.acc} />
           </div>
-        ))}
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 800, color: hov ? "#999" : t.acc, letterSpacing: "0.12em" }}>TIER {t.id}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em", color: "#111" }}>{t.name}</div>
+          </div>
+        </div>
+
+        {/* Price */}
+        <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #F0F0F0" }}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#111", letterSpacing: "-0.05em", lineHeight: 1 }}>KES {(t.deposit/1000).toFixed(0)}K</div>
+          <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>starting deposit - daily rewards by tier</div>
+        </div>
+
+        {/* Features */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+          {[[`${t.videos} required videos/day`, "play"], [`${t.bonus} bonus rewards/day`, "activity"], [`KES ${daily.toLocaleString()} earned daily`, "trendUp"], [`~${days} days to weekly target`, "star"]].map(([label, icon], i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "#444" }}>
+              <div style={{ width: 20, height: 20, borderRadius: 6, background: "#F5F5F5", border: "1px solid #E8E8E8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <I n={icon} s={11} c="#888" />
+              </div>
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <button onClick={e => { e.stopPropagation(); handlePick(); }}
+          style={{ width: "100%", padding: "11px", background: hov ? "#111" : "#fff", color: hov ? "#fff" : "#111", border: "1.5px solid #111", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif", transition: "all .2s", letterSpacing: "-0.01em" }}>
+          Get Started
+        </button>
       </div>
 
-      <button onClick={e => { e.stopPropagation(); handlePick(); }}
-        style={{ width: "100%", padding: "11px", background: hov ? "#111" : "#fff", color: hov ? "#fff" : "#111", border: "1.5px solid #111", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif", transition: "all .2s", letterSpacing: "-0.01em" }}>
-        Get Started '
-      </button>
+      <img
+        className="ep-tier-mobile-image ep-tier-mobile-image-landing"
+        src={tierArt.primary}
+        alt=""
+        referrerPolicy="no-referrer"
+        onError={(e) => setFallbackSrc(e, tierArt)}
+      />
     </div>
   );
     }
@@ -1304,8 +900,6 @@ function Auth({ type, go, from, authMessage }) {
     const url = window.location.href;
     const hasRecovery =
       /type=recovery/i.test(url) ||
-      /access_token=/i.test(url) ||
-      /refresh_token=/i.test(url) ||
       (typeof sessionStorage !== "undefined" && sessionStorage.getItem("ep:recovery") === "1");
     if (hasRecovery) {
       setRecoveryMode(true);
@@ -1375,9 +969,35 @@ function Auth({ type, go, from, authMessage }) {
       return;
     }
     const refBy = normalizeRefCode(f.ref);
+    const signupWithSupabase = async () => {
+      const { data, error } = await supabase.auth.signUp({
+        email: f.email,
+        password: f.password,
+        options: {
+          data: {
+            full_name: f.name || "",
+            referred_by: refBy || null
+          }
+        }
+      });
+      if (error) return { ok:false, msg:error.message || "Unable to create account." };
+      if (data?.session?.access_token && data?.session?.refresh_token) {
+        try {
+          await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token
+          });
+        } catch (e) {}
+        return { ok:true, redirect:true };
+      }
+      return { ok:true, msg:"Account created. Check your email, then sign in." };
+    };
     const apiBase = getApiBase();
     if (!apiBase) {
-      setErr("Signup service is not configured.");
+      const fallback = await signupWithSupabase();
+      if (!fallback.ok) setErr(fallback.msg);
+      else if (fallback.redirect) go(from || "dashboard");
+      else setInfo(fallback.msg || "Account created. Please sign in.");
       setLoading(false);
       return;
     }
@@ -1394,7 +1014,10 @@ function Auth({ type, go, from, authMessage }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErr(data?.error || "Unable to create account.");
+        const fallback = await signupWithSupabase();
+        if (!fallback.ok) setErr(data?.error || fallback.msg || "Unable to create account.");
+        else if (fallback.redirect) go(from || "dashboard");
+        else setInfo(fallback.msg || "Account created. Please sign in.");
         setLoading(false);
         return;
       }
@@ -1410,8 +1033,11 @@ function Auth({ type, go, from, authMessage }) {
       setLoading(false);
       setInfo(data?.message || "Account created. Please sign in.");
     } catch (e) {
+      const fallback = await signupWithSupabase();
+      if (!fallback.ok) setErr(fallback.msg || "Unable to create account. Please try again.");
+      else if (fallback.redirect) go(from || "dashboard");
+      else setInfo(fallback.msg || "Account created. Please sign in.");
       setLoading(false);
-      setErr("Unable to create account. Please try again.");
     }
   };
   const handleGoogle = async () => {
@@ -1419,15 +1045,16 @@ function Auth({ type, go, from, authMessage }) {
     setInfo("");
     if (!supabase) { setErr("Supabase is not configured."); return; }
     setLoading(true);
+    const redirectTo = `${window.location.origin}/?auth=google`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo }
     });
     if (error) { setErr(error.message); setLoading(false); }
   };
 
   return (
-    <div className="ep-auth-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", fontFamily: "Geist,sans-serif" }}>
+    <div className="ep-auth-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", fontFamily: "Geist,sans-serif" }}>
 
       {/* LEFT - brand panel */}
       <div className="ep-auth-left" style={{ background: "#0D1117", display: "flex", flexDirection: "column", padding: isMobile ? "32px 28px" : "48px 56px", position: "relative", overflow: "hidden", minHeight: isMobile ? 320 : "auto" }}>
@@ -1562,7 +1189,68 @@ function Auth({ type, go, from, authMessage }) {
   );
     }
 
-function TierSelect({ go, authUser, profileRow, onSelectTier }) {
+function FixedPromoSticker({ src, alt, onClose, showClose = true, style }) {
+  const source = typeof src === "string" ? { primary: src, fallback: "" } : (src || { primary: "", fallback: "" });
+  const [activeSrc, setActiveSrc] = useState(source.primary || "");
+  const [imgOk, setImgOk] = useState(true);
+  useEffect(() => {
+    setActiveSrc(source.primary || "");
+    setImgOk(true);
+  }, [source.primary]);
+  if (!activeSrc) return null;
+  if (!imgOk) return null;
+  return (
+    <div style={{ position:"fixed", zIndex:95, pointerEvents: showClose ? "auto" : "none", ...style }}>
+      {showClose && typeof onClose === "function" && (
+        <button
+          onClick={onClose}
+          aria-label={`Close ${alt}`}
+          style={{
+            position:"absolute",
+            top:-8,
+            right:-8,
+            width:24,
+            height:24,
+            borderRadius:"50%",
+            border:"1.5px solid rgba(15,23,42,0.55)",
+            background:"rgba(255,255,255,0.95)",
+            color:"#0f172a",
+            cursor:"pointer",
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"center",
+            fontSize:13,
+            fontWeight:900,
+            boxShadow:"0 6px 14px rgba(2,6,23,0.2)"
+          }}
+        >
+          x
+        </button>
+      )}
+      <img
+        src={activeSrc}
+        alt={alt}
+        referrerPolicy="no-referrer"
+        onError={() => {
+          if (source.fallback && activeSrc !== source.fallback) {
+            setActiveSrc(source.fallback);
+            return;
+          }
+          setImgOk(false);
+        }}
+        style={{
+          display:"block",
+          width:"100%",
+          height:"100%",
+          objectFit:"contain",
+          filter:"drop-shadow(0 10px 20px rgba(2,6,23,0.35))"
+        }}
+      />
+    </div>
+  );
+    }
+
+function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos }) {
   const [selected, setSelected] = useState(() => {
     const intent = getTierIntent();
     return Number(profileRow?.tier) || intent || 1;
@@ -1572,19 +1260,10 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
   const [panel, setPanel] = useState("");
   const [depPhone, setDepPhone] = useState("");
   const [depName, setDepName] = useState("");
-  const [depMethod, setDepMethod] = useState("M-Pesa");
+  const depMethod = "M-Pesa";
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
-  const [depDone, setDepDone] = useState(false);
   const depErrorMsg = formatDepositError(depError);
-  const [autoPrompted, setAutoPrompted] = useState(false);
-  const [depAmount, setDepAmount] = useState("");
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
-  const tier1Min = Number.isFinite(TIER1_MOBILE_MIN) ? TIER1_MOBILE_MIN : 100;
-  const tier1Max = Number.isFinite(TIER1_MOBILE_MAX) ? TIER1_MOBILE_MAX : 1000;
-  const tier1Cap = tier1Max >= tier1Min ? tier1Max : tier1Min;
-  const tier1Floor = tier1Min;
-  const isTier1Flex = isMobile && Number(selected) === 1;
   useEffect(() => {
     const intent = getTierIntent();
     if (!Number.isFinite(Number(profileRow?.tier)) && Number.isFinite(intent)) {
@@ -1592,38 +1271,21 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     } else if (Number.isFinite(Number(profileRow?.tier))) {
       setSelected(Number(profileRow.tier));
     }
-    if (!autoPrompted) {
-      setPanel("pay");
-      setAutoPrompted(true);
-    }
-  }, [profileRow?.tier, autoPrompted]);
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 769);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  useEffect(() => {
-    if (isTier1Flex) {
-      setDepAmount((prev) => (prev ? prev : String(tier1Floor)));
-    } else {
-      setDepAmount("");
-    }
-  }, [isTier1Flex, tier1Floor]);
-
+  }, [profileRow?.tier]);
   useEffect(() => {
     if (profileRow?.phone && !depPhone) setDepPhone(String(profileRow.phone));
     if ((profileRow?.name || profileRow?.full_name) && !depName) {
       setDepName(String(profileRow?.name || profileRow?.full_name));
     }
   }, [profileRow?.phone, profileRow?.name, profileRow?.full_name]);
+  const profileTierSelected = profileRow?.tier_selected === true;
 
   const handlePick = (tierId) => {
     if (!tierId) return;
     setSelected(tierId);
     setErr("");
     setDepError("");
-    setPanel("pay");
-    setAutoPrompted(true);
+    setPanel("");
     storeTierIntent(tierId);
   };
 
@@ -1648,19 +1310,25 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
     setPanel((prev) => (prev === next ? "" : next));
   };
 
-  const handlePayNow = async (tierId) => {
+  const handlePayNow = async (tier) => {
+    if (!tier) return;
+    setErr("");
+    setDepError("");
+    const ok = await commitTier(tier.id, { navigate: false });
+    if (!ok) return;
+    await submitTierDeposit(tier);
+  };
+
+  const handlePreview = async (tierId) => {
     setErr("");
     setDepError("");
     const ok = await commitTier(tierId, { navigate: false });
     if (!ok) return;
-    setPanel("pay");
-    setAutoPrompted(true);
-  };
-
-  const handlePayLater = async (tierId) => {
-    setErr("");
-    setDepError("");
-    await commitTier(tierId, { navigate: true });
+    if (typeof onPreviewToVideos === "function") {
+      onPreviewToVideos();
+      return;
+    }
+    go("dashboard");
   };
 
   const submitTierDeposit = async (tier) => {
@@ -1679,38 +1347,31 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
       setDepError("Email is required for checkout.");
       return;
     }
-    let amount = Number(tier.deposit);
-    if (isTier1Flex && Number(tier.id) === 1) {
-      const nextAmt = clampNumber(depAmount, tier1Floor, tier1Cap);
-      if (!Number.isFinite(nextAmt) || nextAmt <= 0) {
-        setDepError(`Enter an amount between KES ${tier1Floor.toLocaleString()} and KES ${tier1Cap.toLocaleString()}.`);
-        return;
-      }
-      amount = nextAmt;
-    }
+    const amount = Number(tier.deposit);
     setDepError("");
     setDepLoading(true);
     try {
       const token = await getAccessToken();
       const headers = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(`${apiBase}/api/v1/deposit/create`, {
+      const requestBody = {
+        amount,
+        user_id: authUser.id,
+        email,
+        tier: tier.id,
+        method: depMethod || "M-Pesa",
+        payment_mode: "live",
+        phone: depPhone || profileRow?.phone || "",
+        name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
+      };
+      let res = await fetch(`${apiBase}/api/v1/deposit/create`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          amount,
-          user_id: authUser.id,
-          email,
-          tier: tier.id,
-          method: depMethod || "M-Pesa",
-          payment_mode: MANUAL_PAYMENTS ? "manual" : "live",
-          phone: depPhone || profileRow?.phone || "",
-          name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
-        })
+        body: JSON.stringify(requestBody)
       });
-      const data = await res.json().catch(() => ({}));
+      let data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const rawMsg = data?.error || data?.message || "Failed to start checkout.";
+        const rawMsg = data?.error || data?.message || data?.detail || "Failed to start checkout.";
         const msg =
           String(rawMsg || "").toLowerCase().includes("ipn")
             ? "Payment gateway not configured yet. Please contact support."
@@ -1720,16 +1381,13 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
       }
       const url = data?.authorization_url || data?.redirect_url || data?.auth_url || data?.url;
       if (data?.manual) {
-        setDepDone(true);
-        setTimeout(() => setDepDone(false), 2500);
+        setDepError("Direct payment checkout is unavailable right now. Please contact support.");
         return;
       }
       if (!url) {
         setDepError("Payment gateway did not return a checkout URL.");
         return;
       }
-      setDepDone(true);
-      setTimeout(() => setDepDone(false), 2500);
       window.location.href = url;
     } catch (e) {
       setDepError("Network error. Please try again.");
@@ -1761,8 +1419,24 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
           {TIERS.map((tier) => {
             const isActive = Number(selected) === Number(tier.id);
             const daily = getTierDailyTotal(tier);
+            const tierArt = getTierCardImage(tier.id);
+            const showDepositCta = !profileTierSelected;
             return (
-              <div key={tier.id} style={{ background:"#fff", borderRadius:16, border:isActive ? "2px solid #111" : "1.5px solid #E5E7EB", padding:"22px", boxShadow:isActive ? "0 6px 18px rgba(0,0,0,0.08)" : "0 2px 10px rgba(0,0,0,0.04)" }}>
+              <div
+                key={tier.id}
+                className="ep-tier-mobile-image-host ep-tier-mobile-image-host-select"
+                style={{
+                  background:"linear-gradient(145deg,#FFFFFF 0%, #F8FAFC 56%, #EEF2FF 100%)",
+                  borderRadius:16,
+                  border:isActive ? "2px solid #0F172A" : "1.5px solid #E5E7EB",
+                  padding:"22px 22px 20px",
+                  boxShadow:isActive ? "0 10px 24px rgba(15,23,42,0.14)" : "0 4px 14px rgba(15,23,42,0.08)",
+                  position:"relative",
+                  overflow:"hidden"
+                }}
+              >
+                <div style={{ position:"absolute", right:0, top:0, bottom:0, width:"44%", background:"linear-gradient(165deg, rgba(15,23,42,0.02) 0%, rgba(59,130,246,0.1) 100%)", pointerEvents:"none", zIndex:1 }} />
+                <div className="ep-tier-mobile-image-content" style={{ maxWidth:"58%" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
                   <div>
                     <div style={{ fontSize:10, letterSpacing:"0.12em", fontWeight:800, color:tier.acc }}>TIER {tier.id}</div>
@@ -1800,9 +1474,9 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                 )}
                 {isActive && (
                   <>
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:showDepositCta ? "repeat(3,1fr)" : "repeat(2,1fr)", gap:8, marginBottom:10 }}>
                       <button
-                        disabled={saving}
+                        disabled={saving || depLoading}
                         onClick={() => togglePanel("earn")}
                         style={{
                           padding:"9px 8px",
@@ -1812,32 +1486,39 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                           color:panel==="earn" ? "#fff" : "#111",
                           fontWeight:800,
                           fontSize:12,
-                          cursor:saving ? "not-allowed" : "pointer",
+                          cursor:(saving || depLoading) ? "not-allowed" : "pointer",
                           fontFamily:"Geist,sans-serif"
                         }}
                       >
                         Earnings
                       </button>
+                      {showDepositCta && (
+                        <button
+                          className="ep-tier-deposit-btn"
+                          disabled={saving || depLoading}
+                          onClick={() => handlePayNow(tier)}
+                          style={{
+                            padding:"9px 8px",
+                            borderRadius:9,
+                            border:"1.5px solid #166534",
+                            background:depLoading ? "#14532D" : "linear-gradient(135deg,#16A34A 0%, #15803D 56%, #166534 100%)",
+                            color:"#ECFDF5",
+                            fontWeight:900,
+                            fontSize:12,
+                            letterSpacing:"0.01em",
+                            cursor:(saving || depLoading) ? "not-allowed" : "pointer",
+                            fontFamily:"Geist,sans-serif",
+                            boxShadow:depLoading
+                              ? "inset 0 2px 6px rgba(15,23,42,0.45)"
+                              : "0 10px 16px rgba(22,163,74,0.28), inset 0 1px 0 rgba(255,255,255,0.26)"
+                          }}
+                        >
+                          {saving ? "Saving..." : (depLoading ? "Opening..." : "Deposit Now")}
+                        </button>
+                      )}
                       <button
-                        disabled={saving}
-                        onClick={() => handlePayNow(tier.id)}
-                        style={{
-                          padding:"9px 8px",
-                          borderRadius:9,
-                          border:`1.5px solid ${panel==="pay" ? "#111" : "#E2E8F0"}`,
-                          background:panel==="pay" ? "#111" : "#fff",
-                          color:panel==="pay" ? "#fff" : "#111",
-                          fontWeight:800,
-                          fontSize:12,
-                          cursor:saving ? "not-allowed" : "pointer",
-                          fontFamily:"Geist,sans-serif"
-                        }}
-                      >
-                        {saving ? "Saving..." : "Self Deposit"}
-                      </button>
-                      <button
-                        disabled={saving}
-                        onClick={() => handlePayLater(tier.id)}
+                        disabled={saving || depLoading}
+                        onClick={() => handlePreview(tier.id)}
                         style={{
                           padding:"9px 8px",
                           borderRadius:9,
@@ -1846,11 +1527,11 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                           color:"#475569",
                           fontWeight:800,
                           fontSize:12,
-                          cursor:saving ? "not-allowed" : "pointer",
+                          cursor:(saving || depLoading) ? "not-allowed" : "pointer",
                           fontFamily:"Geist,sans-serif"
                         }}
                       >
-                        Pay Later
+                        Preview Videos
                       </button>
                     </div>
 
@@ -1879,125 +1560,27 @@ function TierSelect({ go, authUser, profileRow, onSelectTier }) {
                         </div>
                       </div>
                     )}
-
-                    {panel === "pay" && (
-                      <div style={{ padding:"12px 14px", borderRadius:12, border:"1px solid #E2E8F0", background:"#FFFFFF" }}>
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:12 }}>
-                          <div>
-                            <div style={{ fontSize:10, fontWeight:800, color:"#94A3B8", letterSpacing:"0.18em", textTransform:"uppercase" }}>
-                              Self Deposit Checkout
-                            </div>
-                            <div style={{ fontSize:13, fontWeight:900, color:"#0F172A", marginTop:4 }}>
-                              {MANUAL_PAYMENTS ? "Submit a self deposit request" : `Deposit for ${tier.name}`}
-                            </div>
-                          </div>
-                          <div style={{ padding:"4px 8px", borderRadius:999, background:MANUAL_PAYMENTS ? "#F97316" : "#111827", color:"#fff", fontSize:10, fontWeight:800 }}>
-                            {MANUAL_PAYMENTS ? "MANUAL" : (isTier1Flex ? "MOBILE FLEX" : "LIVE")}
-                          </div>
-                        </div>
-
-                        <div style={{ display:"grid", gridTemplateColumns:"1fr auto", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:"#F8FAFC", border:"1px solid #E2E8F0", marginBottom:10 }}>
-                          <div>
-                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:800, letterSpacing:"0.12em" }}>
-                              {isTier1Flex ? "MOBILE LIMIT" : "LOCKED AMOUNT"}
-                            </div>
-                            <div style={{ fontSize:18, fontWeight:900, color:"#0F172A" }}>
-                              KES {(isTier1Flex ? clampNumber(depAmount || tier1Floor, tier1Floor, tier1Cap) : tier.deposit).toLocaleString()}
-                            </div>
-                            <div style={{ fontSize:10, color:"#64748B", marginTop:2 }}>
-                              {isTier1Flex ? `Limit KES ${tier1Floor.toLocaleString()} - ${tier1Cap.toLocaleString()}` : `${tier.name} Tier`}
-                            </div>
-                          </div>
-                          <div style={{ padding:"6px 10px", borderRadius:999, background:"#111827", color:"#fff", fontSize:10, fontWeight:800 }}>FIXED</div>
-                        </div>
-
-                        {isTier1Flex && (
-                          <div style={{ marginBottom:10 }}>
-                            <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:6 }}>Enter Amount</div>
-                            <input
-                              type="number"
-                              min={tier1Floor}
-                              max={tier1Cap}
-                              value={depAmount}
-                              onChange={e=>setDepAmount(e.target.value)}
-                              placeholder={`KES ${tier1Floor.toLocaleString()} - ${tier1Cap.toLocaleString()}`}
-                              style={{ width:"100%",padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:13,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
-                            />
-                          </div>
-                        )}
-
-                        <div style={{ fontSize:11, color:"#64748B", marginTop:2 }}>
-                          {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Secure checkout will open in a new window."}
-                        </div>
-
-                        <div style={{ marginTop:12 }}>
-                          <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:8 }}>Choose Method</div>
-                          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8 }}>
-                            {DEPOSIT_METHODS.map((m) => {
-                              const active = depMethod === m.label;
-                              return (
-                                <button key={m.id} onClick={() => setDepMethod(m.label)}
-                                  style={{
-                                    padding:"10px 10px",
-                                    borderRadius:10,
-                                    border:active ? "1.5px solid #111" : "1.5px solid #E2E8F0",
-                                    background:active ? "#111" : "#F8FAFC",
-                                    color:active ? "#fff" : "#111",
-                                    fontWeight:800,
-                                    fontSize:12,
-                                    cursor:"pointer",
-                                    fontFamily:"Geist,sans-serif",
-                                    textAlign:"left"
-                                  }}>
-                                  <div style={{ fontSize:12, fontWeight:900 }}>{m.label}</div>
-                                  <div style={{ fontSize:10, opacity:active ? 0.8 : 0.6 }}>{m.desc}</div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
-                          <input
-                            value={depPhone}
-                            onChange={e=>setDepPhone(e.target.value)}
-                            placeholder="Phone (M‑Pesa only, optional)"
-                            style={{ width:"100%",padding:"9px 10px",borderRadius:9,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
-                          />
-                          <input
-                            value={depName}
-                            onChange={e=>setDepName(e.target.value)}
-                            placeholder="Full name (optional)"
-                            style={{ width:"100%",padding:"9px 10px",borderRadius:9,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
-                          />
-                        </div>
-                        <button
-                          onClick={() => submitTierDeposit(tier)}
-                          disabled={depLoading}
-                          style={{ width:"100%",marginTop:10,padding:"11px 12px",background:depLoading?"#334155":"linear-gradient(135deg,#111827 0%, #0F172A 100%)",color:"#fff",border:"none",borderRadius:10,fontWeight:900,fontSize:12,cursor:depLoading?"not-allowed":"pointer",fontFamily:"Geist,sans-serif" }}
-                        >
-                          {depLoading
-                            ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
-                            : (depDone
-                              ? "Self Deposit Submitted"
-                              : (MANUAL_PAYMENTS
-                                ? `Submit ${depMethod} Request`
-                                : `Continue with ${depMethod}`))}
-                        </button>
-                        {depErrorMsg && (
-                          <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
-                            {depErrorMsg}
-                          </div>
-                        )}
-                        {!MANUAL_PAYMENTS && (
-                          <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
-                            You’ll complete the payment in a secure checkout and return here automatically.
-                          </div>
-                        )}
+                    {depErrorMsg && (
+                      <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
+                        {depErrorMsg}
+                      </div>
+                    )}
+                    {!showDepositCta && (
+                      <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
+                        Tier already selected. Use Wallet checkout to deposit anytime.
                       </div>
                     )}
                   </>
                 )}
+                </div>
+                <img
+                  className="ep-tier-mobile-image ep-tier-mobile-image-select"
+                  src={tierArt.primary}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  onError={(e) => setFallbackSrc(e, tierArt)}
+                  style={{ display:"block", position:"absolute", right:0, top:0, width:"44%", height:"100%", objectFit:"cover", objectPosition:"right center", opacity:0.96, zIndex:1, filter:"saturate(1.03) contrast(1.04) drop-shadow(0 14px 24px rgba(15,23,42,0.24))" }}
+                />
               </div>
             );
           })}
@@ -2038,6 +1621,15 @@ const CLIENT_NAV = [
   { id: "referrals", label: "Referrals", ic: "gift"   },
   { id: "withdraw",  label: "Wallet",  ic: "wallet" },
 ];
+const DASH_GUIDE_STEPS = [
+  { title:"Help Button", text:"Tap the shield button anytime to contact support quickly from anywhere in the app." },
+  { title:"Deposit & Wallet", text:"Open Wallet and tap Pay Now to unlock earnings and withdrawals for your tier." },
+  { title:"Referral Power", text:"Share your referral link. You earn 10% from direct referral deposits automatically." },
+  { title:"Upgrade Tiers", text:"When ready, top up only the remaining amount to move to the next tier level." },
+  { title:"Video Earnings", text:"Go to Videos, complete required watches, then claim bonus rewards daily." },
+  { title:"Settings", text:"In Settings you can update your profile and replay this full onboarding guide." }
+];
+const DASH_GUIDE_SEEN_KEY = "ep:dashboard-guide-seen";
 
 const LIVE_SYMBOLS = [
   { ch:"+", x:"6%",  y:"14%", size:26, dur:20, delay:-2 },
@@ -2059,10 +1651,28 @@ const cdnUrl = (path) => (CDN_BASE ? `${CDN_BASE}${path.startsWith("/") ? path :
 const PLAN_BG_VIDEO = cdnUrl("/plan-actions.mp4");
 const HOME_BALANCE_VIDEO = cdnUrl("/home-balance.mp4");
 const ACCOUNT_GOAL_VIDEO = cdnUrl("/account-goal.mp4");
+const HOME_HERO_BG_IMAGE = import.meta.env.VITE_HOME_HERO_BG_IMAGE || cdnUrl("/hero-space-money.png");
 const HOME_HERO_BOT_IMAGE = import.meta.env.VITE_HOME_HERO_BOT_IMAGE || cdnUrl("/hero-casino-bot.png");
+const proxyImageUrl = (rawUrl) => `https://proxy.duckduckgo.com/iu/?u=${encodeURIComponent(rawUrl)}&f=1`;
+const imageSource = (rawUrl) => ({ primary: proxyImageUrl(rawUrl), fallback: rawUrl });
+const LANDING_STICKER_TOP_IMAGE = imageSource("https://i.postimg.cc/jjzn0XRJ/BG2_removebg_preview.png");
+const LANDING_STICKER_BOTTOM_IMAGE = imageSource("https://i.postimg.cc/1RNtLBB0/BG6_removebg_preview.png");
+const LANDING_STICKER_TIER_IMAGE = imageSource("https://i.postimg.cc/7hXLPsRL/BG5_removebg_preview.png");
+const DASH_BOT_GUIDE_IMAGE = imageSource("https://i.postimg.cc/RFKkTW1c/BG8_removebg_preview.png");
+const HOME_BALANCE_SIDE_IMAGE = imageSource("https://i.postimg.cc/fyLdGYVG/BG1_removebg_preview.png");
+const REFERRAL_WORK_BOT_IMAGE = imageSource("https://i.postimg.cc/jSrH5wm8/BG2_removebg_preview.png");
+const setFallbackSrc = (e, srcObj) => {
+  const fallback = srcObj?.fallback || "";
+  if (!fallback) return;
+  const cur = e?.currentTarget?.src || "";
+  if (cur && cur.includes(encodeURIComponent(fallback))) return;
+  if (cur && cur.includes(fallback)) return;
+  if (e?.currentTarget) e.currentTarget.src = fallback;
+};
 const PLAN_BG_VIDEO_FALLBACK = CDN_BASE ? "/plan-actions.mp4" : "";
 const HOME_BALANCE_VIDEO_FALLBACK = CDN_BASE ? "/home-balance.mp4" : "";
 const ACCOUNT_GOAL_VIDEO_FALLBACK = CDN_BASE ? "/account-goal.mp4" : "";
+const HOME_HERO_BG_IMAGE_FALLBACK = CDN_BASE ? "/hero-space-money.png" : "";
 const HOME_HERO_BOT_IMAGE_FALLBACK = CDN_BASE ? "/hero-casino-bot.png" : "";
 const LIVE_COLORS_LIGHT = [
   "rgba(59,130,246,0.16)",
@@ -2113,18 +1723,38 @@ function LiveMathBackground({ tone = "light", symbols = LIVE_SYMBOLS, opacity = 
   );
     }
 
-function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
+function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, externalTab, onTabChange }) {
   const [open, setOpen] = useState(true);
-  const [tab, setTab] = useState("overview");
+  const normalizeClientTab = useCallback((tabId) => {
+    const tab = String(tabId || "").toLowerCase();
+    return ["overview","videos","analytics","referrals","withdraw","settings"].includes(tab) ? tab : "overview";
+  }, []);
+  const [tabState, setTabState] = useState(() => normalizeClientTab(externalTab || "overview"));
+  const isClientTabControlled = typeof externalTab === "string";
+  const tab = isClientTabControlled ? normalizeClientTab(externalTab) : tabState;
+  const setTab = useCallback((nextTab) => {
+    const resolvedRaw = typeof nextTab === "function" ? nextTab(tab) : nextTab;
+    const resolved = normalizeClientTab(resolvedRaw);
+    if (!isClientTabControlled) setTabState(resolved);
+    if (onTabChange) onTabChange(resolved);
+  }, [isClientTabControlled, normalizeClientTab, onTabChange, tab]);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifs, setNotifs] = useState([
-    { ic:"check", title:"Withdrawal Approved", sub:"KES 1,200 sent to M-Pesa", time:"2h ago", c:"#059669", read:false },
-    { ic:"play",  title:"Bonus credited", sub:"14 videos  -  KES 280 earned", time:"5h ago", c:t.acc, read:false },
-    { ic:"gift",  title:"New referral joined", sub:"Amina K. signed up via your link", time:"1d ago", c:"#E8820C", read:false },
-  ]);
+  const [notifs, setNotifs] = useState(() => {
+    try {
+      const raw = localStorage.getItem("ep:dash-notifs");
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch (e) {}
+    return [
+      { ic:"check", title:"Withdrawal Approved", sub:"KES 1,200 sent to M-Pesa", time:"2h ago", c:"#059669", read:false },
+      { ic:"play",  title:"Bonus credited", sub:"14 videos  -  KES 280 earned", time:"5h ago", c:t.acc, read:false },
+      { ic:"gift",  title:"New referral joined", sub:"Amina K. signed up via your link", time:"1d ago", c:"#E8820C", read:false },
+    ];
+  });
   const [profileOpen, setProfileOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [depositFocus, setDepositFocus] = useState(false);
+  const [depositBannerDismissed, setDepositBannerDismissed] = useState(() => DEPOSIT_WALLET_BANNER_DISMISSED);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
   const [overviewMediaReady, setOverviewMediaReady] = useState(() => window.innerWidth >= 769);
@@ -2164,6 +1794,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const [clientTx, setClientTx] = useState([]);
   const [clientRefs, setClientRefs] = useState([]);
   const [clientRefTable, setClientRefTable] = useState([]);
+  useEffect(() => {
+    try { localStorage.setItem("ep:dash-notifs", JSON.stringify(notifs)); } catch (e) {}
+  }, [notifs]);
   const baseEarn = 0;
   const USE_LOCAL_WALLET = !SUPABASE_ENABLED;
   const [earnBonus, setEarnBonus] = useState(() => {
@@ -2197,6 +1830,12 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const serverBalanceVal = Number(profile.balance);
   const serverBalance = Number.isFinite(serverBalanceVal) ? serverBalanceVal : null;
   const depositRequired = !USE_LOCAL_WALLET && hasTierDeposit === false;
+  const DEPOSIT_AUTO_OPEN_SECS = 60;
+  const [depositCountdown, setDepositCountdown] = useState(DEPOSIT_AUTO_OPEN_SECS);
+  const timerMinutes = Math.floor(depositCountdown / 60);
+  const timerSeconds = depositCountdown % 60;
+  const depositTimerLabel = `${String(timerMinutes).padStart(2, "0")}:${String(timerSeconds).padStart(2, "0")}`;
+  const depositTimerPct = Math.max(0, Math.min(100, Math.round((depositCountdown / DEPOSIT_AUTO_OPEN_SECS) * 100)));
 
   useEffect(() => {
     if (!supabase || !authId || USE_LOCAL_WALLET) { setHasTierDeposit(null); return; }
@@ -2208,7 +1847,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
         .select("deposit_id")
         .eq("user_id", authId)
         .eq("status", "success")
-        .eq("tier_at_deposit", Number(t?.id || 1))
         .limit(1);
       if (!ignore) {
         setHasTierDeposit(!error && Array.isArray(data) && data.length > 0);
@@ -2217,6 +1855,29 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     })();
     return () => { ignore = true; };
   }, [authId, t?.id, USE_LOCAL_WALLET]);
+  useEffect(() => {
+    if (!depositRequired) {
+      setDepositCountdown(DEPOSIT_AUTO_OPEN_SECS);
+      return;
+    }
+    setDepositCountdown(DEPOSIT_AUTO_OPEN_SECS);
+  }, [depositRequired, authId, t?.id, DEPOSIT_AUTO_OPEN_SECS]);
+  useEffect(() => {
+    if (!depositRequired) return;
+    const id = setInterval(() => {
+      setDepositCountdown(prev => {
+        if (prev <= 0) return 0;
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [depositRequired]);
+  useEffect(() => {
+    if (!depositRequired) return;
+    if (depositCountdown > 0) return;
+    setTab("withdraw");
+    setDepositFocus(true);
+  }, [depositRequired, depositCountdown]);
   const earn = Number.isFinite(serverBalance) ? serverBalance : (baseEarn + earnBonus);
   const goal = getTierDailyTotal(t) * 7;
   const pct = Math.round((earn / goal) * 100);
@@ -2242,7 +1903,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
   const SIDEBAR_W = isMobile ? (isTiny ? 220 : 260) : 260;
   const ICON_W = 60;
   const headingFont = "Sora, Geist, sans-serif";
-  const pagePad = isMobile ? (isTiny ? "10px 12px 96px" : "14px 16px 96px") : "26px 34px 48px";
+  const pagePad = isMobile ? (isTiny ? "10px 12px 126px" : "14px 16px 132px") : "26px 34px 48px";
   const headerPad = isMobile ? (isTiny ? "10px 12px 0" : "12px 16px 0") : "18px 28px 0";
   const upgradeBtnActive = {
     background:"linear-gradient(180deg,#FDE047 0%, #F59E0B 45%, #F97316 100%)",
@@ -2266,12 +1927,41 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     setDepositFocus(!!focus);
     setTab("withdraw");
   };
+  const dismissDepositBanner = () => {
+    DEPOSIT_WALLET_BANNER_DISMISSED = true;
+    setDepositBannerDismissed(true);
+  };
   useEffect(() => {
     if (tab !== "withdraw" && depositFocus) setDepositFocus(false);
   }, [tab, depositFocus]);
+  const pushNotif = useCallback((item) => {
+    if (!item) return;
+    setNotifs(prev => {
+      const base = Array.isArray(prev) ? prev : [];
+      return [
+        {
+          ic: item.ic || "bell",
+          title: item.title || "Account update",
+          sub: item.sub || "",
+          time: item.time || "Just now",
+          c: item.c || t.acc,
+          read: false
+        },
+        ...base
+      ].slice(0, 40);
+    });
+  }, [t.acc]);
   const addClientTx = useCallback((tx) => {
     setClientTx(prev => [tx, ...(Array.isArray(prev) ? prev : [])]);
-  }, []);
+    if (!tx) return;
+    pushNotif({
+      ic: tx.ic || "wallet",
+      title: tx.text || "Wallet update",
+      sub: tx.sub || "New activity on your account.",
+      time: tx.time || "Just now",
+      c: tx.c || t.acc
+    });
+  }, [pushNotif, t.acc]);
   const makeEventId = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
     return `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -2548,7 +2238,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
     { id:"videos",    label:"Videos",    ic:"play",  badge: "2 left" },
     { id:"analytics", label:"Analytics", ic:"chart"  },
     { id:"referrals", label:"Referrals", ic:"gift",  badge: "8" },
-    { id:"withdraw",  label:"Wallet",  ic:"wallet" },
+    { id:"withdraw",  label:"Wallet",    ic:"wallet" },
     { id:"settings",  label:"Settings",  ic:"settings" },
   ];
 
@@ -2813,7 +2503,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
       <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0 }}>
 
         {/* "" TOP BAR "" */}
-        <header style={{
+        <header className="ep-dash-topbar" style={{
           minHeight: isMobile ? 64 : 62,
           height: isMobile ? "auto" : 62,
           background:"#fff",
@@ -2831,6 +2521,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           {/* Toggle / Upgrade */}
           {!isMobile && (
             <button onClick={() => setOpen(o => !o)}
+              className="ep-dash-icon-btn"
               style={{ width:36, height:36, borderRadius:9, border:"1.5px solid #E8E8E8", background:"#FAFAFA", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s", flexShrink:0 }}
               onMouseEnter={e=>{e.currentTarget.style.background="#F0F0F0";}} onMouseLeave={e=>{e.currentTarget.style.background="#FAFAFA";}}>
               <I n="menu" s={16} c="#555"/>
@@ -2907,6 +2598,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           {/* Notifications */}
           <div style={{ position:"relative" }}>
             <button onClick={()=>{setNotifOpen(o=>!o); setProfileOpen(false);}}
+              className="ep-dash-icon-btn"
               style={{ width:36, height:36, borderRadius:9, border:"1.5px solid #E8E8E8", background:"#FAFAFA", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
               <I n="bell" s={15} c="#666"/>
               {notifs.some(n=>!n.read) && (
@@ -2937,7 +2629,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
           {/* Profile */}
           <div style={{ position:"relative" }}>
-            <div onClick={()=>{setProfileOpen(o=>!o); setNotifOpen(false);}} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 10px 4px 4px", border:"1.5px solid #E8E8E8", borderRadius:50, background:"#FAFAFA" }}>
+            <div onClick={()=>{setProfileOpen(o=>!o); setNotifOpen(false);}} className="ep-dash-profile-trigger" style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 10px 4px 4px", border:"1.5px solid #E8E8E8", borderRadius:50, background:"#FAFAFA" }}>
               <div style={{ width:28, height:28, borderRadius:"50%", background:t.acc, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                 {profile.avatar ? (
                   <img src={profile.avatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
@@ -2994,7 +2686,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
         </header>
 
         {/* "" PAGE HEADER STRIP "" */}
-        <div style={{
+        <div className="ep-dash-strip" style={{
           position:"sticky",
           top:0,
           zIndex:20,
@@ -3022,7 +2714,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                 </p>
               </div>
               {/* Quick action buttons */}
-              <div style={{ display:"flex", gap:8 }}>
+              <div className="ep-dash-strip-actions" style={{ display:"flex", gap:8 }}>
                 <button onClick={()=>setTab("videos")} style={{ padding:"8px 16px", background:"#111", color:"#fff", border:"none", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
                   <I n="play" s={12} c="#fff"/> Watch Now
                 </button>
@@ -3034,7 +2726,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
           )}
 
           {isMobile && (
-            <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:10 }}>
+            <div className="ep-dash-strip-mobile" style={{ width:"100%", display:"flex", flexDirection:"column", gap:10 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap" }}>
                 <h2 style={{ fontSize:isTiny?14:16, fontWeight:900, letterSpacing:"-0.04em", color:"#111", lineHeight:1.1, fontFamily: headingFont, flex:"1 1 140px", minWidth:0 }}>
                   {navItems.find(n=>n.id===tab)?.label || "Overview"}
@@ -3043,7 +2735,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                   {t.name} Tier
                 </span>
               </div>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              <div className="ep-dash-strip-mobile-meta" style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#555", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>{today}</span>
                 <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#111", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>KES {earn.toLocaleString()} earned</span>
               </div>
@@ -3109,21 +2801,40 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
               </button>
             </div>
           )}
-          {depositRequired && (
-            <div style={{ padding:"14px 16px", background:"#EEF2FF", border:"1px solid #C7D2FE", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", marginBottom:16 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          {depositRequired && !depositBannerDismissed && (
+            <div style={{ position:"relative", padding:"14px 16px", background:"#EEF2FF", border:"1px solid #C7D2FE", borderRadius:12, display:"grid", gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1fr) minmax(250px, 320px)", gap:12, alignItems:"stretch", marginBottom:16 }}>
+              <button
+                type="button"
+                aria-label="Dismiss deposit notice"
+                onClick={dismissDepositBanner}
+                style={{ position:"absolute", top:8, right:8, width:24, height:24, borderRadius:"50%", border:"1px solid #C7D2FE", background:"#fff", color:"#4C51BF", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", zIndex:2 }}
+              >
+                <I n="xmark" s={12} c="#4C51BF" />
+              </button>
+              <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
                 <div style={{ width:34, height:34, borderRadius:10, background:"#4F46E5", display:"flex", alignItems:"center", justifyContent:"center" }}>
                   <I n="wallet" s={14} c="#fff"/>
                 </div>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Self deposit required to unlock your tier</div>
-                  <div style={{ fontSize:11, color:"#4C51BF", marginTop:2 }}>Submit the fixed tier deposit to activate earnings and withdrawals.</div>
+                <div style={{ minWidth:0, paddingRight:20 }}>
+                  <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Deposit needed to unlock wallet</div>
+                  <div style={{ fontSize:11, color:"#4C51BF", marginTop:2 }}>Pay KES {t.deposit.toLocaleString()} once to unlock earnings and withdrawals.</div>
                 </div>
               </div>
-              <button onClick={() => goDeposit(true)}
-                style={{ padding:"9px 14px", borderRadius:10, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap" }}>
-                Self Deposit Now
-              </button>
+              <div style={{ border:"1px solid rgba(165,180,252,0.7)", background:"#fff", borderRadius:12, padding:isMobile ? "8px 10px" : "10px 12px", display:"grid", gridTemplateColumns:"1fr auto", alignItems:"center", gap:10, minHeight:isMobile ? 86 : 108 }}>
+                <button onClick={() => goDeposit(true)}
+                  style={{ padding:isMobile ? "8px 12px" : "9px 15px", borderRadius:10, border:"1px solid rgba(187,247,208,0.7)", background:"linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:"#ecfdf5", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap", boxShadow:"0 8px 18px rgba(22,163,74,0.28)", justifySelf:"start" }}>
+                  Pay Now
+                </button>
+                <div style={{ width:isMobile ? 86 : 112, height:isMobile ? 70 : 92, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", justifySelf:"end" }}>
+                  <img
+                    src={LANDING_STICKER_BOTTOM_IMAGE.primary}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    onError={(e) => setFallbackSrc(e, LANDING_STICKER_BOTTOM_IMAGE)}
+                    style={{ width:"100%", height:"100%", objectFit:"contain", pointerEvents:"none", userSelect:"none" }}
+                  />
+                </div>
+              </div>
             </div>
           )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady}/>}
@@ -3139,10 +2850,16 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                     <div style={{ fontSize:14, fontWeight:900, color:"#111" }}>Profile Settings</div>
                     <div style={{ fontSize:11, color:"#888", marginTop:2 }}>Update your account details and photo.</div>
                   </div>
-                  <button onClick={saveProfile} disabled={!profileDirty || profileSaving}
-                    style={{ padding:"8px 14px", borderRadius:9, border:"none", background: profileDirty ? "#111" : "#E5E7EB", color: profileDirty ? "#fff" : "#9CA3AF", fontSize:12, fontWeight:800, cursor: profileDirty ? "pointer" : "not-allowed", fontFamily:"Geist,sans-serif" }}>
-                    {profileSaving ? "Saving..." : "Save Changes"}
-                  </button>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                    <button onClick={() => onReplayGuide?.()}
+                      style={{ padding:"8px 14px", borderRadius:9, border:"1.5px solid #111", background:"#fff", color:"#111", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif" }}>
+                      Replay Guide
+                    </button>
+                    <button onClick={saveProfile} disabled={!profileDirty || profileSaving}
+                      style={{ padding:"8px 14px", borderRadius:9, border:"none", background: profileDirty ? "#111" : "#E5E7EB", color: profileDirty ? "#fff" : "#9CA3AF", fontSize:12, fontWeight:800, cursor: profileDirty ? "pointer" : "not-allowed", fontFamily:"Geist,sans-serif" }}>
+                      {profileSaving ? "Saving..." : "Save Changes"}
+                    </button>
+                  </div>
                 </div>
 
                 {profileMsg && (
@@ -3261,6 +2978,29 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
                     {nextTier ? "Upgrade available - move to the next tier anytime." : "You're at the top tier."}
                   </div>
                 </div>
+                <button
+                  onClick={() => (onSignOut ? onSignOut() : go("landing"))}
+                  style={{
+                    marginTop: 4,
+                    width: "100%",
+                    padding: "11px 12px",
+                    borderRadius: 10,
+                    border: "1.5px solid #FCA5A5",
+                    background: "#FFF1F2",
+                    color: "#B91C1C",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    fontFamily: "Geist,sans-serif",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8
+                  }}
+                >
+                  <I n="logout" s={14} c="#B91C1C" />
+                  Logout
+                </button>
               </div>
             </div>
           )}
@@ -3269,36 +3009,72 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut }) {
 
       {/* "" Mobile bottom nav "" */}
       {isMobile && (
-        <nav style={{ position:"fixed", bottom:0, left:0, right:0, height:60, background:"#fff", borderTop:"none", display:"flex", alignItems:"stretch", zIndex:150, boxShadow:"0 -6px 22px rgba(0,0,0,0.1)" }}>
+        <nav
+          style={{
+            position:"fixed",
+            left:"50%",
+            bottom:"calc(14px + env(safe-area-inset-bottom, 0px))",
+            transform:"translateX(-50%)",
+            width:"calc(100% - 22px)",
+            maxWidth:460,
+            padding:"8px",
+            borderRadius:999,
+            background:"linear-gradient(180deg,#111827 0%, #020617 100%)",
+            border:"1px solid rgba(148,163,184,0.34)",
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"space-between",
+            gap:8,
+            zIndex:150,
+            boxShadow:"0 16px 28px rgba(2,6,23,0.42), 0 6px 10px rgba(2,6,23,0.32)",
+            backdropFilter:"blur(10px)"
+          }}>
           {navItems.filter(n=>["overview","videos","referrals","withdraw","settings"].includes(n.id)).map(({id,ic,label}) => {
             const active = tab===id;
-            const isRef = id === "referrals";
-            const pop = active && !isRef;
+            const isReferral = id==="referrals";
+            const expandedWidth = active
+              ? (isReferral ? (isTiny ? 126 : 146) : (isTiny ? 112 : 132))
+              : (isReferral ? 52 : 44);
+            const baseBg = active
+              ? (isReferral ? "linear-gradient(135deg,#F59E0B 0%, #F97316 55%, #EA580C 100%)" : "#F8FAFC")
+              : (isReferral ? "linear-gradient(135deg,rgba(245,158,11,0.96) 0%, rgba(249,115,22,0.96) 100%)" : "rgba(248,250,252,0.98)");
+            const baseColor = isReferral ? "#FFFFFF" : (active ? "#0F172A" : "#111827");
             return (
               <button key={id} onClick={()=>{setTab(id); setOpen(false);}}
                 style={{
-                  flex:1,
+                  height:isReferral ? 46 : 44,
+                  width:expandedWidth,
+                  minWidth:44,
+                  border:"none",
+                  borderRadius:999,
+                  cursor:"pointer",
                   display:"flex",
-                  flexDirection:"column",
                   alignItems:"center",
                   justifyContent:"center",
-                  gap:3,
-                  background:isRef?"linear-gradient(180deg,#FFF7E6 0%,#FFE4B3 100%)":(pop?"#fff":"transparent"),
-                  border:"none",
-                  cursor:"pointer",
-                  color: isRef ? "#111" : (active?t.acc:"#BBB"),
-                  transition:"all .15s",
+                  gap:active ? 8 : 0,
+                  padding:active ? "0 14px 0 12px" : 0,
+                  background:baseBg,
+                  color:baseColor,
+                  boxShadow:isReferral
+                    ? (active
+                      ? "0 10px 20px rgba(249,115,22,0.46), 0 0 0 1px rgba(255,237,213,0.52) inset"
+                      : "0 8px 16px rgba(249,115,22,0.38), 0 0 0 1px rgba(255,237,213,0.32) inset")
+                    : (active ? "0 8px 14px rgba(15,23,42,0.25)" : "0 3px 8px rgba(2,6,23,0.26)"),
+                  transform:isReferral ? (active ? "translateY(-2px)" : "translateY(-1px)") : (active ? "translateY(-1px)" : "translateY(0)"),
+                  transition:"all .24s cubic-bezier(.4,0,.2,1)",
                   fontFamily:"IBM Plex Sans, Geist, sans-serif",
-                  position:"relative",
-                  margin:isRef?"6px 8px 10px":0,
-                  borderRadius:isRef?15:(pop?13:0),
-                  transform:isRef?"translateY(-12px) scale(1.06)":(pop?"translateY(-9px) scale(1.04)":"none"),
-                  boxShadow:isRef?"0 12px 24px rgba(0,0,0,0.22)":(pop?"0 10px 18px rgba(0,0,0,0.22)":"none")
+                  flexShrink:0,
+                  position:"relative"
                 }}>
-                <I n={ic} s={active?22:19} c={isRef? "#111" : (active?t.acc:"#BBBBBB")}/>
-                <span style={{ fontSize:9, fontWeight:800, whiteSpace:"nowrap", letterSpacing:"0.04em", color:isRef? "#111" : (active?t.acc:"#888") }}>{label}</span>
-                {isRef && <div style={{ position:"absolute", top:6, right:10, padding:"2px 6px", borderRadius:8, background:"#111", color:"#fff", fontSize:8, fontWeight:800, letterSpacing:"0.06em" }}>PRIZE</div>}
-                {active && !isRef && <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:28, height:2, background:t.acc, borderRadius:99 }}/>}
+                {isReferral && !active && (
+                  <span style={{ position:"absolute",top:6,right:7,width:7,height:7,borderRadius:"50%",background:"#FDE68A",boxShadow:"0 0 0 4px rgba(254,243,199,0.18)" }} />
+                )}
+                <I n={ic} s={active ? 18 : 17} c={baseColor}/>
+                {active && (
+                  <span style={{ fontSize:13, fontWeight:800, whiteSpace:"nowrap", letterSpacing:"0.01em", color:baseColor }}>
+                    {label}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -3601,9 +3377,12 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     boxShadow:"none"
   };
   const showOverviewMedia = !isMobile || mediaEager;
+  const reducePlanMotion = !isMobile;
+  const showPlanVideo = Boolean(PLAN_BG_VIDEO && showOverviewMedia && !reducePlanMotion);
+  const showPlanAmbient = showOverviewMedia && !reducePlanMotion;
   const PlanActionsCard = () => (
-    <div className="ep-frame-light" style={{ background:"transparent", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22)", minHeight:230, position:"relative", overflow:"hidden" }}>
-      {PLAN_BG_VIDEO && showOverviewMedia && (
+    <div className="ep-frame-light" style={{ background:reducePlanMotion ? "linear-gradient(135deg,#F1F5F9 0%, #EFF6FF 52%, #F8FAFC 100%)" : "transparent", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22)", minHeight:230, position:"relative", overflow:"hidden" }}>
+      {showPlanVideo && (
         <LazyVideo
           src={PLAN_BG_VIDEO}
           fallbackSrc={PLAN_BG_VIDEO_FALLBACK}
@@ -3615,7 +3394,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.78, filter:"saturate(1.15) contrast(1.08)", zIndex:0 }}
         />
       )}
-      {showOverviewMedia && <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.2} zIndex={1} />}
+      {showPlanAmbient && <LiveMathBackground tone="light" symbols={planSymbols} opacity={0.2} zIndex={1} />}
       <div style={{ position:"relative", zIndex:2 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
@@ -3630,8 +3409,8 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           <BrandMark size={26} />
         </div>
         <div
-          className={hasTierGlare ? "ep-tier-glare" : undefined}
-          style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)", ...(hasTierGlare ? {"--glare": tierGlareTone} : {}) }}>
+          className={hasTierGlare && !reducePlanMotion ? "ep-tier-glare" : undefined}
+          style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)", ...(hasTierGlare && !reducePlanMotion ? {"--glare": tierGlareTone} : {}) }}>
           <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
           <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
           <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:4 }}>
@@ -4341,10 +4120,13 @@ function VideosContent({ t, onEarning, authUser }) {
   const [bonusPct, setBotPct] = useState(initialActivatedOn === dayKey ? 100 : 0);
   const [bonusDone, setBotDone] = useState(initialActivatedOn === dayKey ? BONUS_COUNT : 0);
   const [activeTab, setActiveTab] = useState("manual");
+  const simpleVideosUI = true;
   const [imgErrors, setImgErrors] = useState({});
   const [imgLoaded, setImgLoaded] = useState({});
+  const [showClaimBotPopup, setShowClaimBotPopup] = useState(false);
   const prevWatchedRef = useRef(watched);
   const prevBotRef = useRef(bonusDone);
+  const isStandardOrAbove = Number(t?.id || 0) >= 2;
 
   const recordView = async (videoId, isRequired) => {
     if (!supabase || !authUser?.id) return;
@@ -4398,6 +4180,7 @@ function VideosContent({ t, onEarning, authUser }) {
         setBotActivatedOn("");
         setBotPct(0);
         setBotDone(0);
+        setShowClaimBotPopup(false);
         try {
           localStorage?.setItem("ep-manual-date", key);
           localStorage?.setItem("ep-manual-watched", "0");
@@ -4417,7 +4200,12 @@ function VideosContent({ t, onEarning, authUser }) {
     try { localStorage?.setItem("ep-bonus-activated-on", dayKey); } catch (e) {}
     setBotPct(0);
     setBotDone(0);
+    if (isStandardOrAbove && BONUS_COUNT > 0) setShowClaimBotPopup(true);
   };
+
+  useEffect(() => {
+    if (!isStandardOrAbove || BONUS_COUNT <= 0) setShowClaimBotPopup(false);
+  }, [isStandardOrAbove, BONUS_COUNT]);
 
   // "" Bot ticker (runs only after activation)
   useEffect(() => {
@@ -4503,16 +4291,28 @@ function VideosContent({ t, onEarning, authUser }) {
   };
 
   return (
-    <div style={{ display:"flex",flexDirection:"column",gap:20, borderRadius:18, padding:16, background:"radial-gradient(120% 90% at 0% 0%, rgba(34,197,94,0.18) 0%, rgba(2,6,23,0.92) 38%, rgba(1,4,14,0.95) 100%)", border:"1px solid rgba(132,204,22,0.25)" }}>
-      <div style={{ borderRadius:14, padding:"14px 16px", background:"linear-gradient(120deg, rgba(163,230,53,0.24) 0%, rgba(250,204,21,0.2) 45%, rgba(16,185,129,0.22) 100%)", border:"1px solid rgba(190,242,100,0.4)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
-        <div>
-          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.13em", color:"#ecfccb" }}>REWARD STUDIO</div>
-          <div style={{ marginTop:5, fontSize:20, fontWeight:900, color:"#f8fafc", fontFamily:"Bungee, Sora, sans-serif", letterSpacing:"0.02em" }}>Daily Reward Command Deck</div>
+    <div className="ep-videos-shell" style={{ display:"flex",flexDirection:"column",gap:20, borderRadius:18, padding:16, background:"radial-gradient(120% 90% at 0% 0%, rgba(34,197,94,0.18) 0%, rgba(2,6,23,0.92) 38%, rgba(1,4,14,0.95) 100%)", border:"1px solid rgba(132,204,22,0.25)" }}>
+      <div className="ep-videos-hero" style={{ borderRadius:14, padding:"18px 18px", minHeight:118, background:"linear-gradient(120deg, rgba(163,230,53,0.24) 0%, rgba(250,204,21,0.2) 45%, rgba(16,185,129,0.22) 100%)", border:"1px solid rgba(190,242,100,0.4)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", position:"relative", overflow:"hidden" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div className="ep-video-hero-icon">
+            <I n="play" s={18} c="#052e16" />
+          </div>
+          <div>
+            <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.13em", color:"#ecfccb" }}>REWARD STUDIO</div>
+            <div className="ep-videos-hero-title" style={{ marginTop:5, fontSize:20, fontWeight:900, color:"#f8fafc", fontFamily:"Bungee, Sora, sans-serif", letterSpacing:"0.02em" }}>Daily Reward Command Deck</div>
+          </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px", borderRadius:999, background:"rgba(2,6,23,0.65)", border:"1px solid rgba(190,242,100,0.44)", color:"#d9f99d", fontSize:11, fontWeight:800 }}>
+        <div className="ep-videos-live-pill" style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px", borderRadius:999, background:"rgba(2,6,23,0.65)", border:"1px solid rgba(190,242,100,0.44)", color:"#d9f99d", fontSize:11, fontWeight:800 }}>
           <div style={{ width:7, height:7, borderRadius:"50%", background:"#4ade80", animation:"pulse 1.2s infinite" }} />
           REWARDS LIVE
         </div>
+        <img
+          src={DASH_BOT_GUIDE_IMAGE.primary}
+          alt=""
+          referrerPolicy="no-referrer"
+          onError={(e) => setFallbackSrc(e, DASH_BOT_GUIDE_IMAGE)}
+          style={{ position:"absolute", right:-18, bottom:-18, width:130, height:130, objectFit:"contain", opacity:0.78, pointerEvents:"none" }}
+        />
       </div>
 
       {showPlayer !== null && (
@@ -4548,10 +4348,9 @@ function VideosContent({ t, onEarning, authUser }) {
       )}
 
       {/* "" Summary bar "" */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
+      <div className="ep-videos-summary-grid" style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12 }}>
         {[
           [`${watched}/${MANUAL_COUNT}`,"Required Watched","#f8fafc"],
-          [`${bonusDone}/${BONUS_COUNT}`,"Bonus Completed","#a3e635"],
           [`KES ${(watched*V_PRICE).toLocaleString()}`,"Required Earned","#facc15"],
           [`KES ${todayEarn.toLocaleString()}`,"Total Today","#4ade80"],
         ].map(([v,l,c],i) => (
@@ -4563,7 +4362,7 @@ function VideosContent({ t, onEarning, authUser }) {
       </div>
 
       {/* "" Tab switcher "" */}
-      <div style={{ display:"flex",gap:2,background:"rgba(15,23,42,0.7)",borderRadius:10,padding:3,width:"100%",justifyContent:"center",flexWrap:"wrap",border:"1px solid rgba(132,204,22,0.25)" }}>
+      <div className="ep-videos-tab-switch" style={{ display:simpleVideosUI?"none":"flex",gap:2,background:"rgba(15,23,42,0.7)",borderRadius:10,padding:3,width:"100%",justifyContent:"center",flexWrap:"wrap",border:"1px solid rgba(132,204,22,0.25)" }}>
         {[["manual",`Required (${MANUAL_COUNT})`],["bonus",`Bonus Reward (${BONUS_COUNT})`]].map(([id,lbl])=>(
           <button key={id} onClick={()=>setActiveTab(id)}
             style={{ padding:"8px 18px",borderRadius:8,border:"none",background:activeTab===id?"linear-gradient(135deg,#bef264 0%, #84cc16 55%, #16a34a 100%)":"transparent",color:activeTab===id?"#052e16":"rgba(226,232,240,0.7)",fontWeight:activeTab===id?800:600,fontSize:13,cursor:"pointer",fontFamily:"Sora, Geist, sans-serif",boxShadow:activeTab===id?"0 6px 14px rgba(132,204,22,0.35)":"none",transition:"all .15s" }}>
@@ -4574,25 +4373,24 @@ function VideosContent({ t, onEarning, authUser }) {
 
       {/*  MANUAL TAB  */}
       {activeTab === "manual" && (
-        <div className="ep-casino-pop" style={{ ...casinoPanel, borderRadius:14,padding:"22px 24px" }}>
+        <div className="ep-casino-pop ep-videos-panel" style={{ ...casinoPanel, borderRadius:14,padding:simpleVideosUI?"18px 18px":"22px 24px" }}>
           {/* Header */}
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+          <div className="ep-videos-manual-head" style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
             <div>
               <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em", color:"#f8fafc" }}>Your Required Daily Videos</h3>
               <p style={{ fontSize:13,color:"rgba(203,213,225,0.78)",marginTop:4 }}>
-                Watch full {MANUAL_SECONDS} seconds to earn <strong style={{color:"#facc15"}}>KES {V_PRICE}</strong> each.
-                Video 2 unlocks after Video 1 is complete.
+                Watch full {MANUAL_SECONDS} seconds to earn <strong style={{color:"#facc15"}}>KES {V_PRICE}</strong> per video.
               </p>
             </div>
             {watched === MANUAL_COUNT && (
-              <div style={{ padding:"7px 16px",background:"rgba(16,185,129,0.2)",border:"1px solid rgba(74,222,128,0.45)",borderRadius:50,fontSize:12,fontWeight:800,color:"#86efac",display:"flex",alignItems:"center",gap:6 }}>
+              <div className="ep-videos-manual-done" style={{ padding:"7px 16px",background:"rgba(16,185,129,0.2)",border:"1px solid rgba(74,222,128,0.45)",borderRadius:50,fontSize:12,fontWeight:800,color:"#86efac",display:"flex",alignItems:"center",gap:6 }}>
                 <I n="check" s={12} c="#86efac"/> All done  -  KES {(MANUAL_COUNT*V_PRICE).toLocaleString()} earned!
               </div>
             )}
           </div>
 
           {/* Now Playing / Status */}
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"12px 14px",background:"rgba(15,23,42,0.66)",border:"1px solid rgba(148,163,184,0.35)",borderRadius:12,marginBottom:16,flexWrap:"wrap" }}>
+          <div className="ep-videos-status-bar" style={{ display:simpleVideosUI?"none":"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"12px 14px",background:"rgba(15,23,42,0.66)",border:"1px solid rgba(148,163,184,0.35)",borderRadius:12,marginBottom:16,flexWrap:"wrap" }}>
             <div>
               <div style={{ fontSize:10,color:"#93c5fd",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>REQUIRED STATUS</div>
               <div style={{ fontSize:14,fontWeight:900,color:"#f8fafc" }}>{manualStatus}</div>
@@ -4602,7 +4400,7 @@ function VideosContent({ t, onEarning, authUser }) {
                 </div>
               )}
             </div>
-            <div style={{ textAlign:"right",minWidth:90 }}>
+            <div className="ep-videos-status-right" style={{ textAlign:"right",minWidth:90 }}>
               {playing !== null ? (
                 <div style={{ fontSize:20,fontWeight:900,color:"#f8fafc",fontVariantNumeric:"tabular-nums" }}>{timer}s</div>
               ) : (
@@ -4616,7 +4414,7 @@ function VideosContent({ t, onEarning, authUser }) {
           </div>
 
           {/* Unlock chain indicator */}
-          <div style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"rgba(15,23,42,0.6)",border:"1px solid rgba(148,163,184,0.32)",borderRadius:10,marginBottom:20,fontSize:12,color:"#cbd5e1" }}>
+          <div className="ep-videos-chain" style={{ display:simpleVideosUI?"none":"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"rgba(15,23,42,0.6)",border:"1px solid rgba(148,163,184,0.32)",borderRadius:10,marginBottom:20,fontSize:12,color:"#cbd5e1" }}>
             {[1,2].map((n,i) => (
               <React.Fragment key={n}>
                 <div style={{ display:"flex",alignItems:"center",gap:6 }}>
@@ -4625,13 +4423,13 @@ function VideosContent({ t, onEarning, authUser }) {
                   </div>
                   <span style={{ fontWeight:700,color:watched>=n?"#86efac":watched===n-1?"#f8fafc":"#cbd5e1" }}>Video {n}{watched>=n?" OK":""}</span>
                 </div>
-                {i===0 && <div style={{ flex:1,height:1,background:watched>=1?"#22c55e":"rgba(148,163,184,0.45)",transition:"background .5s" }}/>}
+                {i===0 && <div className="ep-videos-chain-link" style={{ flex:1,height:1,background:watched>=1?"#22c55e":"rgba(148,163,184,0.45)",transition:"background .5s" }}/>}
               </React.Fragment>
             ))}
           </div>
 
           {/* Video cards */}
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16 }}>
+          <div className="ep-videos-manual-grid" style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:simpleVideosUI?12:16 }}>
             {YT_VIDEOS.slice(0, MANUAL_COUNT).map((vid, i) => {
               const isDone   = watched > i;
               const isActive = playing === i && timerRunning;
@@ -4736,7 +4534,7 @@ function VideosContent({ t, onEarning, authUser }) {
                     </div>
 
                     {/* Unlock hint for video 2 */}
-                    {i===1&&isLocked&&(
+                    {i===1&&isLocked&&!simpleVideosUI&&(
                       <div style={{ marginTop:10,padding:"8px 12px",background:"rgba(30,64,175,0.22)",border:"1px solid rgba(147,197,253,0.45)",borderRadius:8,fontSize:11,color:"#bfdbfe",fontWeight:700,display:"flex",alignItems:"center",gap:6 }}>
                         <I n="lock" s={12} c="#bfdbfe"/> Complete Video 1 to unlock this
                       </div>
@@ -4749,10 +4547,57 @@ function VideosContent({ t, onEarning, authUser }) {
         </div>
       )}
 
+      {simpleVideosUI && (
+        <div className="ep-casino-pop ep-videos-panel" style={{ ...casinoPanel, borderRadius:14, padding:"18px 18px" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10 }}>
+            <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em",color:"#f8fafc" }}>
+              Bonus Rewards ({BONUS_COUNT})
+            </h3>
+            <div style={{ fontSize:12,fontWeight:800,color:"#4ade80" }}>
+              KES {(bonusDone*bonusUnit).toLocaleString()} earned
+            </div>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 12px",background:watched>=MANUAL_COUNT?"rgba(16,185,129,0.2)":"rgba(249,115,22,0.18)",border:`1px solid ${watched>=MANUAL_COUNT?"rgba(74,222,128,0.45)":"rgba(251,146,60,0.5)"}`,borderRadius:10,marginBottom:12,flexWrap:"wrap" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>
+              <I n={watched>=MANUAL_COUNT?"check":"lock"} s={13} c={watched>=MANUAL_COUNT?"#86efac":"#fdba74"} />
+              {watched>=MANUAL_COUNT ? "Bonus unlocked - required videos complete" : "Complete required videos to unlock bonus"}
+            </div>
+            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <div style={{ fontSize:11,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>{watched}/{MANUAL_COUNT}</div>
+              <div style={{ width:84,height:6,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
+                <div style={{ height:"100%",width:`${manualUnlockPct}%`,background:watched>=MANUAL_COUNT?"#22c55e":"#f59e0b",borderRadius:99,transition:"width .3s ease" }} />
+              </div>
+            </div>
+          </div>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:10,flexWrap:"wrap" }}>
+            <div style={{ fontSize:12, color:"rgba(226,232,240,0.82)" }}>
+              {BONUS_COUNT === 0
+                ? "No bonus rewards on this tier."
+                : bonusActive
+                  ? "Bonus activated for today."
+                  : "Activate once daily after required videos."}
+            </div>
+            <button
+              onClick={activateBot}
+              disabled={!canActivateBot || BONUS_COUNT === 0}
+              style={{ padding:"8px 14px",background:canActivateBot && BONUS_COUNT>0?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)",color:canActivateBot && BONUS_COUNT>0?"#052e16":"#94a3b8",border:canActivateBot && BONUS_COUNT>0?"none":"1px solid rgba(148,163,184,0.35)",borderRadius:9,fontSize:12,fontWeight:800,cursor:canActivateBot && BONUS_COUNT>0?"pointer":"not-allowed",fontFamily:"Sora, Geist, sans-serif" }}
+            >
+              {bonusActive ? "Activated Today" : "Claim Bonus"}
+            </button>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+            <div style={{ flex:1,height:7,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
+              <div style={{ height:"100%",width:`${bonusPct}%`,background:"linear-gradient(90deg,#facc15 0%, #22c55e 100%)",borderRadius:99,transition:"width .2s ease" }} />
+            </div>
+            <div style={{ minWidth:40,textAlign:"right",fontSize:12,fontWeight:900,color:"#86efac" }}>{Math.round(bonusPct)}%</div>
+          </div>
+        </div>
+      )}
+
       {/*  BONUS TAB  */}
-      {activeTab === "bonus" && (
-        <div className="ep-casino-pop" style={{ ...casinoPanel, borderRadius:14,padding:"22px 24px" }}>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
+      {!simpleVideosUI && activeTab === "bonus" && (
+        <div className="ep-casino-pop ep-videos-panel" style={{ ...casinoPanel, borderRadius:14,padding:"22px 24px" }}>
+          <div className="ep-videos-bonus-head" style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
             <div>
               <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em", color:"#f8fafc" }}>Bonus Reward - {BONUS_COUNT} {BONUS_COUNT === 1 ? "reward" : "rewards"}</h3>
               <p style={{ fontSize:13,color:"rgba(203,213,225,0.82)",marginTop:4 }}>Running silently  -  30 sec each  -  KES {bonusUnit} per bonus reward</p>
@@ -4789,7 +4634,7 @@ function VideosContent({ t, onEarning, authUser }) {
             </div>
             <span style={{ fontSize:12,fontWeight:800,color:"#86efac",minWidth:40 }}>{Math.round(bonusPct)}%</span>
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
+          <div className="ep-videos-bonus-grid" style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
             {YT_VIDEOS.slice(MANUAL_COUNT, MANUAL_COUNT + BONUS_COUNT).map((vid, i) => {
               const done = bonusActive && i < bonusDone;
               const isActive = bonusActive && i === bonusDone;
@@ -4835,6 +4680,41 @@ function VideosContent({ t, onEarning, authUser }) {
           <div style={{ marginTop:18,padding:"12px 16px",background:"rgba(22,163,74,0.2)",borderRadius:10,border:"1px solid rgba(74,222,128,0.5)",fontSize:12,color:"#bbf7d0",display:"flex",alignItems:"center",gap:8 }}>
             <I n="shield" s={14} c="#86efac"/>
             Activate once per day to run the bonus. Earnings credit as each video completes.
+          </div>
+        </div>
+      )}
+
+      {showClaimBotPopup && (
+        <div style={{ position:"fixed", left:14, bottom:"calc(16px + env(safe-area-inset-bottom, 0px))", zIndex:9997, width:"min(330px, calc(100vw - 28px))", borderRadius:16, border:"1.5px solid rgba(163,230,53,0.58)", background:"linear-gradient(145deg, rgba(2,6,23,0.94) 0%, rgba(6,12,25,0.94) 100%)", boxShadow:"0 20px 32px rgba(2,6,23,0.5), 0 0 20px rgba(74,222,128,0.2)", padding:"11px 12px 12px", animation:"scaleIn .2s ease" }}>
+          <button
+            type="button"
+            aria-label="Dismiss bonus popup"
+            onClick={() => setShowClaimBotPopup(false)}
+            style={{ position:"absolute", top:8, right:8, width:24, height:24, borderRadius:"50%", border:"1px solid rgba(148,163,184,0.48)", background:"rgba(15,23,42,0.72)", color:"#e2e8f0", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
+          >
+            <I n="xmark" s={12} c="#e2e8f0" />
+          </button>
+          <div style={{ display:"flex", alignItems:"center", gap:10, paddingRight:24 }}>
+            <img
+              src={DASH_BOT_GUIDE_IMAGE.primary}
+              alt="Bonus bot"
+              referrerPolicy="no-referrer"
+              onError={(e) => setFallbackSrc(e, DASH_BOT_GUIDE_IMAGE)}
+              style={{ width:72, height:72, objectFit:"contain", flexShrink:0, filter:"drop-shadow(0 8px 16px rgba(15,23,42,0.4))" }}
+            />
+            <div>
+              <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.1em", color:"#bef264" }}>BONUS CLAIMED</div>
+              <div style={{ marginTop:4, fontSize:13, lineHeight:1.35, fontWeight:800, color:"#f8fafc" }}>
+                Reward bot is now running your bonus session.
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClaimBotPopup(false)}
+                style={{ marginTop:8, padding:"6px 10px", borderRadius:999, border:"1px solid rgba(148,163,184,0.42)", background:"rgba(15,23,42,0.64)", color:"#cbd5e1", fontSize:10, fontWeight:800, cursor:"pointer", fontFamily:"Sora, Geist, sans-serif" }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -4916,19 +4796,28 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
         </div>
 
         {/* How it works */}
-        <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:cardBorder }}>
+        <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:cardBorder, position:"relative", overflow:"hidden" }}>
           <div style={{ fontSize:11,fontWeight:700,color:"#BBB",letterSpacing:"0.08em",marginBottom:14 }}>HOW REFERRALS WORK</div>
-          {[
-            ["1","Friend signs up with your referral code",t.acc],
-            ["2","They choose a tier and deposit",t.acc],
-            ["3","You earn 10% of their deposit",t.acc],
-            ["4","They can start earning right away",t.acc],
-          ].map(([n,step,c],i) => (
-            <div key={i} style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:10 }}>
-              <div style={{ width:20,height:20,borderRadius:6,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff",flexShrink:0,marginTop:1 }}>{n}</div>
-              <span style={{ fontSize:12,color:"#555",lineHeight:1.5 }}>{step}</span>
-            </div>
-          ))}
+          <div style={{ paddingRight:isMobile ? 0 : 130 }}>
+            {[
+              ["1","Friend signs up with your referral code",t.acc],
+              ["2","They choose a tier and deposit",t.acc],
+              ["3","You earn 10% of their deposit",t.acc],
+              ["4","They can start earning right away",t.acc],
+            ].map(([n,step,c],i) => (
+              <div key={i} style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:10 }}>
+                <div style={{ width:20,height:20,borderRadius:6,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff",flexShrink:0,marginTop:1 }}>{n}</div>
+                <span style={{ fontSize:12,color:"#555",lineHeight:1.5 }}>{step}</span>
+              </div>
+            ))}
+          </div>
+          <img
+            src={REFERRAL_WORK_BOT_IMAGE.primary}
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={(e) => setFallbackSrc(e, REFERRAL_WORK_BOT_IMAGE)}
+            style={{ position:"absolute", right:isMobile ? 8 : -6, bottom:isMobile ? -2 : -8, width:isMobile ? 86 : 138, height:isMobile ? 86 : 138, objectFit:"contain", pointerEvents:"none", userSelect:"none" }}
+          />
         </div>
       </div>
     </div>
@@ -4989,7 +4878,15 @@ function AnalyticsContent({ t, earn, refCode, isMobile }) {
 /* "" REFERRALS CONTENT "" */
 function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
   const [filter, setFilter] = useState("all");
+  const [guideStep, setGuideStep] = useState(0);
+  const [showGuide, setShowGuide] = useState(true);
   const cardBorder = isMobile ? "1px solid #111" : "1.5px solid #111";
+  const referralGuide = [
+    { title:"Share Your Link", text:"Copy your referral link and send it on WhatsApp, Telegram, and social posts." },
+    { title:"Friend Deposits", text:"Your referral chooses a tier and completes their fixed deposit." },
+    { title:"Auto Bonus", text:"You get 10% bonus automatically on each direct referral deposit." },
+    { title:"Upgrade Faster", text:"Use referral bonuses to move into higher tiers sooner and earn more daily." }
+  ];
 
   const fallbackRefs = [
     { name:"John Mwangi",    email:"j.mwangi@gmail.com",  tier:"Standard",     date:"Mar 8, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 3.2) },
@@ -5030,8 +4927,42 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
     return s.includes(",") ? s.split(",")[0] : s;
   };
 
+  const handleGuideNext = () => {
+    if (guideStep === referralGuide.length - 1) {
+      setShowGuide(false);
+      return;
+    }
+    setGuideStep((prev) => Math.min(referralGuide.length - 1, prev + 1));
+  };
+
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:18 }}>
+      {showGuide && (
+      <div style={{ background:"linear-gradient(120deg, #052e16 0%, #0f172a 58%, #14532d 100%)", borderRadius:14, padding:isMobile ? "14px 14px" : "16px 18px", border:"1px solid rgba(163,230,53,0.38)", boxShadow:"0 12px 24px rgba(2,6,23,0.34)", display:"grid", gridTemplateColumns:isMobile ? "1fr" : "110px 1fr auto", gap:12, alignItems:"center" }}>
+        <img
+          src={DASH_BOT_GUIDE_IMAGE.primary}
+          alt="Referral guide bot"
+          referrerPolicy="no-referrer"
+          onError={(e) => setFallbackSrc(e, DASH_BOT_GUIDE_IMAGE)}
+          style={{ width:isMobile ? 92 : 104, height:isMobile ? 92 : 104, objectFit:"contain", justifySelf:isMobile ? "center" : "start" }}
+        />
+        <div>
+          <div style={{ fontSize:10, color:"#86efac", fontWeight:800, letterSpacing:"0.14em", textTransform:"uppercase" }}>Referral Guide</div>
+          <div style={{ marginTop:4, fontSize:16, color:"#f8fafc", fontWeight:900, letterSpacing:"-0.02em" }}>{referralGuide[guideStep].title}</div>
+          <div style={{ marginTop:6, fontSize:12, color:"#cbd5e1", lineHeight:1.55 }}>{referralGuide[guideStep].text}</div>
+        </div>
+        <div style={{ display:"flex", flexDirection:isMobile ? "row" : "column", gap:8, justifySelf:isMobile ? "center" : "end" }}>
+          <button onClick={() => setGuideStep((prev) => Math.max(0, prev - 1))} disabled={guideStep === 0}
+            style={{ padding:"8px 12px", borderRadius:9, border:"1px solid rgba(148,163,184,0.4)", background:"rgba(15,23,42,0.48)", color:guideStep===0 ? "#94A3B8" : "#E2E8F0", fontSize:11, fontWeight:800, cursor:guideStep===0 ? "not-allowed" : "pointer" }}>
+            Back
+          </button>
+          <button onClick={handleGuideNext}
+            style={{ padding:"8px 12px", borderRadius:9, border:"1px solid rgba(187,247,208,0.55)", background:"linear-gradient(135deg,#22c55e 0%, #16a34a 56%, #15803d 100%)", color:"#ecfdf5", fontSize:11, fontWeight:900, cursor:"pointer" }}>
+            {guideStep === referralGuide.length - 1 ? "Done" : "Next"}
+          </button>
+        </div>
+      </div>
+      )}
 
       {/* Stats */}
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:14 }}>
@@ -5051,30 +4982,30 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
 
       <ReferralLinkCard t={t} refCode={refCode} isMobile={isMobile} />
 
-      {/* Referral table */}
-      <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:cardBorder,boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+      {/* Referral table/cards */}
+      <div style={{ background:"#fff",borderRadius:14,padding:isMobile ? "16px 14px" : "22px 24px",border:cardBorder,boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10 }}>
           <div>
             <h3 style={{ fontWeight:800,fontSize:15,letterSpacing:"-0.02em" }}>Referral Records</h3>
             <p style={{ fontSize:12,color:"#BBB",marginTop:3 }}>{ALL_REFS.length} people referred  -  {activeCount} active</p>
           </div>
           {/* Filter pills */}
-          <div style={{ display:"flex",gap:4,background:"#F5F5F5",borderRadius:8,padding:3 }}>
+          <div style={{ display:"flex",gap:4,background:"#F5F5F5",borderRadius:8,padding:3,flexWrap:"wrap" }}>
             {[["all","All"],["active","Active"],["pending","Pending"],["inactive","Inactive"]].map(([id,lbl])=>(
               <button key={id} onClick={()=>setFilter(id)} style={{ padding:"5px 12px",borderRadius:6,border:"none",background:filter===id?"#fff":"transparent",color:filter===id?"#111":"#888",fontWeight:filter===id?700:500,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif",boxShadow:filter===id?"0 1px 3px rgba(0,0,0,0.08)":"none",transition:"all .12s" }}>{lbl}</button>
             ))}
           </div>
         </div>
 
-        {/* Table header */}
-        <div style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"8px 12px",marginBottom:4 }}>
-          {["PERSON","LEVEL","TIER","JOINED","YOUR BONUS","THEIR EARNINGS","STATUS"].map(h => (
-            <span key={h} style={{ fontSize:9,color:"#BBB",fontWeight:800,letterSpacing:"0.1em" }}>{h}</span>
-          ))}
-        </div>
+        {!isMobile && (
+          <div style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"8px 12px",marginBottom:4 }}>
+            {["PERSON","LEVEL","TIER","JOINED","YOUR BONUS","THEIR EARNINGS","STATUS"].map(h => (
+              <span key={h} style={{ fontSize:9,color:"#BBB",fontWeight:800,letterSpacing:"0.1em" }}>{h}</span>
+            ))}
+          </div>
+        )}
 
-        {/* Rows */}
-        {filtered.map((r, i) => {
+        {!isMobile && filtered.map((r, i) => {
           const sc = statusColor(r.status);
           const tc = tierColor(r.tier);
           return (
@@ -5100,13 +5031,42 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
           );
         })}
 
+        {isMobile && (
+          <div style={{ display:"grid", gap:10 }}>
+            {filtered.map((r, i) => {
+              const sc = statusColor(r.status);
+              const tc = tierColor(r.tier);
+              return (
+                <div key={i} style={{ border:"1px solid #E5E7EB", borderRadius:12, padding:"12px 12px", background:"#FAFAFA" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:9, minWidth:0 }}>
+                      <div style={{ width:34,height:34,borderRadius:"50%",background:t.lgt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:t.acc,flexShrink:0 }}>{r.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:800, color:"#111", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.name}</div>
+                        <div style={{ fontSize:10, color:"#94A3B8", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.email}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:50,background:sc.bg,color:sc.col,whiteSpace:"nowrap" }}>{r.status}</span>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10 }}>
+                    <div style={{ fontSize:10, color:"#94A3B8" }}>Tier<div style={{ marginTop:2, fontSize:12, color:"#111", fontWeight:800 }}><span style={{ display:"inline-block", width:7, height:7, borderRadius:2, background:tc, marginRight:6 }} />{r.tier}</div></div>
+                    <div style={{ fontSize:10, color:"#94A3B8" }}>Level<div style={{ marginTop:2, fontSize:12, color:"#111", fontWeight:800 }}>L{r.level || 1}</div></div>
+                    <div style={{ fontSize:10, color:"#94A3B8" }}>Your Bonus<div style={{ marginTop:2, fontSize:12, color:"#059669", fontWeight:900 }}>+KES {r.bonus.toLocaleString()}</div></div>
+                    <div style={{ fontSize:10, color:"#94A3B8" }}>Joined<div style={{ marginTop:2, fontSize:12, color:"#111", fontWeight:700 }}>{shortDate(r.date)}</div></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {filtered.length === 0 && (
           <div style={{ padding:"32px",textAlign:"center",color:"#BBB",fontSize:14 }}>No {filter} referrals yet.</div>
         )}
 
         {/* Totals footer */}
         <div style={{ marginTop:12,padding:"12px 14px",background:"#F7F9FC",borderRadius:10,border:cardBorder,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12 }}>
-          <div style={{ display:"flex",gap:24 }}>
+          <div style={{ display:"flex",gap:24,flexWrap:"wrap" }}>
             <div><span style={{ fontSize:11,color:"#BBB" }}>Total bonus earned  </span><span style={{ fontSize:14,fontWeight:900,color:"#059669" }}>KES {totalBonus.toLocaleString()}</span></div>
             <div><span style={{ fontSize:11,color:"#BBB" }}>Avg per referral  </span><span style={{ fontSize:14,fontWeight:900,color:"#111" }}>KES {activeCount > 0 ? Math.round(totalBonus/activeCount).toLocaleString() : 0}</span></div>
           </div>
@@ -5121,7 +5081,7 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
 function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx, onBalanceUpdate, hasDeposit }) {
   const [wdAmt,setWdAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
   const [wdError, setWdError] = useState("");
-  const [depAmt, setDepAmt] = useState("");
+  const [showWithdrawStatusBanner, setShowWithdrawStatusBanner] = useState(true);
   const [depPhone, setDepPhone] = useState("");
   const [depName, setDepName] = useState("");
   const [depMethod, setDepMethod] = useState("M-Pesa");
@@ -5130,33 +5090,32 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const [depDone, setDepDone] = useState(false);
   const depErrorMsg = formatDepositError(depError);
   const depositRef = useRef(null);
-  const isMobile = window.innerWidth < 769;
-  const tier1Min = Number.isFinite(TIER1_MOBILE_MIN) ? TIER1_MOBILE_MIN : 100;
-  const tier1Max = Number.isFinite(TIER1_MOBILE_MAX) ? TIER1_MOBILE_MAX : 1000;
-  const tier1Cap = tier1Max >= tier1Min ? tier1Max : tier1Min;
-  const tier1Floor = tier1Min;
   const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
   const can=["Tuesday","Friday"].includes(today);
+  const canWithdrawNow = can && hasDeposit !== false;
+  const wdAmtNum = Number(wdAmt);
+  const hasValidWdAmt = Number.isFinite(wdAmtNum) && wdAmtNum > 0;
+  const canSubmitWithdrawal = canWithdrawNow && hasValidWdAmt;
   const nextTier = TIERS[t.id];
-  const safeBalance = Number.isFinite(balance) ? balance : t.deposit;
-  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - safeBalance, 0) : 0;
+  const currentTierDeposit = Number(t?.deposit) || 0;
+  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - currentTierDeposit, 0) : 0;
   const needsUnlock = hasDeposit === false;
-  const unlockNeed = needsUnlock ? t.deposit : 0;
+  const unlockNeed = needsUnlock ? currentTierDeposit : 0;
   const primaryNeed = needsUnlock ? unlockNeed : upgradeNeed;
   const canDeposit = primaryNeed > 0;
-  const isTier1Flex = isMobile && Number(t?.id) === 1 && needsUnlock;
+  const targetTierId = needsUnlock ? t.id : (nextTier?.id || t.id);
   useEffect(() => {
     if (!focusDeposit) return;
     if (depositRef.current) depositRef.current.scrollIntoView({ behavior:"smooth", block:"start" });
-    if (isTier1Flex) {
-      if (!depAmt) setDepAmt(String(tier1Floor));
-    } else if (primaryNeed > 0 && String(primaryNeed) !== depAmt) {
-      setDepAmt(String(primaryNeed));
-    }
     if (onFocusDone) onFocusDone();
-  }, [focusDeposit, primaryNeed, isTier1Flex, tier1Floor, depAmt]);
-  const submitDeposit = async () => {
-    const requiredAmt = isTier1Flex ? clampNumber(depAmt, tier1Floor, tier1Cap) : Number(primaryNeed);
+  }, [focusDeposit, onFocusDone]);
+  useEffect(() => {
+    if (!wdError) return;
+    setWdError("");
+  }, [wdAmt, method]);
+  const submitDeposit = async (methodOverride = "") => {
+    const selectedMethod = String(methodOverride || depMethod || "M-Pesa").trim() || "M-Pesa";
+    const requiredAmt = Number(primaryNeed);
     if (!Number.isFinite(requiredAmt) || requiredAmt <= 0) {
       setDepError("No deposit is required right now.");
       return;
@@ -5176,29 +5135,32 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       setDepError("Email is required for checkout.");
       return;
     }
+    setDepMethod(selectedMethod);
     setDepError("");
     setDepLoading(true);
     try {
       const token = await getAccessToken();
       const headers = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(`${apiBase}/api/v1/deposit/create`, {
+      const requestBody = (mode = "live") => ({
+        amount: amt,
+        user_id: authUser.id,
+        email,
+        tier: targetTierId,
+        upgrade_from_tier: t.id,
+        method: selectedMethod,
+        payment_mode: mode,
+        phone: depPhone || profileRow?.phone || "",
+        name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
+      });
+      let res = await fetch(`${apiBase}/api/v1/deposit/create`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          amount: amt,
-          user_id: authUser.id,
-          email,
-          tier: t.id,
-          method: depMethod || "M-Pesa",
-          payment_mode: MANUAL_PAYMENTS ? "manual" : "live",
-          phone: depPhone || profileRow?.phone || "",
-          name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
-        })
+        body: JSON.stringify(requestBody("live"))
       });
-      const data = await res.json().catch(() => ({}));
+      let data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const rawMsg = data?.error || data?.message || "Failed to start checkout.";
+        const rawMsg = data?.error || data?.message || data?.detail || "Failed to start checkout.";
         const msg =
           String(rawMsg || "").toLowerCase().includes("ipn")
             ? "Payment gateway not configured yet. Please contact support."
@@ -5229,7 +5191,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       onNewTx?.({
         ic:"wallet",
         text:"Deposit initiated",
-        sub:`KES ${amt.toLocaleString()} via ${depMethod || "Payment Gateway"}`,
+        sub:`KES ${amt.toLocaleString()} via ${selectedMethod || "Payment Gateway"}`,
         time:"Just now",
         c:"#0066FF",
         amt
@@ -5297,33 +5259,66 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const submitWithdrawal = async () => {
     setWdError("");
     if (hasDeposit === false) {
-      setWdError(`Self deposit KES ${t.deposit.toLocaleString()} to unlock withdrawals for Tier ${t.id}.`);
+      setWdError(`Please deposit KES ${t.deposit.toLocaleString()} first to unlock withdrawals.`);
       return;
     }
-    if (!wdAmt) return;
+    if (!can) {
+      setWdError("Withdrawals are only available on Tuesday and Friday.");
+      return;
+    }
+    if (!hasValidWdAmt) {
+      setWdError("Enter a valid withdrawal amount.");
+      return;
+    }
+    if (Number.isFinite(balance) && wdAmtNum > balance) {
+      setWdError("Withdrawal amount cannot exceed available balance.");
+      return;
+    }
     const ok = await requestWithdrawal(wdAmt, method, profileRow?.phone || "");
-    if (!ok) return;
+    if (!ok) {
+      setWdError("Unable to submit withdrawal right now. Please try again.");
+      return;
+    }
     setDone(true);
     setTimeout(()=>setDone(false), 3000);
   };
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
-      <div style={{ padding:"14px 18px",borderRadius:10,border:`1px solid ${can?"#A7F3D0":"#FCA5A5"}`,background:can?"#ECFDF5":"#FFF0F0",display:"flex",alignItems:"center",gap:12 }}>
-        <div style={{ width:30,height:30,borderRadius:"50%",background:can?"#059669":"#DC2626",display:"flex",alignItems:"center",justifyContent:"center" }}>
-          <I n={can?"check":"xmark"} s={14} c="#fff"/>
-        </div>
-          <div>
+      {showWithdrawStatusBanner && (
+        <div style={{ padding:"14px 16px",borderRadius:10,border:`1px solid ${can?"#A7F3D0":"#FCA5A5"}`,background:can?"#ECFDF5":"#FFF0F0",display:"flex",alignItems:"center",gap:12 }}>
+          <div style={{ width:30,height:30,borderRadius:"50%",background:can?"#059669":"#DC2626",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <I n={can?"check":"xmark"} s={14} c="#fff"/>
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontWeight:800,fontSize:14,color:can?"#065F46":"#991B1B" }}>{can?"Withdrawals processing today":"Withdrawals queued today"}</div>
             <div style={{ fontSize:12,color:"#888",marginTop:2 }}>Processing: Tue & Fri - 08:30 - 17:30</div>
             {MANUAL_WITHDRAWALS && (
               <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>All withdrawals are manually approved by admin.</div>
             )}
           </div>
+          <button
+            type="button"
+            aria-label="Dismiss withdrawal status"
+            onClick={() => setShowWithdrawStatusBanner(false)}
+            style={{ width:28,height:28,borderRadius:8,border:"1px solid rgba(148,163,184,0.45)",background:"rgba(255,255,255,0.7)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}
+          >
+            <I n="xmark" s={12} c={can?"#065F46":"#991B1B"} />
+          </button>
         </div>
+      )}
       {hasDeposit === false && (
-        <div style={{ padding:"12px 16px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFF7ED",display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#9A3412",fontWeight:700 }}>
-          <I n="lock" s={13} c="#EA580C"/> Self deposit KES {t.deposit.toLocaleString()} to unlock withdrawals for Tier {t.id}.
+        <div style={{ padding:"12px 16px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFF7ED",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#9A3412",fontWeight:700 }}>
+            <I n="lock" s={13} c="#EA580C"/> Deposit KES {t.deposit.toLocaleString()} once to unlock withdrawals.
+          </div>
+          <img
+            src={LANDING_STICKER_BOTTOM_IMAGE.primary}
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={(e) => setFallbackSrc(e, LANDING_STICKER_BOTTOM_IMAGE)}
+            style={{ width:56, height:56, objectFit:"contain", pointerEvents:"none", userSelect:"none" }}
+          />
         </div>
       )}
       {wdError && (
@@ -5332,229 +5327,136 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         </div>
       )}
 
-      {nextTier && (
-        <div style={{ padding:"12px 16px",borderRadius:12,border:"1px solid #E2E8F0",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" }}>
-          <div>
-            <div style={{ fontSize:12,fontWeight:900,color:"#0F172A" }}>
-              {needsUnlock ? `Self deposit to unlock ${t.name}` : `Upgrade to ${nextTier.name}`}
-            </div>
-            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>
-              {needsUnlock
-                ? `Self deposit KES ${unlockNeed.toLocaleString()} to activate earnings.`
-                : `Top up KES ${upgradeNeed.toLocaleString()} to move to ${nextTier.name}.`}
-            </div>
-          </div>
-          <button onClick={() => depositRef.current?.scrollIntoView({ behavior:"smooth", block:"start" })}
-            style={{ padding:"9px 14px",borderRadius:10,border:"1.5px solid #111",background:"#111",color:"#fff",fontSize:12,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>
-            {needsUnlock ? "Self Deposit Now" : "Upgrade Now"}
-          </button>
-        </div>
-      )}
-
       <div ref={depositRef} style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"18px 20px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.08)" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
           <div>
-            <div style={{ fontSize:13,fontWeight:900,color:"#0F172A",letterSpacing:"0.02em" }}>{needsUnlock ? "Self Deposit to Unlock" : "Self Deposit & Upgrade"}</div>
-            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>
-              {needsUnlock ? `Self deposit required to unlock ${t.name} earnings.` : (nextTier ? `Next tier: ${nextTier.name}` : "You're already at the top tier.")}
-            </div>
+            <div style={{ fontSize:13,fontWeight:900,color:"#0F172A",letterSpacing:"0.02em" }}>Checkout Gateway</div>
+            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>Choose a verified payment icon and tap to pay instantly.</div>
           </div>
-          {needsUnlock ? (
-            <div style={{ padding:"6px 10px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,fontSize:11,color:"#9A3412",fontWeight:800 }}>
-              Self deposit KES {unlockNeed.toLocaleString()} to unlock
-            </div>
-          ) : nextTier && (
-            <div style={{ padding:"6px 10px",background:"#EEF2FF",border:"1px solid #C7D2FE",borderRadius:999,fontSize:11,color:"#3730A3",fontWeight:800 }}>
-              Need KES {upgradeNeed.toLocaleString()} to upgrade
-            </div>
-          )}
+          <div style={{ padding:"6px 10px",background:"#ECFDF5",border:"1px solid #A7F3D0",borderRadius:999,fontSize:11,color:"#047857",fontWeight:800,display:"flex",alignItems:"center",gap:6 }}>
+            <I n="check" s={11} c="#059669" /> Verified channels
+          </div>
         </div>
 
-        {nextTier && (
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14 }}>
-            <div style={{ padding:"10px 12px",borderRadius:12,border:"1px solid #E5E7EB",background:"#FFFFFF" }}>
-              <div style={{ fontSize:9,color:"#94A3B8",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>BALANCE</div>
-              <div style={{ fontSize:13,fontWeight:900,color:"#0F172A" }}>KES {safeBalance.toLocaleString()}</div>
-              <div style={{ fontSize:10,color:"#94A3B8",marginTop:2 }}>{t.name} Tier</div>
+        <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#FFFFFF" }}>
+          <div style={{ padding:"12px 12px",borderRadius:12,background:"linear-gradient(135deg,#0F172A 0%, #1F2937 55%, #111827 100%)",color:"#fff",position:"relative",overflow:"hidden" }}>
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
+              <div>
+                <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Secure Payment Gateway</div>
+                <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Secure checkout, instant wallet credit.</div>
+              </div>
+              <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",fontSize:10,fontWeight:800,letterSpacing:"0.08em" }}>
+                VERIFIED
+              </div>
             </div>
-            <div style={{ padding:"10px 12px",borderRadius:12,border:"1px solid #111827",background:"#111827" }}>
-              <div style={{ fontSize:9,color:"rgba(255,255,255,0.6)",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>NEXT</div>
-              <div style={{ fontSize:13,fontWeight:900,color:"#FFFFFF" }}>{nextTier.name}</div>
-              <div style={{ fontSize:10,color:"rgba(255,255,255,0.65)",marginTop:2 }}>KES {nextTier.deposit.toLocaleString()}</div>
+            <div style={{ position:"absolute",right:-30,top:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,0.08)" }}/>
+            <div style={{ position:"absolute",right:30,bottom:-40,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.06)" }}/>
+          </div>
+          <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:12 }}>
+            {[
+              { label:"SSL Secured", icon:"lock" },
+              { label:"Instant Confirmation", icon:"bolt" },
+              { label:"Buyer Protection", icon:"shield" }
+            ].map((b) => (
+              <div key={b.label} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:999,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:10,fontWeight:700,color:"#0F172A" }}>
+                <I n={b.icon} s={12} c="#0F172A" /> {b.label}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:10,padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
+            <div>
+              <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
+              <div style={{ fontSize:15,fontWeight:900,color:"#0F172A" }}>
+                KES {Math.max(primaryNeed, 0).toLocaleString()}
+              </div>
             </div>
-            <div style={{ padding:"10px 12px",borderRadius:12,border:"1px solid #DCFCE7",background:"#ECFDF5" }}>
-              <div style={{ fontSize:9,color:"#10B981",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>TOP UP</div>
-              <div style={{ fontSize:13,fontWeight:900,color:"#047857" }}>KES {upgradeNeed.toLocaleString()}</div>
-              <div style={{ fontSize:10,color:"#059669",marginTop:2 }}>to upgrade</div>
+            <div style={{ padding:"4px 8px",borderRadius:999,background:"#111827",color:"#fff",fontSize:10,fontWeight:800 }}>FIXED</div>
+          </div>
+
+          <div style={{ marginTop:10 }}>
+            <div style={{ fontSize:10,letterSpacing:"0.14em",fontWeight:800,color:"#64748B",textTransform:"uppercase",marginBottom:8 }}>Payment Method</div>
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(148px,1fr))",gap:8 }}>
+              {DEPOSIT_METHODS.map((m) => {
+                const active = depMethod === m.value;
+                const logoSrc = m.logo ? (PAYMENT_ICON_SOURCES[m.logo] || PAYMENT_ICON_SOURCES["Google Pay"]) : "";
+                return (
+                  <button key={m.id} type="button" onClick={() => { setDepMethod(m.value); setDepError(""); }} disabled={depLoading || !canDeposit}
+                    style={{
+                      padding:"10px 10px",
+                      borderRadius:10,
+                      border:active ? "1.5px solid #111" : "1.5px solid #E2E8F0",
+                      background:active ? "#111" : "#F8FAFC",
+                      color:active ? "#fff" : "#111",
+                      fontWeight:800,
+                      fontSize:12,
+                      cursor:(depLoading || !canDeposit) ? "not-allowed" : "pointer",
+                      fontFamily:"Geist,sans-serif",
+                      textAlign:"left",
+                      minHeight:74,
+                      opacity:(depLoading || !canDeposit) ? 0.7 : 1
+                    }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        {logoSrc ? (
+                          <img
+                            src={logoSrc}
+                            alt={`${m.title} logo`}
+                            loading="lazy"
+                            decoding="async"
+                            referrerPolicy="no-referrer"
+                            style={{ width:36, height:20, objectFit:"contain", filter:active ? "none" : "grayscale(1) saturate(0) brightness(0.74)" }}
+                          />
+                        ) : (
+                          <div style={{ minWidth:36, fontSize:9, fontWeight:900, letterSpacing:"0.05em", opacity:active ? 0.86 : 0.62 }}>
+                            BANK
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:900, lineHeight:1.2 }}>{m.title}</div>
+                          <div style={{ fontSize:10, opacity:active ? 0.8 : 0.6, marginTop:2 }}>{m.subtitle}</div>
+                        </div>
+                      </div>
+                      <div style={{ display:"inline-flex",alignItems:"center",gap:3,padding:"2px 6px",borderRadius:999,background:active ? "rgba(167,243,208,0.22)" : "#ECFDF5",border:active ? "1px solid rgba(167,243,208,0.4)" : "1px solid #A7F3D0",fontSize:9,color:active ? "#A7F3D0" : "#047857",fontWeight:800 }}>
+                        <I n="check" s={10} c={active ? "#86EFAC" : "#059669"} />
+                        Verified
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        )}
 
-        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:14 }}>
-          {MANUAL_PAYMENTS ? (
-            <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#F8FAFC" }}>
-              <div style={{ padding:"12px 12px",borderRadius:12,background:"linear-gradient(135deg,#0F172A 0%, #1F2937 55%, #111827 100%)",color:"#fff",position:"relative",overflow:"hidden" }}>
-                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
-                  <div>
-                    <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Manual Confirmation</div>
-                    <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Submit request, pay offline, get verified.</div>
-                  </div>
-                  <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",fontSize:10,fontWeight:800,letterSpacing:"0.08em" }}>
-                    REVIEW
-                  </div>
-                </div>
-                <div style={{ position:"absolute",right:-30,top:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,0.08)" }}/>
-                <div style={{ position:"absolute",right:30,bottom:-40,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.06)" }}/>
-              </div>
-              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:12 }}>
-                {[
-                  { label:"Manual Review", icon:"shield" },
-                  { label:"Wallet Credit", icon:"bolt" },
-                  { label:"Support Assisted", icon:"users" }
-                ].map((b) => (
-                  <div key={b.label} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:999,background:"#FFFFFF",border:"1px solid #E2E8F0",fontSize:10,fontWeight:700,color:"#0F172A" }}>
-                    <I n={b.icon} s={12} c="#0F172A" /> {b.label}
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop:12,fontSize:11,color:"#64748B" }}>
-                {DEPOSIT_INSTRUCTIONS}
-              </div>
-            </div>
-          ) : (
-            <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#F8FAFC" }}>
-              <div style={{ padding:"12px 12px",borderRadius:12,background:"linear-gradient(135deg,#0F172A 0%, #1F2937 55%, #111827 100%)",color:"#fff",position:"relative",overflow:"hidden" }}>
-                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
-                  <div>
-                    <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Secure Payment Gateway</div>
-                    <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Secure checkout, instant wallet credit.</div>
-                  </div>
-                  <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",fontSize:10,fontWeight:800,letterSpacing:"0.08em" }}>
-                    VERIFIED
-                  </div>
-                </div>
-                <div style={{ position:"absolute",right:-30,top:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,0.08)" }}/>
-                <div style={{ position:"absolute",right:30,bottom:-40,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.06)" }}/>
-              </div>
-              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:12 }}>
-                {[
-                  { label:"SSL Secured", icon:"lock" },
-                  { label:"Instant Confirmation", icon:"bolt" },
-                  { label:"Buyer Protection", icon:"shield" }
-                ].map((b) => (
-                  <div key={b.label} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:999,background:"#FFFFFF",border:"1px solid #E2E8F0",fontSize:10,fontWeight:700,color:"#0F172A" }}>
-                    <I n={b.icon} s={12} c="#0F172A" /> {b.label}
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop:12,display:"flex",flexWrap:"wrap",gap:10 }}>
-                {[
-                  { name:"M-Pesa", logo:"M-Pesa" },
-                  { name:"Airtel Money", word:"Airtel Money" },
-                  { name:"Visa", logo:"Visa" },
-                  { name:"Mastercard", logo:"Mastercard" },
-                  { name:"Bank Transfer", word:"Bank Transfer" },
-                  { name:"Crypto", word:"USDT / BTC" }
-                ].map((m) => (
-                  <div key={m.name} style={{ padding:"8px 10px",borderRadius:12,border:"1px solid #E5E7EB",background:"#FFFFFF",minWidth:110 }}>
-                    {m.logo ? <PaymentLogo name={m.logo} /> : <Wordmark text={m.word || m.name} width={96} />}
-                    <div style={{ marginTop:6,fontSize:10,color:"#64748B",fontWeight:700 }}>{m.name}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop:10,fontSize:11,color:"#64748B" }}>
-                Pay by mobile money, card, or crypto. You’ll return here automatically after checkout.
-              </div>
+          <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10 }}>
+            <input
+              value={depPhone}
+              onChange={e=>setDepPhone(e.target.value)}
+              placeholder="Phone (M-Pesa only, optional)"
+              style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+            />
+            <input
+              value={depName}
+              onChange={e=>setDepName(e.target.value)}
+              placeholder="Full name (optional)"
+              style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+            />
+          </div>
+          <button onClick={() => submitDeposit(depMethod)} disabled={depLoading || !canDeposit} style={{ width:"100%",marginTop:12,padding:"12px 12px",background:(depLoading || !canDeposit)?"#E2E8F0":"linear-gradient(135deg,#22c55e 0%, #16a34a 48%, #15803d 100%)",color:(depLoading || !canDeposit)?"#94A3B8":"#ecfdf5",border: (depLoading || !canDeposit) ? "none" : "1px solid rgba(187,247,208,0.55)",borderRadius:11,fontWeight:900,fontSize:13,cursor:(depLoading || !canDeposit)?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",boxShadow:(depLoading || !canDeposit)?"none":"0 12px 22px rgba(22,163,74,0.28)" }}>
+            {depLoading
+              ? "Opening checkout..."
+              : (!canDeposit ? "No Deposit Required" : (depDone ? "Checkout Started" : "Pay Now"))}
+          </button>
+          {depErrorMsg && (
+            <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
+              {depErrorMsg}
             </div>
           )}
-
-          <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#FFFFFF" }}>
-            <div style={{ fontSize:11,fontWeight:800,color:"#0F172A",letterSpacing:"0.18em",textTransform:"uppercase" }}>Self Deposit Details</div>
-            <div style={{ marginTop:10,padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
-              <div>
-                <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>
-                  {isTier1Flex ? "MOBILE LIMIT" : "LOCKED AMOUNT"}
-                </div>
-                <div style={{ fontSize:15,fontWeight:900,color:"#0F172A" }}>
-                  KES {Math.max(isTier1Flex ? clampNumber(depAmt || tier1Floor, tier1Floor, tier1Cap) : primaryNeed, 0).toLocaleString()}
-                </div>
-              </div>
-              <div style={{ padding:"4px 8px",borderRadius:999,background:"#111827",color:"#fff",fontSize:10,fontWeight:800 }}>FIXED</div>
-            </div>
-
-            {isTier1Flex && (
-              <div style={{ marginTop:10 }}>
-                <div style={{ fontSize:10,letterSpacing:"0.14em",fontWeight:800,color:"#64748B",textTransform:"uppercase",marginBottom:6 }}>Enter Amount</div>
-                <input
-                  type="number"
-                  min={tier1Floor}
-                  max={tier1Cap}
-                  value={depAmt}
-                  onChange={e=>setDepAmt(e.target.value)}
-                  placeholder={`KES ${tier1Floor.toLocaleString()} - ${tier1Cap.toLocaleString()}`}
-                  style={{ width:"100%",padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
-                />
-              </div>
-            )}
-
-            <div style={{ marginTop:10 }}>
-              <div style={{ fontSize:10,letterSpacing:"0.14em",fontWeight:800,color:"#64748B",textTransform:"uppercase",marginBottom:8 }}>Payment Method</div>
-              <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8 }}>
-                {DEPOSIT_METHODS.map((m) => {
-                  const active = depMethod === m.label;
-                  return (
-                    <button key={m.id} onClick={() => setDepMethod(m.label)}
-                      style={{
-                        padding:"10px 10px",
-                        borderRadius:10,
-                        border:active ? "1.5px solid #111" : "1.5px solid #E2E8F0",
-                        background:active ? "#111" : "#F8FAFC",
-                        color:active ? "#fff" : "#111",
-                        fontWeight:800,
-                        fontSize:12,
-                        cursor:"pointer",
-                        fontFamily:"Geist,sans-serif",
-                        textAlign:"left"
-                      }}>
-                      <div style={{ fontSize:12,fontWeight:900 }}>{m.label}</div>
-                      <div style={{ fontSize:10,opacity:active ? 0.8 : 0.6 }}>{m.desc}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-              <input
-                value={depPhone}
-                onChange={e=>setDepPhone(e.target.value)}
-                placeholder="Phone (M‑Pesa only, optional)"
-                style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
-              />
-              <input
-                value={depName}
-                onChange={e=>setDepName(e.target.value)}
-                placeholder="Full name (optional)"
-                style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
-              />
-            </div>
-            <button onClick={submitDeposit} disabled={depLoading || !canDeposit} style={{ width:"100%",marginTop:12,padding:"12px 12px",background:(depLoading || !canDeposit)?"#E2E8F0":"linear-gradient(135deg,#111827 0%, #0F172A 100%)",color:(depLoading || !canDeposit)?"#94A3B8":"#fff",border:"none",borderRadius:11,fontWeight:900,fontSize:13,cursor:(depLoading || !canDeposit)?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",boxShadow:(depLoading || !canDeposit)?"none":"0 10px 20px rgba(15,23,42,0.18)" }}>
-              {depLoading
-                ? (MANUAL_PAYMENTS ? "Submitting..." : "Redirecting...")
-                : (!canDeposit ? "No Self Deposit Required" : (depDone ? "Self Deposit Submitted" : (MANUAL_PAYMENTS ? `Submit ${depMethod} Request` : `Continue with ${depMethod}`)))}
-            </button>
-            {depErrorMsg && (
-              <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
-                {depErrorMsg}
-              </div>
-            )}
-            <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
-              {MANUAL_PAYMENTS ? DEPOSIT_INSTRUCTIONS : "Processing time: typically under 60 seconds."}
-            </div>
+          <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
+            Pay by mobile money, card, or crypto. You’ll return here automatically after checkout.
           </div>
         </div>
       </div>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14 }}>
         <div style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"20px 22px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.06)" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
             <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A" }}>Request Withdrawal</div>
@@ -5569,13 +5471,55 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
           <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6,letterSpacing:"0.08em" }}>Amount</label>
           <input type="number" value={wdAmt} onChange={e=>setWdAmt(e.target.value)} placeholder="Enter amount..." style={{ width:"100%",padding:"11px 12px",background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:14,color:"#0F172A",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:12 }}/>
           <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8,letterSpacing:"0.08em" }}>Method</label>
-          <div style={{ display:"flex",gap:7,marginBottom:16,flexWrap:"wrap" }}>
-            {["M-Pesa","Airtel","Bank"].map(m=>(
-              <button key={m} onClick={()=>setMethod(m)} style={{ padding:"7px 14px",borderRadius:10,border:`1.5px solid ${method===m?"#111827":"#E2E8F0"}`,background:method===m?"#111827":"#fff",color:method===m?"#fff":"#64748B",fontWeight:method===m?800:600,cursor:"pointer",fontSize:12,fontFamily:"Geist,sans-serif",transition:"all .15s" }}>{m}</button>
-            ))}
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(132px,1fr))",gap:8,marginBottom:16 }}>
+            {DEPOSIT_METHODS.map((m) => {
+              const active = method === m.value;
+              const logoSrc = m.logo ? (PAYMENT_ICON_SOURCES[m.logo] || PAYMENT_ICON_SOURCES["Google Pay"]) : "";
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setMethod(m.value)}
+                  style={{
+                    padding:"10px 9px",
+                    borderRadius:10,
+                    border:`1.5px solid ${active ? "#111827" : "#E2E8F0"}`,
+                    background:active ? "#111827" : "#fff",
+                    color:active ? "#fff" : "#64748B",
+                    fontWeight:active ? 800 : 700,
+                    cursor:"pointer",
+                    fontSize:12,
+                    fontFamily:"Geist,sans-serif",
+                    transition:"all .15s",
+                    textAlign:"left",
+                    minHeight:68
+                  }}
+                >
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    {logoSrc ? (
+                      <img
+                        src={logoSrc}
+                        alt={`${m.title} logo`}
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        style={{ width:34, height:18, objectFit:"contain", filter:active ? "none" : "grayscale(1) saturate(0) brightness(0.74)" }}
+                      />
+                    ) : (
+                      <div style={{ minWidth:34, fontSize:9, fontWeight:900, letterSpacing:"0.05em", opacity:active ? 0.9 : 0.62 }}>
+                        BANK
+                      </div>
+                    )}
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:900, lineHeight:1.2 }}>{m.title}</div>
+                      <div style={{ fontSize:10, opacity:active ? 0.82 : 0.62, marginTop:2 }}>{m.subtitle}</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          <button onClick={submitWithdrawal} style={{ width:"100%",padding:"13px",background:can?"linear-gradient(135deg,#111827 0%, #0F172A 100%)":"#E2E8F0",color:can?"#fff":"#94A3B8",border:"none",borderRadius:11,fontWeight:800,fontSize:14,cursor:can?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s",boxShadow:can?"0 10px 20px rgba(15,23,42,0.18)":"none" }}>
-            <I n={done?"check":"wallet"} s={14} c={can?"#fff":"#94A3B8"}/>{done?"Submitted!":"Submit Withdrawal"}
+          <button onClick={submitWithdrawal} disabled={!canSubmitWithdrawal} style={{ width:"100%",padding:"13px",background:canSubmitWithdrawal?"linear-gradient(135deg,#111827 0%, #0F172A 100%)":"#E2E8F0",color:canSubmitWithdrawal?"#fff":"#94A3B8",border:"none",borderRadius:11,fontWeight:800,fontSize:14,cursor:canSubmitWithdrawal?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s",boxShadow:canSubmitWithdrawal?"0 10px 20px rgba(15,23,42,0.18)":"none" }}>
+            <I n={done?"check":"wallet"} s={14} c={canSubmitWithdrawal?"#fff":"#94A3B8"}/>{done?"Submitted!":"Submit Withdrawal"}
           </button>
         </div>
         <div style={{ background:"#FFFFFF",borderRadius:16,padding:"20px 22px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.06)" }}>
@@ -5646,9 +5590,21 @@ const ADMIN_TXS = [
   { id:"T012", user:"Alice Mwangi",    type:"Earning",     amount:2400,   method:"Videos",      date:"Feb 26, 2025", status:"Paid" },
 ];
 
-function AdminDash({ go, authUser, profileRow, onSignOut }) {
+function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChange }) {
   const [sideOpen, setSideOpen] = useState(true);
-  const [tab, setTab] = useState("overview");
+  const normalizeAdminTab = useCallback((tabId) => {
+    const tab = String(tabId || "").toLowerCase();
+    return ["overview","users","transactions","withdrawals","settings"].includes(tab) ? tab : "overview";
+  }, []);
+  const [tabState, setTabState] = useState(() => normalizeAdminTab(externalTab || "overview"));
+  const isAdminTabControlled = typeof externalTab === "string";
+  const tab = isAdminTabControlled ? normalizeAdminTab(externalTab) : tabState;
+  const setTab = useCallback((nextTab) => {
+    const resolvedRaw = typeof nextTab === "function" ? nextTab(tab) : nextTab;
+    const resolved = normalizeAdminTab(resolvedRaw);
+    if (!isAdminTabControlled) setTabState(resolved);
+    if (onTabChange) onTabChange(resolved);
+  }, [isAdminTabControlled, normalizeAdminTab, onTabChange, tab]);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
   const [userSearch, setUserSearch] = useState("");
@@ -6406,6 +6362,8 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   const [page, setPage] = useState("landing");
   const [prevPage, setPrevPage] = useState("landing");
+  const [dashboardTab, setDashboardTab] = useState("overview");
+  const [adminTab, setAdminTab] = useState("overview");
   const [tier, setTier] = useState(0);
   const t = TIERS[tier];
   const [session, setSession] = useState(null);
@@ -6417,12 +6375,21 @@ export default function App() {
   const [isMobileInstall, setIsMobileInstall] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [installHint, setInstallHint] = useState("");
-  const [showInstallPanel, setShowInstallPanel] = useState(false);
-  const [installPanelSeen, setInstallPanelSeen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState(0);
+  const [guideTyped, setGuideTyped] = useState("");
+  const [guideSeen, setGuideSeen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem(DASH_GUIDE_SEEN_KEY) === "1"; } catch (e) { return false; }
+  });
+  const markGuideSeen = useCallback(() => {
+    setGuideSeen(true);
+    try { localStorage.setItem(DASH_GUIDE_SEEN_KEY, "1"); } catch (e) {}
+  }, []);
 
   useEffect(() => {
     const url = window.location.href;
-    const hasRecovery = /type=recovery/i.test(url) || /access_token=/i.test(url) || /refresh_token=/i.test(url);
+    const hasRecovery = /type=recovery/i.test(url);
     if (hasRecovery) {
       try { sessionStorage.setItem("ep:recovery", "1"); } catch (e) {}
       setPrevPage("login");
@@ -6578,7 +6545,7 @@ export default function App() {
   }, [SUPABASE_ENABLED, authReady, authUser?.id]);
   const role = profileRow?.role || "client";
   const isAdmin = role === "admin";
-  // showDevNav defined above (dev override / localhost / dev mode)
+  // showDevNav is an explicit debug toggle (query/localStorage/env)
   const profileReady = !SUPABASE_ENABLED || !authUser || profileRow !== null;
   const tierSelected = profileRow?.tier_selected === true;
 
@@ -6595,6 +6562,27 @@ export default function App() {
     });
     return () => { ignore = true; subscription?.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !authReady) return;
+    if (!authUser?.id) return;
+    const href = window.location.href;
+    const isGoogleReturn = /[?&]auth=google/i.test(href) || /access_token=/i.test(href) || /refresh_token=/i.test(href) || /[?&]code=/i.test(href);
+    if (!isGoogleReturn) return;
+    setAuthMessage("");
+    setPrevPage("login");
+    setPage("dashboard");
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("auth");
+      if (!/type=recovery/i.test(u.search + u.hash)) {
+        const q = u.searchParams.toString();
+        u.search = q ? `?${q}` : "";
+        u.hash = "";
+        window.history.replaceState({}, document.title, `${u.pathname}${u.search}`);
+      }
+    } catch (e) {}
+  }, [SUPABASE_ENABLED, authReady, authUser?.id]);
 
   useEffect(() => {
     if (!supabase || !authUser?.id) return;
@@ -6687,19 +6675,157 @@ export default function App() {
       return false;
     }
   })();
-  const isLocalHost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1");
-  const showDevNav = devNavOverride || isLocalHost || !SUPABASE_ENABLED || import.meta.env.DEV;
+  const showDevNav = devNavOverride || String(import.meta.env.VITE_SHOW_DEV_NAV || "0") === "1";
+  const mustSelectTier = !!authUser && !isAdmin && SUPABASE_ENABLED && profileRow?.tier_selected !== true;
 
-  const route = showDevNav
+  const route = !SUPABASE_ENABLED
     ? page
-    : (!SUPABASE_ENABLED
-        ? page
-        : (authUser
-            ? (isAdmin ? "admin" : (page==="tier-select" ? "tier-select" : "dashboard"))
-            : (page==="login" || page==="signup" ? page : "landing")));
+    : (() => {
+      if (!authUser) {
+        return (page === "landing" || page === "login" || page === "signup") ? page : "landing";
+      }
+      if (isAdmin) {
+        return (page === "landing" || page === "admin") ? page : "admin";
+      }
+      if (mustSelectTier) {
+        return (page === "landing" || page === "tier-select") ? page : "tier-select";
+      }
+      return (page === "landing" || page === "dashboard" || page === "tier-select") ? page : "dashboard";
+    })();
+  useEffect(() => {
+    if (route !== "dashboard" || isAdmin || guideSeen) return;
+    const id = setTimeout(() => {
+      setGuideStep(0);
+      setGuideOpen(true);
+      markGuideSeen();
+    }, 1100);
+    return () => clearTimeout(id);
+  }, [route, isAdmin, guideSeen, markGuideSeen]);
+  useEffect(() => {
+    if (!guideOpen) { setGuideTyped(""); return; }
+    const message = DASH_GUIDE_STEPS[guideStep]?.text || "";
+    setGuideTyped("");
+    let idx = 0;
+    const id = setInterval(() => {
+      idx += 1;
+      setGuideTyped(message.slice(0, idx));
+      if (idx >= message.length) clearInterval(id);
+    }, 18);
+    return () => clearInterval(id);
+  }, [guideOpen, guideStep]);
+  const openGuideTour = () => {
+    setGuideStep(0);
+    setGuideOpen(true);
+    markGuideSeen();
+  };
+  const globalNavItems = useMemo(() => {
+    const tierNavItems = TIERS.map((tierItem, tierIndex) => ({
+      id: `tier-${tierItem.id}`,
+      route: "dashboard",
+      tierId: tierItem.id,
+      tierIndex,
+      label: tierItem.name,
+      ic: "star"
+    }));
+    const clientDashboardItems = CLIENT_DASH_TAB_ITEMS.map(({ id, label, ic }) => ({
+      id: `dashboard-${id}`,
+      route: "dashboard",
+      dashboardTab: id,
+      label,
+      ic
+    }));
+    const adminDashboardItems = ADMIN_DASH_TAB_ITEMS.map(({ id, label, ic }) => ({
+      id: `admin-${id}`,
+      route: "admin",
+      adminTab: id,
+      label,
+      ic
+    }));
+    if (!SUPABASE_ENABLED) {
+      return [
+        { id: "landing", route: "landing", label: "Home", ic: "home" },
+        { id: "login", route: "login", label: "Sign In", ic: "lock" },
+        { id: "signup", route: "signup", label: "Sign Up", ic: "user" },
+        { id: "tier-select", route: "tier-select", label: "Tier Select", ic: "star" },
+        { id: "dashboard", route: "dashboard", label: "Dashboard", ic: "chart" },
+        ...tierNavItems,
+        ...clientDashboardItems,
+        ...(isAdmin ? [{ id: "admin", route: "admin", label: "Admin", ic: "settings" }, ...adminDashboardItems] : [])
+      ];
+    }
+    if (!authUser) {
+      return [
+        { id: "landing", route: "landing", label: "Home", ic: "home" },
+        { id: "login", route: "login", label: "Sign In", ic: "lock" },
+        { id: "signup", route: "signup", label: "Sign Up", ic: "user" }
+      ];
+    }
+    if (isAdmin) {
+      return [
+        { id: "landing", route: "landing", label: "Home", ic: "home" },
+        { id: "admin", route: "admin", label: "Admin", ic: "settings" },
+        ...adminDashboardItems
+      ];
+    }
+    if (mustSelectTier) {
+      return [
+        { id: "landing", route: "landing", label: "Home", ic: "home" },
+        { id: "tier-select", route: "tier-select", label: "Tier Select", ic: "star" }
+      ];
+    }
+    return [
+      { id: "landing", route: "landing", label: "Home", ic: "home" },
+      { id: "dashboard", route: "dashboard", label: "Dashboard", ic: "chart" },
+      ...tierNavItems,
+      ...clientDashboardItems,
+      { id: "tier-select", route: "tier-select", label: "Tier Select", ic: "star" }
+    ];
+  }, [SUPABASE_ENABLED, authUser, isAdmin, mustSelectTier]);
+  const globalNavHeight = 50;
+  const devNavHeight = showDevNav ? 44 : 0;
+  const appViewportHeight = `calc(100vh - ${globalNavHeight + devNavHeight}px)`;
+  const handleGlobalNavigate = async (navItem) => {
+    const item = typeof navItem === "string" ? { id: navItem, route: navItem } : (navItem || {});
+    const target = item.route || item.id;
+    const hasTierIndex = Number.isFinite(Number(item.tierIndex));
+    const hasTierId = Number.isFinite(Number(item.tierId));
+    let tierChosenNow = false;
+    if (hasTierIndex) {
+      setTier(Number(item.tierIndex));
+      if (item.dashboardTab) setDashboardTab(item.dashboardTab);
+      else setDashboardTab("overview");
+      if (SUPABASE_ENABLED && authUser && !isAdmin && hasTierId) {
+        const ok = await handleTierSelect(Number(item.tierId));
+        tierChosenNow = !!ok;
+      } else {
+        tierChosenNow = true;
+      }
+    } else if (item.dashboardTab) {
+      setDashboardTab(item.dashboardTab);
+    }
+    if (item.adminTab) setAdminTab(item.adminTab);
+    if (!SUPABASE_ENABLED) {
+      go(target);
+      return;
+    }
+    if (!authUser) {
+      if (target === "dashboard" || target === "tier-select" || target === "admin") {
+        go("login");
+        return;
+      }
+      go(target);
+      return;
+    }
+    if (target === "admin") {
+      go(isAdmin ? "admin" : "dashboard");
+      return;
+    }
+    if (mustSelectTier && target === "dashboard" && !tierChosenNow) {
+      go("tier-select");
+      return;
+    }
+    go(target);
+  };
 
   const handleTierSelect = async (tierId) => {
     if (!supabase || !authUser?.id) return false;
@@ -6754,36 +6880,55 @@ export default function App() {
 
   const showInstallButton = isMobileInstall && !isStandalone && route === "landing";
   const installReady = !!installPrompt && showInstall;
-  const showInstallPanelReady = showInstallButton && !installPanelSeen;
-
-  useEffect(() => {
-    if (!showInstallPanelReady) return;
-    let timer;
-    let armed = false;
-    const arm = () => {
-      if (armed) return;
-      armed = true;
-      timer = setTimeout(() => {
-        setShowInstallPanel(true);
-        setInstallPanelSeen(true);
-      }, 5000);
-    };
-    const events = ["pointerdown", "keydown", "scroll", "touchstart"];
-    events.forEach(e => window.addEventListener(e, arm, { passive: true }));
-    return () => {
-      events.forEach(e => window.removeEventListener(e, arm));
-      if (timer) clearTimeout(timer);
-    };
-  }, [showInstallPanelReady]);
 
   return (
     <ErrorBoundary>
       <GlobalStyles />
       <Fonts />
 
+      <div style={{ position:"sticky", top:0, zIndex:10000, background:"rgba(3,8,18,0.96)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(148,163,184,0.22)", height:globalNavHeight, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 10px", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+          <div onClick={() => handleGlobalNavigate("landing")} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"6px 8px", borderRadius:10, flexShrink:0 }}>
+            <BrandMark size={24} />
+            <span style={{ fontSize:13, fontWeight:900, color:"#d9f99d", letterSpacing:"0.02em", whiteSpace:"nowrap" }}>EdisonPay</span>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, overflowX:"auto", minWidth:0, paddingBottom:2 }}>
+            {globalNavItems.map((item) => {
+              const { id, route: itemRoute, label, ic, dashboardTab: itemDashboardTab, adminTab: itemAdminTab, tierIndex: itemTierIndex } = item;
+              const targetRoute = itemRoute || id;
+              const active = itemDashboardTab
+                ? route === "dashboard" && dashboardTab === itemDashboardTab
+                : itemAdminTab
+                  ? route === "admin" && adminTab === itemAdminTab
+                  : Number.isFinite(Number(itemTierIndex))
+                    ? route === "dashboard" && tier === Number(itemTierIndex)
+                    : route === targetRoute || page === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => handleGlobalNavigate(item)}
+                  style={{ padding:"6px 11px", borderRadius:999, border:active ? "1px solid rgba(190,242,100,0.62)" : "1px solid rgba(71,85,105,0.55)", background:active ? "rgba(190,242,100,0.16)" : "rgba(15,23,42,0.48)", color:active ? "#ecfccb" : "#cbd5e1", fontSize:11, fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap", fontFamily:"Geist,sans-serif" }}
+                >
+                  <I n={ic} s={11} c="currentColor" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {authUser ? (
+          <button onClick={handleSignOut} style={{ padding:"6px 11px", borderRadius:999, border:"1px solid #FCA5A5", background:"#7F1D1D", color:"#FECACA", fontSize:11, fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", gap:6, flexShrink:0, fontFamily:"Geist,sans-serif" }}>
+            <I n="logout" s={11} c="#FECACA" />
+            Logout
+          </button>
+        ) : (
+          <div style={{ fontSize:11, color:"#94A3B8", fontWeight:700, whiteSpace:"nowrap", flexShrink:0 }}>Navigate anywhere</div>
+        )}
+      </div>
+
       {/* "" PAGE SWITCHER - sticky top bar "" */}
       {showDevNav && (
-        <div style={{ position:"sticky",top:0,zIndex:9999,background:"#0A0A0A",display:"flex",alignItems:"center",padding:"0 12px",height:44,gap:4,borderBottom:"1px solid #1A1A1A",flexShrink:0 }}>
+        <div style={{ position:"sticky",top:globalNavHeight,zIndex:9999,background:"#0A0A0A",display:"flex",alignItems:"center",padding:"0 12px",height:44,gap:4,borderBottom:"1px solid #1A1A1A",flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",gap:4,flex:1,flexWrap:"nowrap",overflowX:"auto" }}>
             {[["landing","Home","home"],["login","Login","lock"],["signup","Sign Up","user"],["tier-select","Tier Select","star"],["dashboard","Dashboard","chart"],["admin","Admin","settings"]].map(([id,lbl,ic])=>(
               <button key={id} onClick={()=>go(id)} style={{ padding:"5px 13px",borderRadius:50,border:"none",background:page===id?"#fff":"#1A1A1A",color:page===id?"#111":"#888",fontSize:11,fontWeight:page===id?800:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>
@@ -6803,7 +6948,7 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ height: showDevNav ? "calc(100vh - 44px)" : "100vh", overflow:"hidden" }}>
+      <div style={{ height: appViewportHeight, overflow:"hidden" }}>
         {SUPABASE_ENABLED && (!authReady || !profileReady) && (
           <div style={{ height:"100%", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
             <div style={{ width:"min(520px, 92vw)", display:"grid", gap:12 }}>
@@ -6823,9 +6968,9 @@ export default function App() {
             {route==="landing"   && <div style={{ height:"100%",overflowY:"auto" }}><Landing  go={go}/></div>}
             {route==="login"     && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="login"  go={go} from={prevPage==="landing"?"dashboard":prevPage} authMessage={authMessage}/></div>}
             {route==="signup"    && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="signup" go={go} from={prevPage==="landing"?"dashboard":prevPage} authMessage={authMessage}/></div>}
-            {route==="tier-select" && <div style={{ height:"100%",overflowY:"auto" }}><TierSelect go={go} authUser={authUser} profileRow={profileRow} onSelectTier={handleTierSelect} /></div>}
-            {route==="dashboard" && <ClientDash t={t} go={go} key={tier} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut}/>}
-            {route==="admin"     && <AdminDash go={go} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut}/>}
+            {route==="tier-select" && <div style={{ height:"100%",overflowY:"auto" }}><TierSelect go={go} authUser={authUser} profileRow={profileRow} onSelectTier={handleTierSelect} onPreviewToVideos={() => { setDashboardTab("videos"); go("dashboard"); }} /></div>}
+            {route==="dashboard" && <ClientDash t={t} go={go} key={tier} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut} onReplayGuide={openGuideTour} externalTab={dashboardTab} onTabChange={setDashboardTab}/>}
+            {route==="admin"     && <AdminDash go={go} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut} externalTab={adminTab} onTabChange={setAdminTab}/>}
           </>
         )}
       </div>
@@ -6884,65 +7029,75 @@ export default function App() {
           </button>
         </div>
       )}
-      {showInstallPanel && showInstallButton && (
-        <div
-          style={{
-            position:"fixed",
-            right:14,
-            top:"50%",
-            transform:"translateY(-50%)",
-            zIndex:9998,
-            width:"min(260px, 78vw)",
-            background:"#fff",
-            border:"1.5px solid #111",
-            borderRadius:16,
-            boxShadow:"0 10px 30px rgba(0,0,0,0.18)",
-            padding:"14px 14px 12px",
-            display:"grid",
-            gap:10
-          }}
-        >
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-            <div style={{ fontSize:12, fontWeight:900, color:"#111", letterSpacing:"0.06em" }}>DOWNLOAD APP</div>
+      {route === "dashboard" && guideOpen && !isAdmin && (
+        <div className="ep-guide-panel">
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8 }}>
+            <div style={{ fontSize:10, fontWeight:900, color:"#111", letterSpacing:"0.1em" }}>HELP GUIDE</div>
             <button
-              onClick={() => setShowInstallPanel(false)}
-              style={{ width:22, height:22, borderRadius:"50%", border:"1px solid #111", background:"#fff", display:"grid", placeItems:"center", cursor:"pointer" }}
+              onClick={() => setGuideOpen(false)}
+              aria-label="Exit guide"
+              style={{ width:24, height:24, borderRadius:"50%", border:"1.5px solid #111", background:"#fff", color:"#111", display:"grid", placeItems:"center", cursor:"pointer" }}
             >
               <I n="xmark" s={12} c="#111" />
             </button>
           </div>
-          <div style={{ fontSize:12, color:"#444", lineHeight:1.5 }}>
-            Install the app for a faster, full'screen experience.
+          <div className="ep-guide-bubble">
+            <div style={{ display:"grid", gridTemplateColumns:"82px 1fr", gap:10, padding:"10px 10px 8px" }}>
+              <img
+                src={DASH_BOT_GUIDE_IMAGE.primary}
+                alt="Guide bot"
+                referrerPolicy="no-referrer"
+                onError={(e) => setFallbackSrc(e, DASH_BOT_GUIDE_IMAGE)}
+                className="ep-guide-avatar-bw"
+                style={{ width:78, height:78, objectFit:"contain", alignSelf:"center" }}
+              />
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:10, fontWeight:900, color:"#111", letterSpacing:"0.08em" }}>GUIDED TOUR</div>
+                <div style={{ marginTop:4, fontSize:14, fontWeight:900, color:"#0f172a", lineHeight:1.2 }}>{DASH_GUIDE_STEPS[guideStep]?.title}</div>
+                <div style={{ marginTop:7, fontSize:12, color:"#111827", lineHeight:1.45, minHeight:52 }}>
+                  {guideTyped}
+                  <span className="ep-guide-cursor">|</span>
+                </div>
+                <div style={{ marginTop:6, fontSize:10, color:"#4b5563", textAlign:"right", fontWeight:700 }}>
+                  Step {guideStep + 1}/{DASH_GUIDE_STEPS.length}
+                </div>
+              </div>
+            </div>
           </div>
-          <button
-            onClick={handleInstall}
-            style={{
-              padding:"9px 12px",
-              borderRadius:10,
-              border:"1.5px solid #111",
-              background: installReady ? "#111" : "#222",
-              color:"#fff",
-              fontWeight:900,
-              fontSize:12,
-              cursor:"pointer",
-              boxShadow:"0 4px 0 #111"
-            }}
-          >
-            Install App
-          </button>
-          {installHint && (
-            <div style={{ fontSize:10, color:"#6B7280" }}>{installHint}</div>
-          )}
+          <div style={{ marginTop:9, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8 }}>
+            <button
+              onClick={() => setGuideStep(prev => Math.max(0, prev - 1))}
+              disabled={guideStep === 0}
+              style={{ padding:"7px 11px", borderRadius:999, border:"1.5px solid #111", background:"#fff", color:guideStep===0 ? "#9ca3af" : "#111827", fontSize:11, fontWeight:800, cursor:guideStep===0 ? "not-allowed" : "pointer" }}
+            >
+              Back
+            </button>
+            {guideStep < DASH_GUIDE_STEPS.length - 1 ? (
+              <button
+                onClick={() => setGuideStep(prev => Math.min(DASH_GUIDE_STEPS.length - 1, prev + 1))}
+                style={{ padding:"7px 12px", borderRadius:999, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:11, fontWeight:900, cursor:"pointer" }}
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                onClick={() => setGuideOpen(false)}
+                style={{ padding:"7px 12px", borderRadius:999, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:11, fontWeight:900, cursor:"pointer" }}
+              >
+                Done
+              </button>
+            )}
+          </div>
         </div>
       )}
       <button onClick={openHelp}
-        className="ep-help-fab"
+        className={`ep-help-fab${route === "dashboard" && guideOpen && guideStep === 0 ? " ep-help-focus" : ""}`}
         style={{
           right:18,
           bottom:18,
           zIndex:9999,
-          width:42,
-          height:42,
+          width:36,
+          height:36,
           borderRadius:"50%",
           border:"1.5px solid #111",
           background:"#fff",
@@ -6961,6 +7116,9 @@ export default function App() {
     </ErrorBoundary>
   );
     }
+
+
+
 
 
 

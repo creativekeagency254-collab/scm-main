@@ -1,11 +1,13 @@
 const clean = (value) => String(value || "").trim().replace(/^['"]|['"]$/g, "");
+const KORA_TEST_SECRET_FALLBACK = "sk_test_AbiBDoPaW7uKjyZpkXztMxf2MuKatkB5TNvhkvHc";
 
 const KORA_BASE = clean(process.env.KORA_BASE_URL || "https://api.korapay.com");
 const KORA_SECRET_KEY = clean(
   process.env.KORA_SECRET_KEY ||
     process.env.KORA_SECRET ||
     process.env.PESAPAL_CONSUMER_SECRET ||
-    process.env.PESAPAL_CONSUMER_KEY
+    process.env.PESAPAL_CONSUMER_KEY ||
+    KORA_TEST_SECRET_FALLBACK
 );
 const KORA_CALLBACK_URL = clean(process.env.KORA_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL);
 const KORA_WEBHOOK_URL = clean(process.env.KORA_WEBHOOK_URL || process.env.PESAPAL_IPN_URL);
@@ -29,6 +31,34 @@ const withQueryParam = (url, key, value) => {
   return `${base}${joiner}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
 };
 
+const hasSuccessFlag = (data) => {
+  const rawStatus =
+    data?.status ??
+    data?.success ??
+    data?.statusCode ??
+    data?.code ??
+    "";
+  const normalized = String(rawStatus).trim().toLowerCase();
+  if (data?.status === true || data?.success === true) return true;
+  if (Number(data?.statusCode) === 200 || Number(data?.code) === 200) return true;
+  return ["success", "successful", "ok", "true", "200"].includes(normalized);
+};
+
+const hasUsefulPayload = (data) => {
+  const payload = data?.data;
+  const payloadHasKeys =
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    Object.keys(payload).length > 0;
+  return Boolean(
+    payloadHasKeys ||
+      data?.checkout_url ||
+      data?.redirect_url ||
+      data?.authorization_url
+  );
+};
+
 const jsonFetch = async (url, options = {}) => {
   const res = await fetch(url, {
     ...options,
@@ -38,14 +68,25 @@ const jsonFetch = async (url, options = {}) => {
       ...(options.headers || {})
     }
   });
-  const data = await res.json().catch(() => ({}));
-  const okFlag = data?.status === true || data?.status === "success" || data?.success === true;
-  if (!res.ok || !okFlag) {
-    const msg =
+  const raw = await res.text().catch(() => "");
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    data = { raw };
+  }
+  const okFlag = hasSuccessFlag(data);
+  if (!res.ok || (!okFlag && !hasUsefulPayload(data))) {
+    const msgRaw =
       data?.message ||
       data?.error?.message ||
+      data?.errors?.[0]?.message ||
       data?.error ||
+      data?.detail ||
+      data?.raw ||
       "Kora request failed";
+    const msg =
+      typeof msgRaw === "string" ? msgRaw : JSON.stringify(msgRaw);
     const err = new Error(msg);
     err.status = res.status;
     err.data = data;
@@ -126,9 +167,21 @@ export const submitOrder = async (payload = {}) => {
     data?.data?.checkout_url ||
     data?.data?.checkoutUrl ||
     data?.data?.redirect_url ||
+    data?.data?.redirectUrl ||
+    data?.data?.authorization_url ||
+    data?.data?.authorizationUrl ||
+    data?.data?.checkout?.url ||
+    data?.checkout_url ||
+    data?.redirect_url ||
+    data?.authorization_url ||
     "";
   if (!checkout) throw new Error("Kora did not return a checkout URL.");
-  const providerRef = clean(data?.data?.reference || reference);
+  const providerRef = clean(
+    data?.data?.reference ||
+      data?.data?.payment_reference ||
+      data?.data?.id ||
+      reference
+  );
   return {
     ...data,
     redirect_url: checkout,

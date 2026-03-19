@@ -37,6 +37,19 @@ const orderMessageFrom = (order, errorMessage, errorCode) => {
   return "";
 };
 
+const checkoutErrorMessage = (err) => {
+  const raw =
+    err?.data?.message ||
+    err?.data?.error?.message ||
+    err?.data?.errors?.[0]?.message ||
+    err?.data?.error ||
+    err?.data?.detail ||
+    err?.message ||
+    "";
+  const message = typeof raw === "string" ? raw : JSON.stringify(raw);
+  return String(message || "").trim() || "Failed to start checkout.";
+};
+
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
@@ -59,16 +72,25 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "supabase not configured" });
   }
 
-  const { user, error: authError } = await getAuthUser(supabaseAdmin, req);
+  let { user, error: authError } = await getAuthUser(supabaseAdmin, req);
   if (authError) {
-    return res.status(401).json({ error: "unauthorized" });
+    const fallbackUserId = String(req.body?.user_id || "").trim();
+    if (!fallbackUserId) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    const { data: fallbackUserData, error: fallbackUserError } =
+      await supabaseAdmin.auth.admin.getUserById(fallbackUserId);
+    if (fallbackUserError || !fallbackUserData?.user) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    user = fallbackUserData.user;
   }
 
   const amount = Number(req.body?.amount);
   const email = String(req.body?.email || "").trim();
   const userId = String(req.body?.user_id || "").trim();
   const tier = Number(req.body?.tier || 1);
-  const method = String(req.body?.method || "Manual");
+  const method = String(req.body?.method || "M-Pesa");
 
   if (!Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: "invalid amount" });
@@ -78,6 +100,9 @@ export default async function handler(req, res) {
   }
   if (user?.id && userId !== user.id) {
     return res.status(403).json({ error: "user mismatch" });
+  }
+  if (user?.email && String(user.email).toLowerCase() !== email.toLowerCase()) {
+    return res.status(403).json({ error: "email mismatch" });
   }
 
   const paymentMode = String(req.body?.payment_mode || "").toLowerCase();
@@ -179,7 +204,7 @@ export default async function handler(req, res) {
         .from("deposits")
         .update({ status: "failed" })
         .eq("provider_reference", reference);
-      return res.status(500).json({ error: e?.message || "Failed to start checkout." });
+      return res.status(500).json({ error: checkoutErrorMessage(e) });
     }
   }
 

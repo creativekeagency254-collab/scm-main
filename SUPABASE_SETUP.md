@@ -1,6 +1,6 @@
 # Supabase Setup
 
-> Note: The updated MVP schema is in `supabase/migrations/20260314_mvp.sql`, the earning rules are in `supabase/migrations/20260314_claim_earning.sql`, and RLS/auth/withdrawal helpers are in `supabase/migrations/20260315_rls_and_functions.sql`. These replace the legacy schema below.
+> Note: The current MVP schema is in `supabase/migrations/20260314_mvp.sql`, the earning rules are in `supabase/migrations/20260314_claim_earning.sql`, and RLS/auth/withdrawal helpers are in `supabase/migrations/20260315_rls_and_functions.sql`. The legacy SQL section below is archival reference only and is not the source of truth.
 
 This project uses Supabase for auth and data when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
 
@@ -11,6 +11,7 @@ Create a `.env` file (or set these in Vercel):
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 VITE_API_BASE=http://localhost:8787
+VITE_ENABLE_TAWK_CHAT=0
 ```
 
 For E2E tests (optional):
@@ -19,8 +20,9 @@ For E2E tests (optional):
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-PESAPAL_CONSUMER_KEY=your_pesapal_key
-PESAPAL_CONSUMER_SECRET=your_pesapal_secret
+KORA_PUBLIC_KEY=your_kora_public_key
+KORA_SECRET_KEY=your_kora_secret_key
+KORA_WEBHOOK_URL=https://your-domain.com/api/v1/webhook/kora
 API_BASE=http://localhost:8787
 ```
 
