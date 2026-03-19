@@ -393,28 +393,46 @@ function Landing({ go }) {
     "Airtel Money"
   ];
   const processSteps = [
-    { icon: "user", title: "Sign Up", desc: "Choose your tier and create your account.", timeline: "T+0 min" },
-    { icon: "wallet", title: "Deposit", desc: "Pay the fixed starting balance for your tier.", timeline: "T+2 min" },
-    { icon: "play", title: "Watch Videos", desc: "Earn KES 50 per video and unlock bonuses automatically.", timeline: "T+Same day" },
-    { icon: "gift", title: "Refer Friends", desc: "Get 10% bonus whenever someone joins using your code.", timeline: "T+Daily" },
-    { icon: "up", title: "Withdraw", desc: "Cash out every Tuesday and Friday to your phone.", timeline: "Tue / Fri" }
+    { icon: "user", title: "Sign Up", desc: "Choose your tier and create your account.", timeline: "Quick Registration" },
+    { icon: "wallet", title: "Deposit", desc: "Pay the fixed starting balance for your tier.", timeline: "Secure Deposit" },
+    { icon: "play", title: "Watch Videos", desc: "Earn KES 50 per video and unlock bonuses automatically.", timeline: "Daily Earnings" },
+    { icon: "gift", title: "Refer Friends", desc: "Get 10% bonus whenever someone joins using your code.", timeline: "Referral Boost" },
+    { icon: "up", title: "Withdraw", desc: "Cash out every Tuesday and Friday to your phone.", timeline: "Payout Window" }
   ];
   const [activeProcessStep, setActiveProcessStep] = useState(0);
+  const [processAutoPaused, setProcessAutoPaused] = useState(false);
+  const processResumeTimerRef = useRef(null);
   const processProgress = processSteps.length > 1
     ? (activeProcessStep / (processSteps.length - 1)) * 100
     : 100;
   const activeProcessLabel = processSteps[activeProcessStep]?.title || "Sign Up";
+  const pauseProcessAutoAdvance = useCallback(() => {
+    if (processResumeTimerRef.current) window.clearTimeout(processResumeTimerRef.current);
+    setProcessAutoPaused(true);
+    processResumeTimerRef.current = window.setTimeout(() => {
+      setProcessAutoPaused(false);
+    }, 7000);
+  }, []);
+  const handleProcessStepFocus = useCallback((stepIndex) => {
+    if (!Number.isFinite(stepIndex)) return;
+    const bounded = Math.max(0, Math.min(stepIndex, processSteps.length - 1));
+    setActiveProcessStep(bounded);
+    pauseProcessAutoAdvance();
+  }, [pauseProcessAutoAdvance, processSteps.length]);
 
   useEffect(() => {
     const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
       : false;
-    if (prefersReducedMotion) return undefined;
+    if (prefersReducedMotion || processAutoPaused) return undefined;
     const timer = window.setInterval(() => {
       setActiveProcessStep((step) => (step + 1) % processSteps.length);
     }, 2300);
     return () => window.clearInterval(timer);
-  }, [processSteps.length]);
+  }, [processSteps.length, processAutoPaused]);
+  useEffect(() => () => {
+    if (processResumeTimerRef.current) window.clearTimeout(processResumeTimerRef.current);
+  }, []);
   const landingNavLinks = [
     { label: "Features", ic: "play", target: "landing-features" },
     { label: "Tiers", ic: "star", target: "landing-tiers" },
@@ -428,13 +446,15 @@ function Landing({ go }) {
   }, []);
 
   const anim = (delay = 0) => ({ animation: `fadeUp .55s ease both`, animationDelay: `${delay}ms`, opacity: heroVisible ? 1 : 0 });
-  const footerBackground = "linear-gradient(140deg, #0b1120 0%, #111827 54%, #14532d 100%)";
   const heroHighlights = [
     "Choose your tier and activate your account in minutes.",
     "Watch required videos and earn KES 50 per video.",
     "Invite friends and receive 10% referral bonus automatically.",
     "Withdraw every Tuesday and Friday straight to your phone."
   ];
+  const isBlackHeroHighlight = (line) =>
+    line === "Choose your tier and activate your account in minutes." ||
+    line === "Withdraw every Tuesday and Friday straight to your phone.";
 
   return (
     <div className="ep-landing-root" style={{ fontFamily: "Manrope, Sora, Geist, sans-serif", background: "#ffffff", color: "#0f172a", minHeight: "100vh", position:"relative", overflowX:"hidden" }}>
@@ -497,17 +517,20 @@ function Landing({ go }) {
               Smart Video Earnings
             </div>
             <h1 style={{ ...anim(60), marginTop:18, fontSize:"clamp(34px,4.8vw,60px)", lineHeight:1.03, letterSpacing:"-0.03em", color:"#0f172a", fontWeight:900 }}>
-              Earn KES 50 per video.
+              Earn KES 50 for every video.
               <span style={{ display:"block", marginTop:10, color:"#0f766e", fontFamily:"Instrument Serif, serif", fontStyle:"italic", fontWeight:400 }}>
-                Clean. Fast. Reliable.
+                Simple. Fast. Trusted.
               </span>
             </h1>
             <p style={{ ...anim(120), marginTop:16, maxWidth:560, color:"#334155", fontSize:17, lineHeight:1.7 }}>
-              Watch short videos, refer friends, and earn tiered daily rewards with five plan options built for different budgets.
+              Watch short videos, invite friends, and grow your earnings daily with five flexible tiers built for every budget.
             </p>
             <div className="ep-landing-hero-highlights ep-landing-hero-highlights-desktop" style={anim(180)}>
               {heroHighlights.map((line, index) => (
-                <div key={line} className={`ep-landing-hero-highlight ${index % 2 ? "is-right" : "is-left"}`}>
+                <div
+                  key={line}
+                  className={`ep-landing-hero-highlight ${index % 2 ? "is-right" : "is-left"} ${isBlackHeroHighlight(line) ? "is-black" : ""}`}
+                >
                   {line}
                 </div>
               ))}
@@ -518,14 +541,14 @@ function Landing({ go }) {
                 className="ep-landing-hero-cta-btn ep-landing-hero-cta-btn-primary"
                 onClick={() => go("signup")}
               >
-                Start Earning
+                Create Account
               </button>
               <button
                 type="button"
                 className="ep-landing-hero-cta-btn ep-landing-hero-cta-btn-secondary"
                 onClick={() => go("login")}
               >
-                Existing Account
+                Sign In
               </button>
             </div>
           </div>
@@ -533,7 +556,10 @@ function Landing({ go }) {
           <div className="ep-landing-hero-image-shell" style={anim(120)}>
             <div className="ep-landing-hero-sentence-orbit" aria-hidden="true">
               {heroHighlights.map((line, index) => (
-                <div key={`mobile-${line}`} className={`ep-landing-hero-sentence-chip chip-${index + 1}`}>
+                <div
+                  key={`mobile-${line}`}
+                  className={`ep-landing-hero-sentence-chip chip-${index + 1} ${isBlackHeroHighlight(line) ? "is-black" : ""}`}
+                >
                   {line}
                 </div>
               ))}
@@ -647,8 +673,11 @@ function Landing({ go }) {
               Follow this timeline from account setup to payout.
             </p>
             <div className="ep-process-auto-pill">
-              <span className="ep-process-auto-dot" />
-              <span>Auto timeline: {activeProcessLabel}</span>
+              <span
+                className="ep-process-auto-dot"
+                style={processAutoPaused ? { background: "#F59E0B", boxShadow: "0 0 0 5px rgba(245,158,11,0.16)", animation: "none" } : undefined}
+              />
+              <span>{processAutoPaused ? `Pinned step: ${activeProcessLabel}` : `Interactive timeline: ${activeProcessLabel}`}</span>
             </div>
           </div>
           <div className="ep-process-wrap">
@@ -657,7 +686,32 @@ function Landing({ go }) {
               {processSteps.map(({ icon, title, desc, timeline }, i) => {
                 const status = i < activeProcessStep ? "is-done" : i === activeProcessStep ? "is-active" : "is-pending";
                 return (
-                <article key={i} className={`ep-process-item ${status}`}>
+                <article
+                  key={i}
+                  className={`ep-process-item ${status}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Preview step ${i + 1}: ${title}`}
+                  onClick={() => handleProcessStepFocus(i)}
+                  onMouseEnter={() => handleProcessStepFocus(i)}
+                  onFocus={() => handleProcessStepFocus(i)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleProcessStepFocus(i);
+                      return;
+                    }
+                    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                      handleProcessStepFocus((i + 1) % processSteps.length);
+                      return;
+                    }
+                    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                      e.preventDefault();
+                      handleProcessStepFocus((i - 1 + processSteps.length) % processSteps.length);
+                    }
+                  }}
+                >
                   <div className="ep-process-node">
                     <span className="ep-process-count">{String(i + 1).padStart(2, "0")}</span>
                   </div>
@@ -682,74 +736,52 @@ function Landing({ go }) {
       </section>
 
       {/* "" FOOTER "" */}
-      <footer className="ep-footer" style={{ backgroundImage: footerBackground, backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", color: "#fff" }}>
-        {/* Top CTA band */}
-        <div className="ep-footer-band" style={{ borderBottom: "1px solid #1F1F1F", padding: "26px 5vw" }}>
-          <div className="ep-footer-cta" style={{ maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
+      <footer className="ep-footer" style={{ background:"#000", color:"#fff", padding:"34px 5vw 20px" }}>
+        <div style={{ maxWidth:1300, margin:"0 auto", border:"1px solid #1f1f1f", borderRadius:22, background:"#050505", padding:"30px clamp(16px, 3vw, 34px) 18px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:"24px clamp(18px, 4vw, 56px)" }}>
             <div>
-              <h3 className="ep-footer-cta-title" style={{ fontSize: "clamp(19px,2.2vw,28px)", fontWeight: 900, letterSpacing: "-0.03em", marginBottom: 6 }}>
-                Ready to start earning?
-              </h3>
-              <p className="ep-footer-cta-copy" style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.45 }}>Join 1,000+ Kenyans building passive income daily.</p>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <BrandMark size={28} />
+                <span style={{ fontWeight:900, fontSize:18, letterSpacing:"-0.03em" }}>EdisonPay</span>
+              </div>
+              <p style={{ maxWidth:360, fontSize:13, color:"#A3A3A3", lineHeight:1.55, marginBottom:16 }}>
+                We offer reliable earning tools for daily growth: watch videos, invite friends, and manage payouts easily.
+              </p>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                {[["Instagram","star"],["Facebook","users"],["X","xmark"],["YouTube","play"]].map(([name, icon]) => (
+                  <button key={name} type="button" aria-label={name}
+                    style={{ width:30, height:30, borderRadius:"50%", border:"none", background:"#fff", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+                    <I n={icon} s={12} c="#0a0a0a" />
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="ep-footer-cta-actions" style={{ display: "flex", gap: 12 }}>
-              <button className="ep-footer-cta-btn" onClick={() => go("signup")} style={{ padding: "10px 20px", background: "#fff", color: "#111", border: "none", borderRadius: 50, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Create Account</button>
-              <button className="ep-footer-cta-btn ep-footer-cta-btn-secondary" onClick={() => go("login")} style={{ padding: "10px 18px", background: "transparent", color: "#fff", border: "1.5px solid #334155", borderRadius: 50, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Sign In</button>
-            </div>
-          </div>
-        </div>
 
-        {/* Main footer grid */}
-        <div className="ep-footer-grid ep-footer-main" style={{ padding: "30px 5vw 22px", maxWidth: 1300, margin: "0 auto", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 22 }}>
-          {/* Brand col */}
-          <div className="ep-footer-brand">
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <BrandMark size={30} />
-              <span style={{ fontWeight: 900, fontSize: 17, letterSpacing: "-0.03em" }}>EdisonPay</span>
-            </div>
-            <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6, maxWidth: 300, marginBottom: 14 }}>
-              Kenya's leading video earnings platform. Watch, earn, refer, and grow your daily rewards.
-            </p>
-            {/* Social links */}
-            <div className="ep-footer-social" style={{ display: "flex", gap: 10 }}>
-              {[["Twitter/X","xmark"],["Instagram","star"],["YouTube","play"],["WhatsApp","users"]].map(([n, ic]) => (
-                <div key={n} title={n} style={{ width: 30, height: 30, borderRadius: 8, background: "#1A1A1A", border: "1px solid #2A2A2A", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "background .15s" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "#2A2A2A"}
-                  onMouseLeave={e => e.currentTarget.style.background = "#1A1A1A"}>
-                  <I n={ic} s={12} c="#94a3b8" />
+            <div>
+              <div style={{ fontSize:13, fontWeight:800, color:"#F5F5F5", marginBottom:10 }}>Extra links</div>
+              {["Home","Buyers","Sellers","Our team","About Us"].map((item) => (
+                <div key={item} style={{ fontSize:13, color:"#BDBDBD", marginBottom:10, lineHeight:1.3, cursor:"pointer" }}>
+                  {item}
                 </div>
               ))}
             </div>
-          </div>
 
-          {/* Link columns */}
-          {[
-            { h: "Platform", ls: ["Overview","Tiers & Plans","Video Earnings","Withdrawals"] },
-            { h: "Company", ls: ["About Us","Blog","Contact","Partners"] },
-            { h: "Support", ls: ["Help Centre","FAQs","Privacy Policy","Terms of Service"] },
-          ].map((col, i) => (
-            <div key={i} className="ep-footer-link-col">
-              <div className="ep-footer-col-title" style={{ fontSize: 10, fontWeight: 800, color: "#e2e8f0", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>{col.h}</div>
-              {col.ls.map(l => (
-                <div key={l} className="ep-footer-link" style={{ fontSize: 12, color: "#94a3b8", marginBottom: 7, cursor: "pointer", transition: "color .12s" }}
-                  onMouseEnter={e => e.currentTarget.style.color = "#e2e8f0"}
-                  onMouseLeave={e => e.currentTarget.style.color = "#94a3b8"}>
-                  {l}
-                </div>
-              ))}
+            <div>
+              <div style={{ fontSize:13, fontWeight:800, color:"#F5F5F5", marginBottom:10 }}>Contact</div>
+              <div style={{ fontSize:13, color:"#BDBDBD", lineHeight:1.55 }}>
+                <div>123 Example Road</div>
+                <div>New York, NY 12345</div>
+                <div style={{ marginTop:10 }}>email@example.com</div>
+                <div style={{ marginTop:10 }}>(555) 555-5555</div>
+              </div>
             </div>
-          ))}
-        </div>
-
-        {/* Bottom bar */}
-        <div className="ep-footer-bottom" style={{ borderTop: "1px solid #1A1A1A", padding: "14px 5vw", maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <span className="ep-footer-legal" style={{ fontSize: 11, color: "#64748b" }}>(c) 2025 EdisonPay Ltd. All rights reserved. Nairobi, Kenya.</span>
-          <div className="ep-footer-bottom-links" style={{ display: "flex", gap: 14, fontSize: 11, color: "#64748b" }}>
-            {["Privacy","Terms","Cookies","Sitemap"].map(l => <span key={l} style={{ cursor: "pointer", transition: "color .12s" }} onMouseEnter={e => e.target.style.color = "#cbd5e1"} onMouseLeave={e => e.target.style.color = "#64748b"}>{l}</span>)}
           </div>
-          <div className="ep-footer-system" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22C55E", animation: "pulse 2s infinite" }} />
-            All systems operational
+
+          <div style={{ marginTop:18, paddingTop:14, borderTop:"1px solid #1f1f1f", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <span style={{ fontSize:11, color:"#808080" }}>(c) 2025 EdisonPay Ltd. All rights reserved.</span>
+            <div style={{ display:"flex", gap:12, fontSize:11, color:"#808080", flexWrap:"wrap" }}>
+              {["Privacy","Terms","Cookies"].map((item) => <span key={item} style={{ cursor:"pointer" }}>{item}</span>)}
+            </div>
           </div>
         </div>
       </footer>
@@ -789,6 +821,13 @@ function TierCard({ t, go, featured, onSelectTier }) {
   const days = Math.ceil(goal / Math.max(daily, 1));
   const hasGlare = t.name === "Regular" || t.name === "Standard" || t.name === "Deluxe";
   const glareTone = t.name === "Deluxe" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
+  const tierGlowSoft = `${t.acc}3D`;
+  const tierGlowStrong = `${t.acc}66`;
+  const baseShadow = hov
+    ? "0 8px 24px rgba(0,0,0,0.12)"
+    : featured
+      ? "0 4px 16px rgba(0,0,0,0.08)"
+      : "0 1px 4px rgba(0,0,0,0.04)";
   const cardStyle = {
     borderRadius: 16,
     border: featured ? "2px solid #111" : `1.5px solid ${hov ? "#111" : "#E0E0E0"}`,
@@ -797,7 +836,7 @@ function TierCard({ t, go, featured, onSelectTier }) {
     cursor: "pointer",
     transition: "all .2s ease",
     transform: hov ? "translateY(-3px)" : "none",
-    boxShadow: hov ? "0 8px 24px rgba(0,0,0,0.12)" : featured ? "0 4px 16px rgba(0,0,0,0.08)" : "0 1px 4px rgba(0,0,0,0.04)",
+    boxShadow: `${baseShadow}, inset 0 -34px 60px -50px ${hov ? tierGlowStrong : tierGlowSoft}`,
     position: "relative",
     overflow: "hidden",
   };
@@ -809,56 +848,58 @@ function TierCard({ t, go, featured, onSelectTier }) {
   const tierArt = getTierCardImage(t?.id);
   const cardClasses = [hasGlare ? "ep-tier-glare" : "", "ep-tier-mobile-image-host", "ep-tier-mobile-image-host-landing"].filter(Boolean).join(" ");
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={handlePick}
-      className={cardClasses}
-      style={cardStyle}>
-      <div className="ep-tier-mobile-image-content ep-tier-mobile-image-content-landing">
-        {featured && (
-          <div style={{ position: "absolute", top: 16, right: 16, padding: "3px 10px", background: "#111", borderRadius: 50, fontSize: 9, fontWeight: 900, color: "#fff", letterSpacing: "0.1em" }}>POPULAR</div>
-        )}
+    <div className="ep-tier-card-shell">
+      <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={handlePick}
+        className={`${cardClasses} ep-tier-card-lively`}
+        style={cardStyle}>
+        <div className="ep-tier-mobile-image-content ep-tier-mobile-image-content-landing">
+          {featured && (
+            <div style={{ position: "absolute", top: 16, right: 16, padding: "3px 10px", background: "#111", borderRadius: 50, fontSize: 9, fontWeight: 900, color: "#fff", letterSpacing: "0.1em" }}>POPULAR</div>
+          )}
 
-        {/* Tier badge + icon row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: hov ? "#111" : t.lgt, border: hov ? "none" : `1.5px solid ${t.mid}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s" }}>
-            <I n="bolt" s={17} c={hov ? "#fff" : t.acc} />
-          </div>
-          <div>
-            <div style={{ fontSize: 9, fontWeight: 800, color: hov ? "#999" : t.acc, letterSpacing: "0.12em" }}>TIER {t.id}</div>
-            <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em", color: "#111" }}>{t.name}</div>
-          </div>
-        </div>
-
-        {/* Price */}
-        <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #F0F0F0" }}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "#111", letterSpacing: "-0.05em", lineHeight: 1 }}>KES {(t.deposit/1000).toFixed(0)}K</div>
-          <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>starting deposit - daily rewards by tier</div>
-        </div>
-
-        {/* Features */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-          {[[`${t.videos} required videos/day`, "play"], [`${t.bonus} bonus rewards/day`, "activity"], [`KES ${daily.toLocaleString()} earned daily`, "trendUp"], [`~${days} days to weekly target`, "star"]].map(([label, icon], i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "#444" }}>
-              <div style={{ width: 20, height: 20, borderRadius: 6, background: "#F5F5F5", border: "1px solid #E8E8E8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <I n={icon} s={11} c="#888" />
-              </div>
-              {label}
+          {/* Tier badge + icon row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: hov ? "#111" : t.lgt, border: hov ? "none" : `1.5px solid ${t.mid}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s" }}>
+              <I n="bolt" s={17} c={hov ? "#fff" : t.acc} />
             </div>
-          ))}
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 800, color: hov ? "#999" : t.acc, letterSpacing: "0.12em" }}>TIER {t.id}</div>
+              <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em", color: "#111" }}>{t.name}</div>
+            </div>
+          </div>
+
+          {/* Price */}
+          <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #F0F0F0" }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#111", letterSpacing: "-0.05em", lineHeight: 1 }}>KES {(t.deposit/1000).toFixed(0)}K</div>
+            <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>starting deposit - daily rewards by tier</div>
+          </div>
+
+          {/* Features */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            {[[`${t.videos} required videos/day`, "play"], [`${t.bonus} bonus rewards/day`, "activity"], [`KES ${daily.toLocaleString()} earned daily`, "trendUp"], [`~${days} days to weekly target`, "star"]].map(([label, icon], i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "#444" }}>
+                <div style={{ width: 20, height: 20, borderRadius: 6, background: "#F5F5F5", border: "1px solid #E8E8E8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <I n={icon} s={11} c="#888" />
+                </div>
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <button onClick={e => { e.stopPropagation(); handlePick(); }}
+            style={{ width: "100%", padding: "11px", background: hov ? "#111" : "#fff", color: hov ? "#fff" : "#111", border: "1.5px solid #111", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif", transition: "all .2s", letterSpacing: "-0.01em" }}>
+            Get Started
+          </button>
         </div>
 
-        <button onClick={e => { e.stopPropagation(); handlePick(); }}
-          style={{ width: "100%", padding: "11px", background: hov ? "#111" : "#fff", color: hov ? "#fff" : "#111", border: "1.5px solid #111", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif", transition: "all .2s", letterSpacing: "-0.01em" }}>
-          Get Started
-        </button>
+        <img
+          className="ep-tier-mobile-image ep-tier-mobile-image-landing"
+          src={tierArt.primary}
+          alt=""
+          referrerPolicy="no-referrer"
+          onError={(e) => setFallbackSrc(e, tierArt)}
+        />
       </div>
-
-      <img
-        className="ep-tier-mobile-image ep-tier-mobile-image-landing"
-        src={tierArt.primary}
-        alt=""
-        referrerPolicy="no-referrer"
-        onError={(e) => setFallbackSrc(e, tierArt)}
-      />
     </div>
   );
     }
@@ -1630,6 +1671,8 @@ const DASH_GUIDE_STEPS = [
   { title:"Settings", text:"In Settings you can update your profile and replay this full onboarding guide." }
 ];
 const DASH_GUIDE_SEEN_KEY = "ep:dashboard-guide-seen";
+const REFERRAL_GUIDE_SEEN_KEY = "ep:referrals-guide-seen";
+const guideSeenKeyForUser = (baseKey, userId) => `${baseKey}:${userId || "anon"}`;
 
 const LIVE_SYMBOLS = [
   { ch:"+", x:"6%",  y:"14%", size:26, dur:20, delay:-2 },
@@ -1661,6 +1704,8 @@ const LANDING_STICKER_TIER_IMAGE = imageSource("https://i.postimg.cc/7hXLPsRL/BG
 const DASH_BOT_GUIDE_IMAGE = imageSource("https://i.postimg.cc/RFKkTW1c/BG8_removebg_preview.png");
 const HOME_BALANCE_SIDE_IMAGE = imageSource("https://i.postimg.cc/fyLdGYVG/BG1_removebg_preview.png");
 const REFERRAL_WORK_BOT_IMAGE = imageSource("https://i.postimg.cc/jSrH5wm8/BG2_removebg_preview.png");
+const WALLET_EARNINGS_BOT_IMAGE = imageSource("https://i.postimg.cc/Vk0b4wT6/BG3_removebg_preview.png");
+const WALLET_DEPOSIT_BOT_IMAGE = imageSource("https://i.postimg.cc/rFPrSsf7/BG4_removebg_preview_(2).png");
 const setFallbackSrc = (e, srcObj) => {
   const fallback = srcObj?.fallback || "";
   if (!fallback) return;
@@ -2802,45 +2847,45 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
             </div>
           )}
           {depositRequired && !depositBannerDismissed && (
-            <div style={{ position:"relative", padding:"14px 16px", background:"#EEF2FF", border:"1px solid #C7D2FE", borderRadius:12, display:"grid", gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1fr) minmax(250px, 320px)", gap:12, alignItems:"stretch", marginBottom:16 }}>
+            <div style={{ position:"relative", background:"#000", border:"1px solid #171717", borderRadius:12, display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr) 108px" : "minmax(0,1fr) minmax(170px, 230px)", alignItems:"stretch", minHeight:isMobile ? 106 : 116, overflow:"hidden", marginBottom:16 }}>
               <button
                 type="button"
                 aria-label="Dismiss deposit notice"
                 onClick={dismissDepositBanner}
-                style={{ position:"absolute", top:8, right:8, width:24, height:24, borderRadius:"50%", border:"1px solid #C7D2FE", background:"#fff", color:"#4C51BF", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", zIndex:2 }}
+                style={{ position:"absolute", top:8, right:8, width:24, height:24, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.28)", background:"rgba(255,255,255,0.08)", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", zIndex:3 }}
               >
-                <I n="xmark" s={12} c="#4C51BF" />
+                <I n="xmark" s={12} c="#fff" />
               </button>
-              <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
-                <div style={{ width:34, height:34, borderRadius:10, background:"#4F46E5", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <I n="wallet" s={14} c="#fff"/>
+              <div style={{ padding:isMobile ? "10px 12px" : "12px 18px", display:"flex", flexDirection:"column", justifyContent:"center", gap:10, minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+                  <div style={{ width:34, height:34, borderRadius:10, background:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <I n="wallet" s={14} c="#111"/>
+                  </div>
+                  <div style={{ minWidth:0, paddingRight:20 }}>
+                    <div style={{ fontSize:13, fontWeight:900, color:"#fff" }}>Deposit needed to unlock wallet</div>
+                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.78)", marginTop:2 }}>Pay KES {t.deposit.toLocaleString()} once to unlock earnings and withdrawals.</div>
+                  </div>
                 </div>
-                <div style={{ minWidth:0, paddingRight:20 }}>
-                  <div style={{ fontSize:13, fontWeight:900, color:"#111" }}>Deposit needed to unlock wallet</div>
-                  <div style={{ fontSize:11, color:"#4C51BF", marginTop:2 }}>Pay KES {t.deposit.toLocaleString()} once to unlock earnings and withdrawals.</div>
-                </div>
-              </div>
-              <div style={{ border:"1px solid rgba(165,180,252,0.7)", background:"#fff", borderRadius:12, padding:isMobile ? "8px 10px" : "10px 12px", display:"grid", gridTemplateColumns:"1fr auto", alignItems:"center", gap:10, minHeight:isMobile ? 86 : 108 }}>
                 <button onClick={() => goDeposit(true)}
-                  style={{ padding:isMobile ? "8px 12px" : "9px 15px", borderRadius:10, border:"1px solid rgba(187,247,208,0.7)", background:"linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:"#ecfdf5", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap", boxShadow:"0 8px 18px rgba(22,163,74,0.28)", justifySelf:"start" }}>
+                  style={{ padding:isMobile ? "9px 13px" : "10px 16px", borderRadius:10, border:"1px solid rgba(187,247,208,0.7)", background:"linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:"#ecfdf5", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap", boxShadow:"0 8px 18px rgba(22,163,74,0.28)", alignSelf:"flex-start" }}>
                   Pay Now
                 </button>
-                <div style={{ width:isMobile ? 86 : 112, height:isMobile ? 70 : 92, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", justifySelf:"end" }}>
-                  <img
-                    src={LANDING_STICKER_BOTTOM_IMAGE.primary}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    onError={(e) => setFallbackSrc(e, LANDING_STICKER_BOTTOM_IMAGE)}
-                    style={{ width:"100%", height:"100%", objectFit:"contain", pointerEvents:"none", userSelect:"none" }}
-                  />
-                </div>
+              </div>
+              <div style={{ background:"#000", overflow:"hidden" }}>
+                <img
+                  src={LANDING_STICKER_BOTTOM_IMAGE.primary}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  onError={(e) => setFallbackSrc(e, LANDING_STICKER_BOTTOM_IMAGE)}
+                  style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center right", pointerEvents:"none", userSelect:"none" }}
+                />
               </div>
             </div>
           )}
           {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady}/>}
           {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} authUser={authUser} />}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
-          {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} />}
+          {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} authUserId={authId} />}
           {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx} onBalanceUpdate={applyBalance} hasDeposit={hasTierDeposit}/>}
           {tab==="settings"  && (
             <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
@@ -3380,7 +3425,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const reducePlanMotion = !isMobile;
   const showPlanVideo = Boolean(PLAN_BG_VIDEO && showOverviewMedia && !reducePlanMotion);
   const showPlanAmbient = showOverviewMedia && !reducePlanMotion;
-  const PlanActionsCard = () => (
+  const planActionsCard = (
     <div className="ep-frame-light" style={{ background:reducePlanMotion ? "linear-gradient(135deg,#F1F5F9 0%, #EFF6FF 52%, #F8FAFC 100%)" : "transparent", borderRadius:16, padding:"18px 20px", border:"1px solid #111", borderTopWidth:1, boxShadow:"0 6px 0 #111, 0 18px 30px rgba(0,0,0,0.22)", minHeight:230, position:"relative", overflow:"hidden" }}>
       {showPlanVideo && (
         <LazyVideo
@@ -3513,7 +3558,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   );
   const mobilePlan = (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <PlanActionsCard />
+      {planActionsCard}
 
       <div className="ep-card" style={{ borderRadius:14, padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
         <div style={{ width:34, height:34, borderRadius:10, background:canW?"#ECFDF5":"#FFF5F5", border:`1.5px solid ${canW?"#A7F3D0":"#FCA5A5"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -3769,7 +3814,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           Top 3 stat cards
        */}
       <div className="ep-desktop-only" style={{ marginBottom:18 }}>
-        <PlanActionsCard />
+        {planActionsCard}
       </div>
 
       <div className="ep-grid-4 ep-desktop-only" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:18 }}>
@@ -4798,7 +4843,7 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
         {/* How it works */}
         <div style={{ background:"#FAFAFA",borderRadius:12,padding:"16px 18px",border:cardBorder, position:"relative", overflow:"hidden" }}>
           <div style={{ fontSize:11,fontWeight:700,color:"#BBB",letterSpacing:"0.08em",marginBottom:14 }}>HOW REFERRALS WORK</div>
-          <div style={{ paddingRight:isMobile ? 0 : 130 }}>
+          <div style={{ paddingRight:isMobile ? 0 : "56%" }}>
             {[
               ["1","Friend signs up with your referral code",t.acc],
               ["2","They choose a tier and deposit",t.acc],
@@ -4816,7 +4861,9 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
             alt=""
             referrerPolicy="no-referrer"
             onError={(e) => setFallbackSrc(e, REFERRAL_WORK_BOT_IMAGE)}
-            style={{ position:"absolute", right:isMobile ? 8 : -6, bottom:isMobile ? -2 : -8, width:isMobile ? 86 : 138, height:isMobile ? 86 : 138, objectFit:"contain", pointerEvents:"none", userSelect:"none" }}
+            style={isMobile
+              ? { position:"absolute", right:6, bottom:-2, width:106, height:106, objectFit:"contain", pointerEvents:"none", userSelect:"none" }
+              : { position:"absolute", right:0, top:0, width:"54%", height:"100%", objectFit:"cover", objectPosition:"center right", pointerEvents:"none", userSelect:"none" }}
           />
         </div>
       </div>
@@ -4876,10 +4923,21 @@ function AnalyticsContent({ t, earn, refCode, isMobile }) {
     }
 
 /* "" REFERRALS CONTENT "" */
-function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
+function ReferralsContent({ t, earn, refData, refCode, isMobile, authUserId }) {
   const [filter, setFilter] = useState("all");
   const [guideStep, setGuideStep] = useState(0);
-  const [showGuide, setShowGuide] = useState(true);
+  const referralGuideKey = guideSeenKeyForUser(REFERRAL_GUIDE_SEEN_KEY, authUserId);
+  const [showGuide, setShowGuide] = useState(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const scopedSeen = localStorage.getItem(referralGuideKey) === "1";
+      const legacySeen = localStorage.getItem(REFERRAL_GUIDE_SEEN_KEY) === "1";
+      if (!scopedSeen && legacySeen) localStorage.setItem(referralGuideKey, "1");
+      return !(scopedSeen || legacySeen);
+    } catch (e) {
+      return true;
+    }
+  });
   const cardBorder = isMobile ? "1px solid #111" : "1.5px solid #111";
   const referralGuide = [
     { title:"Share Your Link", text:"Copy your referral link and send it on WhatsApp, Telegram, and social posts." },
@@ -4887,6 +4945,18 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
     { title:"Auto Bonus", text:"You get 10% bonus automatically on each direct referral deposit." },
     { title:"Upgrade Faster", text:"Use referral bonuses to move into higher tiers sooner and earn more daily." }
   ];
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const scopedSeen = localStorage.getItem(referralGuideKey) === "1";
+      const legacySeen = localStorage.getItem(REFERRAL_GUIDE_SEEN_KEY) === "1";
+      if (!scopedSeen && legacySeen) localStorage.setItem(referralGuideKey, "1");
+      setShowGuide(!(scopedSeen || legacySeen));
+    } catch (e) {
+      setShowGuide(true);
+    }
+    setGuideStep(0);
+  }, [referralGuideKey]);
 
   const fallbackRefs = [
     { name:"John Mwangi",    email:"j.mwangi@gmail.com",  tier:"Standard",     date:"Mar 8, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 3.2) },
@@ -4930,6 +5000,10 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile }) {
   const handleGuideNext = () => {
     if (guideStep === referralGuide.length - 1) {
       setShowGuide(false);
+      try {
+        localStorage.setItem(referralGuideKey, "1");
+        localStorage.setItem(guideSeenKeyForUser(DASH_GUIDE_SEEN_KEY, authUserId), "1");
+      } catch (e) {}
       return;
     }
     setGuideStep((prev) => Math.min(referralGuide.length - 1, prev + 1));
@@ -5308,17 +5382,25 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         </div>
       )}
       {hasDeposit === false && (
-        <div style={{ padding:"12px 16px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFF7ED",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap" }}>
-          <div style={{ display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#9A3412",fontWeight:700 }}>
-            <I n="lock" s={13} c="#EA580C"/> Deposit KES {t.deposit.toLocaleString()} once to unlock withdrawals.
+        <div style={{ background:"#000", border:"1px solid #171717", borderRadius:12, display:"grid", gridTemplateColumns:"minmax(0,1fr) clamp(104px,22vw,180px)", alignItems:"stretch", minHeight:108, overflow:"hidden" }}>
+          <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", justifyContent:"center", gap:10, minWidth:0 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#F8FAFC",fontWeight:800 }}>
+              <I n="lock" s={13} c="#22C55E"/> Deposit KES {t.deposit.toLocaleString()} once to unlock withdrawals.
+            </div>
+            <button onClick={() => submitDeposit(depMethod)} disabled={depLoading || !canDeposit}
+              style={{ padding:"8px 12px", borderRadius:10, border:(depLoading || !canDeposit) ? "1px solid rgba(148,163,184,0.5)" : "1px solid rgba(187,247,208,0.7)", background:(depLoading || !canDeposit) ? "rgba(30,41,59,0.6)" : "linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:(depLoading || !canDeposit) ? "#94A3B8" : "#ECFDF5", fontSize:11, fontWeight:900, cursor:(depLoading || !canDeposit) ? "not-allowed" : "pointer", fontFamily:"Geist,sans-serif", alignSelf:"flex-start", boxShadow:(depLoading || !canDeposit) ? "none" : "0 8px 16px rgba(22,163,74,0.28)" }}>
+              {depLoading ? "Opening..." : "Deposit Now"}
+            </button>
           </div>
-          <img
-            src={LANDING_STICKER_BOTTOM_IMAGE.primary}
-            alt=""
-            referrerPolicy="no-referrer"
-            onError={(e) => setFallbackSrc(e, LANDING_STICKER_BOTTOM_IMAGE)}
-            style={{ width:56, height:56, objectFit:"contain", pointerEvents:"none", userSelect:"none" }}
-          />
+          <div style={{ background:"#000", overflow:"hidden" }}>
+            <img
+              src={WALLET_DEPOSIT_BOT_IMAGE.primary}
+              alt=""
+              referrerPolicy="no-referrer"
+              onError={(e) => setFallbackSrc(e, WALLET_DEPOSIT_BOT_IMAGE)}
+              style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center right", pointerEvents:"none", userSelect:"none" }}
+            />
+          </div>
         </div>
       )}
       {wdError && (
@@ -5464,9 +5546,20 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
               {can ? "Payout window open" : "Payouts next Tue/Fri"}
             </div>
           </div>
-          <div style={{ marginBottom:14,padding:"12px 14px",borderRadius:12,background:"#0F172A",color:"#fff" }}>
-            <div style={{ fontSize:10,opacity:0.6,letterSpacing:"0.18em",textTransform:"uppercase",fontWeight:700 }}>Available Earnings</div>
-            <div style={{ fontSize:28,fontWeight:900,letterSpacing:"-0.03em",marginTop:4 }}>KES {earn.toLocaleString()}</div>
+          <div style={{ marginBottom:14,borderRadius:12,background:"#000",border:"1px solid #171717",color:"#fff",display:"grid",gridTemplateColumns:"minmax(0,1fr) clamp(96px,20vw,150px)",alignItems:"stretch",overflow:"hidden",minHeight:96 }}>
+            <div style={{ padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0 }}>
+              <div style={{ fontSize:10,opacity:0.6,letterSpacing:"0.18em",textTransform:"uppercase",fontWeight:700 }}>Available Earnings</div>
+              <div style={{ fontSize:28,fontWeight:900,letterSpacing:"-0.03em",marginTop:4 }}>KES {earn.toLocaleString()}</div>
+            </div>
+            <div style={{ background:"#000",overflow:"hidden" }}>
+              <img
+                src={WALLET_EARNINGS_BOT_IMAGE.primary}
+                alt=""
+                referrerPolicy="no-referrer"
+                onError={(e) => setFallbackSrc(e, WALLET_EARNINGS_BOT_IMAGE)}
+                style={{ width:"100%",height:"100%",objectFit:"cover",objectPosition:"center right",pointerEvents:"none",userSelect:"none" }}
+              />
+            </div>
           </div>
           <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6,letterSpacing:"0.08em" }}>Amount</label>
           <input type="number" value={wdAmt} onChange={e=>setWdAmt(e.target.value)} placeholder="Enter amount..." style={{ width:"100%",padding:"11px 12px",background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:14,color:"#0F172A",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:12 }}/>
@@ -6378,14 +6471,28 @@ export default function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideTyped, setGuideTyped] = useState("");
-  const [guideSeen, setGuideSeen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try { return localStorage.getItem(DASH_GUIDE_SEEN_KEY) === "1"; } catch (e) { return false; }
-  });
+  const [guideSeen, setGuideSeen] = useState(false);
+  const dashboardGuideKey = guideSeenKeyForUser(DASH_GUIDE_SEEN_KEY, session?.user?.id);
+  const referralGuideKey = guideSeenKeyForUser(REFERRAL_GUIDE_SEEN_KEY, session?.user?.id);
   const markGuideSeen = useCallback(() => {
     setGuideSeen(true);
-    try { localStorage.setItem(DASH_GUIDE_SEEN_KEY, "1"); } catch (e) {}
-  }, []);
+    try {
+      localStorage.setItem(dashboardGuideKey, "1");
+      localStorage.setItem(referralGuideKey, "1");
+    } catch (e) {}
+  }, [dashboardGuideKey, referralGuideKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const scopedSeen = localStorage.getItem(dashboardGuideKey) === "1";
+      const legacySeen = localStorage.getItem(DASH_GUIDE_SEEN_KEY) === "1";
+      if (!scopedSeen && legacySeen) localStorage.setItem(dashboardGuideKey, "1");
+      setGuideSeen(scopedSeen || legacySeen);
+    } catch (e) {
+      setGuideSeen(false);
+    }
+  }, [dashboardGuideKey]);
 
   useEffect(() => {
     const url = window.location.href;
@@ -6697,10 +6804,9 @@ export default function App() {
     const id = setTimeout(() => {
       setGuideStep(0);
       setGuideOpen(true);
-      markGuideSeen();
     }, 1100);
     return () => clearTimeout(id);
-  }, [route, isAdmin, guideSeen, markGuideSeen]);
+  }, [route, isAdmin, guideSeen]);
   useEffect(() => {
     if (!guideOpen) { setGuideTyped(""); return; }
     const message = DASH_GUIDE_STEPS[guideStep]?.text || "";
@@ -6716,7 +6822,9 @@ export default function App() {
   const openGuideTour = () => {
     setGuideStep(0);
     setGuideOpen(true);
-    markGuideSeen();
+    try {
+      localStorage.removeItem(referralGuideKey);
+    } catch (e) {}
   };
   const globalNavItems = useMemo(() => {
     const tierNavItems = TIERS.map((tierItem, tierIndex) => ({
@@ -7081,7 +7189,7 @@ export default function App() {
               </button>
             ) : (
               <button
-                onClick={() => setGuideOpen(false)}
+                onClick={() => { markGuideSeen(); setGuideOpen(false); }}
                 style={{ padding:"7px 12px", borderRadius:999, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:11, fontWeight:900, cursor:"pointer" }}
               >
                 Done
