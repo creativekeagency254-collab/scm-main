@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 
 /* "" FONTS "" */
 const Fonts = () => (
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 );
 
 /* "" CSS KEYFRAMES injected once "" */
@@ -38,6 +38,9 @@ const GlobalStyles = () => {
       @keyframes ep-ambient-alt { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-10px,0) scale(1.04);} }
       @keyframes ep-upgrade-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.9;} 25%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
       @keyframes ep-tier-glare { 0%{transform:translateX(-120%);opacity:0;} 12%{opacity:.85;} 28%{transform:translateX(220%);opacity:0;} 100%{transform:translateX(220%);opacity:0;} }
+      @keyframes ep-neon-drift { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(16px,-18px,0) scale(1.04);} }
+      @keyframes ep-neon-pulse { 0%,100%{box-shadow:0 0 0 rgba(34,197,94,0);} 50%{box-shadow:0 0 24px rgba(34,197,94,0.45);} }
+      @keyframes ep-border-pop { 0%,100%{border-color:rgba(52,211,153,0.34);} 50%{border-color:rgba(132,204,22,0.86);} }
       .ep-hover-lift:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09) !important; }
       .ep-hover-lift { transition: transform .2s ease, box-shadow .2s ease !important; }
       .ep-shimmer { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
@@ -54,6 +57,9 @@ const GlobalStyles = () => {
       .ep-frame-dark { box-shadow: 0 0 0 1px #111, 0 8px 18px rgba(0,0,0,0.12); }
       .ep-frame-light { box-shadow: 0 0 0 1px #fff, 0 8px 18px rgba(0,0,0,0.08); }
       .ep-help-fab { position: fixed; }
+      .ep-casino-glow { animation:ep-neon-pulse 3s ease-in-out infinite; }
+      .ep-casino-border { animation:ep-border-pop 2.4s ease-in-out infinite; }
+      .ep-casino-pop { animation:scaleIn .22s ease, ep-neon-pulse 3.4s ease-in-out infinite; }
       * { box-sizing:border-box; margin:0; padding:0; }
       ::-webkit-scrollbar { width:5px; height:5px; }
       ::-webkit-scrollbar-track { background:transparent; }
@@ -130,7 +136,7 @@ const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 const PAYMENTS_MODE = String(import.meta.env.VITE_PAYMENTS_MODE || "live").toLowerCase();
 const MANUAL_PAYMENTS = PAYMENTS_MODE === "manual";
-const WITHDRAWALS_MODE = String(import.meta.env.VITE_WITHDRAWALS_MODE || PAYMENTS_MODE || "manual").toLowerCase();
+const WITHDRAWALS_MODE = String(import.meta.env.VITE_WITHDRAWALS_MODE || PAYMENTS_MODE || "auto").toLowerCase();
 const MANUAL_WITHDRAWALS = WITHDRAWALS_MODE !== "auto";
 const TIER1_MOBILE_MIN = Number(import.meta.env.VITE_TIER1_MOBILE_MIN || 100);
 const TIER1_MOBILE_MAX = Number(import.meta.env.VITE_TIER1_MOBILE_MAX || 1000);
@@ -178,7 +184,7 @@ const formatDepositError = (msg) => {
   if (!raw) return "";
   const lower = raw.toLowerCase();
   if (lower.includes("amount") && lower.includes("limit")) {
-    return "Payment limit reached for this account. Ask Pesapal to raise your limit or try a lower tier amount.";
+    return "Payment limit reached for this account. Ask Kora support to raise your limit or try a lower tier amount.";
   }
   if (lower.includes("ipn")) {
     return "Payment gateway is not fully configured yet. Please contact support.";
@@ -486,8 +492,8 @@ function PaymentLogo({ name }) {
       return <Wordmark text="Stripe" width={70} />;
     case "Alipay":
       return <Wordmark text="Alipay" width={70} />;
-    case "PesaPal":
-      return <Wordmark text="PesaPal" width={90} />;
+    case "Kora":
+      return <Wordmark text="Kora" width={90} />;
     case "WeChat Pay":
       return (
         <svg viewBox="0 0 100 24" height="20" role="img" aria-label="WeChat Pay" style={{ display:"block" }}>
@@ -818,6 +824,7 @@ function Donut({ pct, acc, size = 80, thickness = 8 }) {
 function Landing({ go }) {
   const [scrollPx, setScrollPx] = useState(0);
   const [heroVisible, setHeroVisible] = useState(false);
+  const [heroBotSrc, setHeroBotSrc] = useState(HOME_HERO_BOT_IMAGE);
   const handleTierPick = (tierId) => {
     storeTierIntent(tierId);
     go("signup");
@@ -840,79 +847,81 @@ function Landing({ go }) {
   const anim = (delay = 0) => ({ animation: `fadeUp .55s ease both`, animationDelay: `${delay}ms`, opacity: heroVisible ? 1 : 0 });
 
   return (
-    <div style={{ fontFamily: "Geist,sans-serif", background: "#fff", color: "#111", minHeight: "100vh" }}>
+    <div style={{ fontFamily: "Manrope, Sora, Geist, sans-serif", background: "radial-gradient(130% 90% at 10% -5%, #14532d 0%, #08130f 38%, #05070a 100%)", color: "#F1F5F9", minHeight: "100vh", position:"relative", overflowX:"hidden" }}>
+      <div style={{ position:"absolute", top:-120, left:-110, width:300, height:300, borderRadius:"50%", background:"radial-gradient(circle, rgba(132,204,22,0.32) 0%, rgba(132,204,22,0) 72%)", filter:"blur(2px)", animation:"ep-neon-drift 14s ease-in-out infinite", pointerEvents:"none" }} />
+      <div style={{ position:"absolute", right:-160, top:180, width:380, height:380, borderRadius:"50%", background:"radial-gradient(circle, rgba(16,185,129,0.22) 0%, rgba(16,185,129,0) 72%)", animation:"ep-neon-drift 17s ease-in-out infinite reverse", pointerEvents:"none" }} />
 
       {/* "" NAV "" */}
-      <nav style={{ position: "sticky", top: 0, zIndex: 90, background: "rgba(255,255,255,0.96)", backdropFilter: "blur(16px)", borderBottom: "1px solid #E8E8E8", padding: "0 5vw", display: "flex", alignItems: "center", height: 60, gap: 32 }}>
+      <nav style={{ position: "sticky", top: 0, zIndex: 90, background: "rgba(5,11,8,0.84)", backdropFilter: "blur(18px)", borderBottom: "1px solid rgba(132,204,22,0.25)", boxShadow:"0 14px 24px rgba(0,0,0,0.3)", padding: "0 5vw", display: "flex", alignItems: "center", height: 64, gap: 32 }}>
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", flexShrink: 0 }} onClick={() => go("landing")}>
           <BrandMark size={32} />
-          <span style={{ fontWeight: 900, fontSize: 16, letterSpacing: "-0.04em", color: "#111" }}>EdisonPay</span>
+          <span style={{ fontWeight: 400, fontSize: 20, letterSpacing: "0.03em", color: "#bef264", fontFamily:"Bungee, Sora, sans-serif", textShadow:"0 0 18px rgba(190,242,100,0.45)" }}>EdisonPay</span>
         </div>
         {/* Divider */}
-        <div style={{ width: 1, height: 20, background: "#E8E8E8" }} />
+        <div style={{ width: 1, height: 20, background: "rgba(132,204,22,0.26)" }} />
         {/* Links */}
         <div className="ep-nav-links" style={{ display: "flex", gap: 4, flex: 1 }}>
           {[["Features","play"],["Tiers","star"],["How It Works","activity"],["Pricing","wallet"]].map(([l, ic]) => (
-            <button key={l} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "transparent", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#666", cursor: "pointer", fontFamily: "Geist,sans-serif", transition: "all .12s" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#F5F5F5"; e.currentTarget.style.color = "#111"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#666"; }}>
+            <button key={l} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "transparent", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, color: "rgba(226,232,240,0.72)", cursor: "pointer", fontFamily: "Sora, Geist, sans-serif", transition: "all .12s" }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(132,204,22,0.14)"; e.currentTarget.style.color = "#d9f99d"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(226,232,240,0.72)"; }}>
               <I n={ic} s={12} c="currentColor" />{l}
             </button>
           ))}
         </div>
         {/* Right actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "#F7F7F7", border: "1px solid #E8E8E8", borderRadius: 8, fontSize: 12, color: "#888", fontWeight: 600 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22C55E", animation: "pulse 2s infinite" }} />
+          <div className="ep-casino-glow" style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(15,23,42,0.72)", border: "1px solid rgba(132,204,22,0.36)", borderRadius: 999, fontSize: 11, color: "#bbf7d0", fontWeight: 700, letterSpacing:"0.03em" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", animation: "pulse 2s infinite" }} />
             Live platform
           </div>
-          <button onClick={() => go("login")} style={{ padding: "8px 18px", background: "transparent", border: "1.5px solid #E0E0E0", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#111", fontFamily: "Geist,sans-serif", transition: "border-color .15s" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "#111"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "#E0E0E0"}>
+          <button onClick={() => go("login")} style={{ padding: "8px 18px", background: "rgba(255,255,255,0.04)", border: "1.2px solid rgba(148,163,184,0.45)", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#e2e8f0", fontFamily: "Sora, Geist, sans-serif", transition: "border-color .15s" }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = "#bef264"}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(148,163,184,0.45)"}>
             Sign In
           </button>
-          <button onClick={() => go("signup")} style={{ padding: "8px 18px", background: "#111", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#fff", fontFamily: "Geist,sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
-            Get Started <I n="chevR" s={12} c="#fff" />
+          <button onClick={() => go("signup")} style={{ padding: "8px 18px", background: "linear-gradient(135deg,#bef264 0%, #84cc16 42%, #22c55e 100%)", border: "1px solid rgba(236,252,203,0.45)", borderRadius: 999, fontSize: 13, fontWeight: 800, cursor: "pointer", color: "#052e16", fontFamily: "Sora, Geist, sans-serif", display: "flex", alignItems: "center", gap: 6, boxShadow:"0 8px 18px rgba(132,204,22,0.35)" }}>
+            Get Started <I n="chevR" s={12} c="#052e16" />
           </button>
         </div>
       </nav>
 
       {/* "" HERO - split layout "" */}
-      <section className="ep-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "calc(100vh - 98px)", maxWidth: 1300, margin: "0 auto", padding: "0 5vw" }}>
+      <section className="ep-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "calc(100vh - 98px)", maxWidth: 1300, margin: "0 auto", padding: "0 5vw", position:"relative", zIndex:2 }}>
 
         {/* LEFT */}
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", paddingRight: "6vw", paddingTop: 40, paddingBottom: 40 }}>
           {/* Social proof */}
-          <div style={{ ...anim(0), display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 32, width: "fit-content" }}>
+          <div style={{ ...anim(0), display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 32, width: "fit-content", padding:"8px 14px", borderRadius:999, background:"rgba(132,204,22,0.12)", border:"1px solid rgba(163,230,53,0.4)" }}>
             <div style={{ display: "flex", gap: -3 }}>
               {["#FFD700","#FFD700","#FFD700","#FFD700","#FFD700"].map((c,i) => <I key={i} n="star" s={14} c={c} />)}
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>4.9 - Trusted by 1,000+ earners</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#d9f99d" }}>4.9 - Trusted by 1,000+ earners</span>
           </div>
 
           {/* Headline */}
-          <h1 style={{ ...anim(80), fontSize: "clamp(40px,4.8vw,66px)", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-0.04em", color: "#111", marginBottom: 24 }}>
+          <h1 style={{ ...anim(80), fontSize: "clamp(40px,4.8vw,66px)", fontWeight: 800, lineHeight: 1.02, letterSpacing: "-0.03em", color: "#ffffff", marginBottom: 24, fontFamily:"Bungee, Sora, sans-serif", textShadow:"0 0 18px rgba(132,204,22,0.35)" }}>
             Earn KES 50<br />
-            <span style={{ fontFamily: "Instrument Serif,serif", fontStyle: "italic", fontWeight: 400 }}>Per Video.</span><br />
+            <span style={{ fontFamily: "Instrument Serif,serif", fontStyle: "italic", fontWeight: 400, color:"#bef264" }}>Per Video.</span><br />
             Daily.
           </h1>
 
-          <p style={{ ...anim(160), fontSize: 17, color: "#666", lineHeight: 1.7, maxWidth: 420, marginBottom: 36 }}>
+          <p style={{ ...anim(160), fontSize: 17, color: "rgba(226,232,240,0.84)", lineHeight: 1.7, maxWidth: 440, marginBottom: 36 }}>
             Watch short videos, refer friends, and earn tiered daily rewards - with 5 tiers built for every budget.
           </p>
 
           <div style={{ ...anim(240), display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 44 }}>
-            <button onClick={() => go("signup")} style={{ padding: "14px 30px", background: "#111", color: "#fff", border: "none", borderRadius: 50, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Start Earning Free</button>
-            <button onClick={() => go("login")} style={{ padding: "14px 30px", background: "#fff", color: "#111", border: "1.5px solid #E5E5E5", borderRadius: 50, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "Geist,sans-serif" }}>Sign In</button>
+            <button className="ep-casino-border" onClick={() => go("signup")} style={{ padding: "14px 30px", background: "linear-gradient(135deg,#facc15 0%, #bef264 36%, #22c55e 100%)", color: "#052e16", border: "2px solid rgba(132,204,22,0.45)", borderRadius: 999, fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "Sora, Geist, sans-serif", boxShadow:"0 12px 28px rgba(132,204,22,0.35)" }}>Start Earning Free</button>
+            <button onClick={() => go("login")} style={{ padding: "14px 30px", background: "rgba(15,23,42,0.5)", color: "#e2e8f0", border: "1.5px solid rgba(148,163,184,0.5)", borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "Sora, Geist, sans-serif" }}>Sign In</button>
           </div>
 
           {/* 3 micro stats */}
-          <div style={{ ...anim(320), display: "flex", gap: 32, paddingTop: 32, borderTop: "1px solid #EBEBEB" }}>
+          <div style={{ ...anim(320), display: "flex", gap: 32, paddingTop: 32, borderTop: "1px solid rgba(132,204,22,0.3)" }}>
             {[["KES 50", "per required video"], ["Daily", "tiered rewards"], ["Tue & Fri", "payouts"]].map(([v, l], i) => (
               <div key={i}>
-                <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.04em", color: "#111" }}>{v}</div>
-                <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>{l}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.04em", color: "#facc15" }}>{v}</div>
+                <div style={{ fontSize: 12, color: "rgba(203,213,225,0.78)", marginTop: 2 }}>{l}</div>
               </div>
             ))}
           </div>
@@ -921,7 +930,7 @@ function Landing({ go }) {
         {/* RIGHT - visual panel */}
         <div style={{ ...anim(120), position: "relative", display: "flex", alignItems: "stretch", paddingTop: 28, paddingBottom: 28 }}>
           {/* Main panel - dark gradient background simulating image */}
-          <div style={{ flex: 1, borderRadius: 24, background: "#0B1320", position: "relative", overflow: "hidden", minHeight: 480 }}>
+          <div className="ep-casino-border" style={{ flex: 1, borderRadius: 24, background: "#0B1320", position: "relative", overflow: "hidden", minHeight: 480, border:"1px solid rgba(132,204,22,0.36)", boxShadow:"0 18px 40px rgba(3,7,18,0.7), 0 0 36px rgba(74,222,128,0.22)" }}>
             {HOME_BALANCE_VIDEO && (
               <LazyVideo
                 src={HOME_BALANCE_VIDEO}
@@ -934,73 +943,94 @@ function Landing({ go }) {
                 style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.55, filter:"saturate(1.05) contrast(1.05)", zIndex:0 }}
               />
             )}
-            <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(13,27,54,0.75) 0%, rgba(13,42,63,0.68) 40%, rgba(10,61,46,0.72) 100%)", zIndex:1 }} />
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(8,20,15,0.65) 0%, rgba(10,28,37,0.58) 48%, rgba(22,63,24,0.72) 100%)", zIndex:1 }} />
             <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none", zIndex:1 }} />
 
             {/* Central graphic - big earnings number */}
             <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-55%)", textAlign: "center", zIndex: 2 }}>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", marginBottom: 12, fontWeight: 500 }}>YOUR BALANCE TODAY</div>
-              <div style={{ fontSize: 64, fontWeight: 900, color: "#fff", letterSpacing: "-0.04em", lineHeight: 1, animation: "fadeIn .8s ease .4s both" }}>
+              <div style={{ fontSize: 13, color: "rgba(236,253,245,0.7)", letterSpacing: "0.18em", marginBottom: 12, fontWeight: 700 }}>YOUR BALANCE TODAY</div>
+              <div style={{ fontSize: 64, fontWeight: 900, color: "#f0fdf4", letterSpacing: "-0.04em", lineHeight: 1, animation: "fadeIn .8s ease .4s both", textShadow:"0 0 22px rgba(132,204,22,0.38)" }}>
                 KES 47,200
               </div>
-              <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 8 }}>+KES 2,000 from today's videos</div>
+              <div style={{ fontSize: 14, color: "rgba(187,247,208,0.88)", marginTop: 8 }}>+KES 2,000 from today's videos</div>
               {/* Progress bar */}
               <div style={{ marginTop: 20, width: 240, margin: "20px auto 0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>
                   <span>Progress to weekly target</span><span>47%</span>
                 </div>
                 <div style={{ height: 6, background: "rgba(255,255,255,0.1)", borderRadius: 99, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: "47%", background: "#0066FF", borderRadius: 99, animation: "fadeIn 1.4s ease .6s both" }} />
+                  <div style={{ height: "100%", width: "47%", background: "linear-gradient(90deg,#facc15 0%, #4ade80 100%)", borderRadius: 99, animation: "fadeIn 1.4s ease .6s both" }} />
                 </div>
               </div>
             </div>
 
+            {heroBotSrc && (
+              <div style={{ position:"absolute", top:24, right:20, width:"clamp(170px, 33%, 250px)", borderRadius:24, overflow:"hidden", border:"1px solid rgba(190,242,100,0.52)", boxShadow:"0 14px 28px rgba(2,6,23,0.58), 0 0 22px rgba(132,204,22,0.3)", zIndex:2 }}>
+                <img
+                  src={heroBotSrc}
+                  alt="EdisonPay reward bot"
+                  onError={() => {
+                    if (HOME_HERO_BOT_IMAGE_FALLBACK && heroBotSrc !== HOME_HERO_BOT_IMAGE_FALLBACK) {
+                      setHeroBotSrc(HOME_HERO_BOT_IMAGE_FALLBACK);
+                    } else {
+                      setHeroBotSrc("");
+                    }
+                  }}
+                  style={{ display:"block", width:"100%", aspectRatio:"1 / 1", objectFit:"cover" }}
+                />
+                <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(2,6,23,0.12) 0%, rgba(2,6,23,0.38) 100%)", pointerEvents:"none" }} />
+                <div style={{ position:"absolute", left:12, top:12, padding:"4px 9px", borderRadius:999, background:"rgba(2,6,23,0.72)", border:"1px solid rgba(190,242,100,0.5)", fontSize:10, fontWeight:800, letterSpacing:"0.08em", color:"#d9f99d" }}>
+                  HOT BONUS
+                </div>
+              </div>
+            )}
+
             {/* Floating card 1 - earnings stat (top right) */}
-            <div style={{ position: "absolute", top: 28, right: 24, background: "#fff", borderRadius: 14, padding: "14px 16px", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", animation: "floatA 4s ease-in-out infinite", minWidth: 190, zIndex:2 }}>
+            <div style={{ position: "absolute", top: heroBotSrc ? 238 : 28, right: 24, background: "rgba(6,18,15,0.9)", borderRadius: 14, padding: "14px 16px", border:"1px solid rgba(74,222,128,0.34)", boxShadow: "0 8px 32px rgba(0,0,0,0.35)", animation: "floatA 4s ease-in-out infinite", minWidth: 190, zIndex:2 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#111", letterSpacing: "0.03em" }}>Daily Earnings</span>
-                <span style={{ fontSize: 9, color: "#999", fontWeight: 500 }}>Live</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#ecfdf5", letterSpacing: "0.03em" }}>Daily Earnings</span>
+                <span style={{ fontSize: 9, color: "#86efac", fontWeight: 700 }}>Live</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1, background: "#0066FF", borderRadius: 8, height: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ flex: 1, background: "linear-gradient(180deg,#16a34a 0%, #65a30d 100%)", borderRadius: 8, height: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
                   <div style={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>82%</div>
                   <div style={{ fontSize: 9, color: "rgba(255,255,255,0.7)", marginTop: 2 }}>Videos</div>
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ flex: 1, background: "#00C896", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ flex: 1, background: "#f59e0b", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>23%</div>
                   </div>
-                  <div style={{ flex: 1, background: "#00C896AA", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ flex: 1, background: "#facc15bb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>76%</div>
                   </div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                <span style={{ fontSize: 10, color: "#888" }}>- Bonus</span>
-                <span style={{ fontSize: 10, color: "#888" }}>- Referrals</span>
+                <span style={{ fontSize: 10, color: "rgba(226,232,240,0.62)" }}>- Bonus</span>
+                <span style={{ fontSize: 10, color: "rgba(226,232,240,0.62)" }}>- Referrals</span>
               </div>
             </div>
 
             {/* Floating card 2 - chat bubble (bottom left) */}
-            <div style={{ position: "absolute", bottom: 60, left: 24, background: "#fff", borderRadius: 50, padding: "12px 18px 12px 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.16)", display: "flex", alignItems: "center", gap: 10, animation: "floatB 5s ease-in-out infinite", zIndex:2 }}>
-              <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#0066FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ position: "absolute", bottom: 60, left: 24, background: "rgba(6,18,15,0.92)", borderRadius: 50, padding: "12px 18px 12px 14px", border:"1px solid rgba(74,222,128,0.36)", boxShadow: "0 8px 24px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", gap: 10, animation: "floatB 5s ease-in-out infinite", zIndex:2 }}>
+              <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <I n="check" s={14} c="#fff" />
               </div>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#111", whiteSpace: "nowrap" }}>Withdrawal approved!</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#ecfdf5", whiteSpace: "nowrap" }}>Withdrawal approved!</span>
             </div>
 
             {/* Floating card 3 - tier badge (bottom right) */}
-            <div style={{ position: "absolute", bottom: 28, right: 24, background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, animation: "floatA 6s ease-in-out infinite .5s", zIndex:2 }}>
-              <I n="bolt" s={14} c="#0066FF" />
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", letterSpacing: "0.04em" }}>Unlock 5 Earning Tiers</span>
-              <I n="chevR" s={14} c="rgba(255,255,255,0.5)" />
+            <div style={{ position: "absolute", bottom: 28, right: 24, background: "rgba(132,204,22,0.18)", backdropFilter: "blur(12px)", border: "1px solid rgba(190,242,100,0.5)", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, animation: "floatA 6s ease-in-out infinite .5s", zIndex:2 }}>
+              <I n="bolt" s={14} c="#facc15" />
+              <span style={{ fontSize: 12, fontWeight: 800, color: "#f7fee7", letterSpacing: "0.06em" }}>Unlock 5 Earning Tiers</span>
+              <I n="chevR" s={14} c="rgba(247,254,231,0.7)" />
             </div>
           </div>
         </div>
       </section>
 
       {/* "" SCROLLING LOGOS "" */}
-      <div style={{ borderTop: "1px solid #EBEBEB", borderBottom: "1px solid #EBEBEB", background: "#FAFAFA", padding: "16px 0", overflow: "hidden" }}>
+      <div style={{ borderTop: "1px solid rgba(132,204,22,0.22)", borderBottom: "1px solid rgba(132,204,22,0.22)", background: "rgba(2,6,23,0.66)", padding: "16px 0", overflow: "hidden" }}>
         <div style={{ display: "flex", gap: 48, width: "max-content", animation: "ticker 22s linear infinite", alignItems:"center" }}>
           {[...payments, ...payments].map((p, i) => (
             <div key={i} style={{ minWidth: 96, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2029,9 +2059,11 @@ const cdnUrl = (path) => (CDN_BASE ? `${CDN_BASE}${path.startsWith("/") ? path :
 const PLAN_BG_VIDEO = cdnUrl("/plan-actions.mp4");
 const HOME_BALANCE_VIDEO = cdnUrl("/home-balance.mp4");
 const ACCOUNT_GOAL_VIDEO = cdnUrl("/account-goal.mp4");
+const HOME_HERO_BOT_IMAGE = import.meta.env.VITE_HOME_HERO_BOT_IMAGE || cdnUrl("/hero-casino-bot.png");
 const PLAN_BG_VIDEO_FALLBACK = CDN_BASE ? "/plan-actions.mp4" : "";
 const HOME_BALANCE_VIDEO_FALLBACK = CDN_BASE ? "/home-balance.mp4" : "";
 const ACCOUNT_GOAL_VIDEO_FALLBACK = CDN_BASE ? "/account-goal.mp4" : "";
+const HOME_HERO_BOT_IMAGE_FALLBACK = CDN_BASE ? "/hero-casino-bot.png" : "";
 const LIVE_COLORS_LIGHT = [
   "rgba(59,130,246,0.16)",
   "rgba(99,102,241,0.14)",
@@ -4458,16 +4490,37 @@ function VideosContent({ t, onEarning, authUser }) {
     ? Math.round(((MANUAL_SECONDS - timer) / MANUAL_SECONDS) * 100)
     : (watched >= MANUAL_COUNT ? 100 : 0);
   const manualUnlockPct = Math.min(100, Math.round((watched / MANUAL_COUNT) * 100));
+  const casinoAccent = "#a3e635";
+  const casinoPanel = {
+    background:"linear-gradient(160deg, rgba(9,14,28,0.96) 0%, rgba(4,10,22,0.96) 46%, rgba(10,24,12,0.94) 100%)",
+    border:"1px solid rgba(163,230,53,0.34)",
+    boxShadow:"0 16px 36px rgba(2,6,23,0.62), 0 0 24px rgba(34,197,94,0.18)"
+  };
+  const casinoCard = {
+    background:"linear-gradient(145deg, rgba(12,20,35,0.96) 0%, rgba(10,15,28,0.96) 100%)",
+    border:"1px solid rgba(148,163,184,0.35)",
+    boxShadow:"0 8px 18px rgba(2,6,23,0.42)"
+  };
 
   return (
-    <div style={{ display:"flex",flexDirection:"column",gap:20 }}>
+    <div style={{ display:"flex",flexDirection:"column",gap:20, borderRadius:18, padding:16, background:"radial-gradient(120% 90% at 0% 0%, rgba(34,197,94,0.18) 0%, rgba(2,6,23,0.92) 38%, rgba(1,4,14,0.95) 100%)", border:"1px solid rgba(132,204,22,0.25)" }}>
+      <div style={{ borderRadius:14, padding:"14px 16px", background:"linear-gradient(120deg, rgba(163,230,53,0.24) 0%, rgba(250,204,21,0.2) 45%, rgba(16,185,129,0.22) 100%)", border:"1px solid rgba(190,242,100,0.4)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.13em", color:"#ecfccb" }}>REWARD STUDIO</div>
+          <div style={{ marginTop:5, fontSize:20, fontWeight:900, color:"#f8fafc", fontFamily:"Bungee, Sora, sans-serif", letterSpacing:"0.02em" }}>Daily Reward Command Deck</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px", borderRadius:999, background:"rgba(2,6,23,0.65)", border:"1px solid rgba(190,242,100,0.44)", color:"#d9f99d", fontSize:11, fontWeight:800 }}>
+          <div style={{ width:7, height:7, borderRadius:"50%", background:"#4ade80", animation:"pulse 1.2s infinite" }} />
+          REWARDS LIVE
+        </div>
+      </div>
 
       {showPlayer !== null && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-          <div style={{ width:"100%", maxWidth:820, background:"#fff", borderRadius:16, overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 20px 50px rgba(0,0,0,0.35)" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:"#0F172A", color:"#fff" }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(2,6,23,0.82)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div style={{ width:"100%", maxWidth:820, background:"#020617", borderRadius:16, overflow:"hidden", border:"1.5px solid rgba(163,230,53,0.46)", boxShadow:"0 20px 50px rgba(0,0,0,0.55), 0 0 28px rgba(34,197,94,0.2)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:"linear-gradient(120deg, #14532d 0%, #0f172a 100%)", color:"#fff" }}>
               <div style={{ fontSize:13, fontWeight:800 }}>Watching Video {showPlayer + 1}</div>
-              <button onClick={closePlayer} style={{ border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", padding:"6px 10px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700 }}>Close</button>
+              <button onClick={closePlayer} style={{ border:"1px solid rgba(190,242,100,0.5)", background:"rgba(2,6,23,0.45)", color:"#f7fee7", padding:"6px 10px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700 }}>Close</button>
             </div>
             <div style={{ position:"relative", paddingTop:"56.25%", background:"#000" }}>
               <iframe
@@ -4478,7 +4531,7 @@ function VideosContent({ t, onEarning, authUser }) {
                 allowFullScreen
               />
             </div>
-            <div style={{ padding:"10px 16px", fontSize:11, color:"#64748B", fontWeight:700 }}>
+            <div style={{ padding:"10px 16px", fontSize:11, color:"#cbd5e1", fontWeight:700 }}>
               Keep this open for {MANUAL_SECONDS} seconds to earn your reward today.
             </div>
           </div>
@@ -4487,33 +4540,33 @@ function VideosContent({ t, onEarning, authUser }) {
 
       {/* "" Error toast "" */}
       {errMsg && (
-        <div style={{ display:"flex",alignItems:"center",gap:10,padding:"12px 18px",background:"#FFF0F0",border:"1.5px solid #FCA5A5",borderRadius:12,fontSize:13,color:"#DC2626",fontWeight:600,animation:"slideUp .2s ease" }}>
-          <I n="xmark" s={15} c="#DC2626"/>
+        <div style={{ display:"flex",alignItems:"center",gap:10,padding:"12px 18px",background:"rgba(127,29,29,0.35)",border:"1.5px solid rgba(248,113,113,0.6)",borderRadius:12,fontSize:13,color:"#fecaca",fontWeight:700,animation:"slideUp .2s ease" }}>
+          <I n="xmark" s={15} c="#fecaca"/>
           {errMsg}
-          <button onClick={()=>setErrMsg("")} style={{ marginLeft:"auto",border:"none",background:"transparent",color:"#DC2626",cursor:"pointer",fontWeight:900,fontSize:16,lineHeight:1 }}>-</button>
+          <button onClick={()=>setErrMsg("")} style={{ marginLeft:"auto",border:"none",background:"transparent",color:"#fecaca",cursor:"pointer",fontWeight:900,fontSize:16,lineHeight:1 }}>-</button>
         </div>
       )}
 
       {/* "" Summary bar "" */}
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
         {[
-          [`${watched}/${MANUAL_COUNT}`,"Required Watched","#111"],
-          [`${bonusDone}/${BONUS_COUNT}`,"Bonus Completed","#059669"],
-          [`KES ${(watched*V_PRICE).toLocaleString()}`,"Required Earned",t.acc],
-          [`KES ${todayEarn.toLocaleString()}`,"Total Today","#059669"],
+          [`${watched}/${MANUAL_COUNT}`,"Required Watched","#f8fafc"],
+          [`${bonusDone}/${BONUS_COUNT}`,"Bonus Completed","#a3e635"],
+          [`KES ${(watched*V_PRICE).toLocaleString()}`,"Required Earned","#facc15"],
+          [`KES ${todayEarn.toLocaleString()}`,"Total Today","#4ade80"],
         ].map(([v,l,c],i) => (
-          <div key={i} style={{ background:"#fff",borderRadius:12,padding:"14px 16px",border:"1px solid #111",boxShadow:"0 4px 12px rgba(0,0,0,0.08)" }}>
-            <div style={{ fontSize:10,color:"#BBB",fontWeight:700,letterSpacing:"0.08em",marginBottom:8 }}>{l.toUpperCase()}</div>
+          <div key={i} className="ep-casino-border" style={{ ...casinoCard, borderRadius:12,padding:"14px 16px" }}>
+            <div style={{ fontSize:10,color:"rgba(186,230,253,0.72)",fontWeight:700,letterSpacing:"0.08em",marginBottom:8 }}>{l.toUpperCase()}</div>
             <div style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:c }}>{v}</div>
           </div>
         ))}
       </div>
 
       {/* "" Tab switcher "" */}
-      <div style={{ display:"flex",gap:2,background:"#F5F5F5",borderRadius:10,padding:3,width:"100%",justifyContent:"center",flexWrap:"wrap" }}>
+      <div style={{ display:"flex",gap:2,background:"rgba(15,23,42,0.7)",borderRadius:10,padding:3,width:"100%",justifyContent:"center",flexWrap:"wrap",border:"1px solid rgba(132,204,22,0.25)" }}>
         {[["manual",`Required (${MANUAL_COUNT})`],["bonus",`Bonus Reward (${BONUS_COUNT})`]].map(([id,lbl])=>(
           <button key={id} onClick={()=>setActiveTab(id)}
-            style={{ padding:"7px 18px",borderRadius:8,border:"none",background:activeTab===id?"#fff":"transparent",color:activeTab===id?"#111":"#888",fontWeight:activeTab===id?800:500,fontSize:13,cursor:"pointer",fontFamily:"Geist,sans-serif",boxShadow:activeTab===id?"0 1px 4px rgba(0,0,0,0.08)":"none",transition:"all .15s" }}>
+            style={{ padding:"8px 18px",borderRadius:8,border:"none",background:activeTab===id?"linear-gradient(135deg,#bef264 0%, #84cc16 55%, #16a34a 100%)":"transparent",color:activeTab===id?"#052e16":"rgba(226,232,240,0.7)",fontWeight:activeTab===id?800:600,fontSize:13,cursor:"pointer",fontFamily:"Sora, Geist, sans-serif",boxShadow:activeTab===id?"0 6px 14px rgba(132,204,22,0.35)":"none",transition:"all .15s" }}>
             {lbl}
           </button>
         ))}
@@ -4521,58 +4574,58 @@ function VideosContent({ t, onEarning, authUser }) {
 
       {/*  MANUAL TAB  */}
       {activeTab === "manual" && (
-        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #111",boxShadow:"0 8px 20px rgba(0,0,0,0.08)" }}>
+        <div className="ep-casino-pop" style={{ ...casinoPanel, borderRadius:14,padding:"22px 24px" }}>
           {/* Header */}
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
             <div>
-              <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em" }}>Your Required Daily Videos</h3>
-              <p style={{ fontSize:13,color:"#BBB",marginTop:4 }}>
-                Watch full {MANUAL_SECONDS} seconds to earn <strong style={{color:"#111"}}>KES {V_PRICE}</strong> each.
+              <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em", color:"#f8fafc" }}>Your Required Daily Videos</h3>
+              <p style={{ fontSize:13,color:"rgba(203,213,225,0.78)",marginTop:4 }}>
+                Watch full {MANUAL_SECONDS} seconds to earn <strong style={{color:"#facc15"}}>KES {V_PRICE}</strong> each.
                 Video 2 unlocks after Video 1 is complete.
               </p>
             </div>
             {watched === MANUAL_COUNT && (
-              <div style={{ padding:"7px 16px",background:"#ECFDF5",border:"1px solid #A7F3D0",borderRadius:50,fontSize:12,fontWeight:800,color:"#059669",display:"flex",alignItems:"center",gap:6 }}>
-                <I n="check" s={12} c="#059669"/> All done  -  KES {(MANUAL_COUNT*V_PRICE).toLocaleString()} earned!
+              <div style={{ padding:"7px 16px",background:"rgba(16,185,129,0.2)",border:"1px solid rgba(74,222,128,0.45)",borderRadius:50,fontSize:12,fontWeight:800,color:"#86efac",display:"flex",alignItems:"center",gap:6 }}>
+                <I n="check" s={12} c="#86efac"/> All done  -  KES {(MANUAL_COUNT*V_PRICE).toLocaleString()} earned!
               </div>
             )}
           </div>
 
           {/* Now Playing / Status */}
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"12px 14px",background:"#F8FAFC",border:"1px solid #E8EEF5",borderRadius:12,marginBottom:16,flexWrap:"wrap" }}>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"12px 14px",background:"rgba(15,23,42,0.66)",border:"1px solid rgba(148,163,184,0.35)",borderRadius:12,marginBottom:16,flexWrap:"wrap" }}>
             <div>
-              <div style={{ fontSize:10,color:"#94A3B8",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>REQUIRED STATUS</div>
-              <div style={{ fontSize:14,fontWeight:900,color:"#111" }}>{manualStatus}</div>
+              <div style={{ fontSize:10,color:"#93c5fd",fontWeight:800,letterSpacing:"0.12em",marginBottom:4 }}>REQUIRED STATUS</div>
+              <div style={{ fontSize:14,fontWeight:900,color:"#f8fafc" }}>{manualStatus}</div>
               {nextManual !== null && (
-                <div style={{ fontSize:11,color:"#64748B",marginTop:3,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden" }}>
+                <div style={{ fontSize:11,color:"#cbd5e1",marginTop:3,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden" }}>
                   {YT_VIDEOS[nextManual]?.title}
                 </div>
               )}
             </div>
             <div style={{ textAlign:"right",minWidth:90 }}>
               {playing !== null ? (
-                <div style={{ fontSize:20,fontWeight:900,color:"#111",fontVariantNumeric:"tabular-nums" }}>{timer}s</div>
+                <div style={{ fontSize:20,fontWeight:900,color:"#f8fafc",fontVariantNumeric:"tabular-nums" }}>{timer}s</div>
               ) : (
-                <div style={{ fontSize:18,fontWeight:900,color:"#111" }}>{manualPct}%</div>
+                <div style={{ fontSize:18,fontWeight:900,color:"#f8fafc" }}>{manualPct}%</div>
               )}
-              <div style={{ fontSize:10,color:"#94A3B8" }}>{playing !== null ? "Time left" : "Progress"}</div>
+              <div style={{ fontSize:10,color:"#93c5fd" }}>{playing !== null ? "Time left" : "Progress"}</div>
             </div>
-            <div style={{ flexBasis:"100%",height:6,background:"#E8EEF5",borderRadius:99,overflow:"hidden" }}>
-              <div style={{ height:"100%",width:`${manualPct}%`,background:playing!==null?t.acc:"#059669",borderRadius:99,transition:"width .4s ease" }}/>
+            <div style={{ flexBasis:"100%",height:6,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
+              <div style={{ height:"100%",width:`${manualPct}%`,background:playing!==null?casinoAccent:"#22c55e",borderRadius:99,transition:"width .4s ease" }}/>
             </div>
           </div>
 
           {/* Unlock chain indicator */}
-          <div style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#F7F7F7",border:"1px solid #EBEBEB",borderRadius:10,marginBottom:20,fontSize:12,color:"#888" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"rgba(15,23,42,0.6)",border:"1px solid rgba(148,163,184,0.32)",borderRadius:10,marginBottom:20,fontSize:12,color:"#cbd5e1" }}>
             {[1,2].map((n,i) => (
               <React.Fragment key={n}>
                 <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                  <div style={{ width:22,height:22,borderRadius:"50%",background:watched>=n?"#059669":watched===n-1&&timerRunning?"#F59E0B":"#E8E8E8",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .3s" }}>
-                    {watched>=n ? <I n="check" s={11} c="#fff"/> : <span style={{fontSize:10,fontWeight:800,color:watched===n-1&&timerRunning?"#fff":"#AAA"}}>{n}</span>}
+                  <div style={{ width:22,height:22,borderRadius:"50%",background:watched>=n?"#22c55e":watched===n-1&&timerRunning?"#f59e0b":"rgba(148,163,184,0.38)",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .3s" }}>
+                    {watched>=n ? <I n="check" s={11} c="#fff"/> : <span style={{fontSize:10,fontWeight:800,color:watched===n-1&&timerRunning?"#fff":"#e2e8f0"}}>{n}</span>}
                   </div>
-                  <span style={{ fontWeight:600,color:watched>=n?"#059669":watched===n-1?"#111":"#AAA" }}>Video {n}{watched>=n?" OK":""}</span>
+                  <span style={{ fontWeight:700,color:watched>=n?"#86efac":watched===n-1?"#f8fafc":"#cbd5e1" }}>Video {n}{watched>=n?" OK":""}</span>
                 </div>
-                {i===0 && <div style={{ flex:1,height:1,background:watched>=1?"#059669":"#E8E8E8",transition:"background .5s" }}/>}
+                {i===0 && <div style={{ flex:1,height:1,background:watched>=1?"#22c55e":"rgba(148,163,184,0.45)",transition:"background .5s" }}/>}
               </React.Fragment>
             ))}
           </div>
@@ -4587,10 +4640,10 @@ function VideosContent({ t, onEarning, authUser }) {
               const pct      = isActive ? ((MANUAL_SECONDS - timer) / MANUAL_SECONDS) * 100 : isDone ? 100 : 0;
 
               return (
-                <div key={i} style={{ borderRadius:16,border:"1px solid #111",boxShadow:"0 6px 16px rgba(0,0,0,0.08)",overflow:"hidden",background:"#fff",transition:"all .25s",outline:isActive?`2px solid ${t.acc}`:"none" }}>
+                <div key={i} style={{ borderRadius:16,border:"1px solid rgba(148,163,184,0.35)",boxShadow:"0 10px 24px rgba(2,6,23,0.46)",overflow:"hidden",background:"linear-gradient(145deg, rgba(12,20,35,0.97) 0%, rgba(8,15,28,0.97) 100%)",transition:"all .25s",outline:isActive?`2px solid ${casinoAccent}`:"none" }}>
 
                   {/* Thumbnail */}
-                  <div style={{ position:"relative",paddingTop:"56.25%",background:"#0D1117",overflow:"hidden",cursor:isReady?"pointer":"default" }}
+                  <div style={{ position:"relative",paddingTop:"56.25%",background:"#030712",overflow:"hidden",cursor:isReady?"pointer":"default" }}
                     onClick={()=>isReady&&startWatch(i)}>
                     {!imgErrors[vid.id] ? (
                       <>
@@ -4598,85 +4651,85 @@ function VideosContent({ t, onEarning, authUser }) {
                         <img src={vid.thumb} alt={vid.title}
                           onLoad={()=>setImgLoaded(s=>({...s,[vid.id]:true}))}
                           onError={()=>setImgErrors(e=>({...e,[vid.id]:true}))}
-                          style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isDone?.45:isLocked?.25:1,transition:"opacity .2s" }}/>
+                          style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isDone?.4:isLocked?.23:1,transition:"opacity .2s",filter:"saturate(1.18)" }}/>
                       </>
                     ) : (
-                      <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,#1a1a2e,#16213e)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,#0b1120,#13223f)",display:"flex",alignItems:"center",justifyContent:"center" }}>
                         <I n="play" s={32} c="rgba(255,255,255,0.15)"/>
                       </div>
                     )}
 
                     {/* State overlay */}
-                    <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.22)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg, rgba(2,6,23,0.18) 0%, rgba(2,6,23,0.5) 100%)",display:"flex",alignItems:"center",justifyContent:"center" }}>
                       {isDone && (
-                        <div style={{ width:52,height:52,borderRadius:"50%",background:"#059669",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 16px rgba(5,150,105,0.4)" }}>
+                        <div style={{ width:52,height:52,borderRadius:"50%",background:"#22c55e",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 16px rgba(34,197,94,0.4)" }}>
                           <I n="check" s={24} c="#fff"/>
                         </div>
                       )}
                       {isActive && (
                         <div style={{ textAlign:"center" }}>
-                          <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(0,0,0,0.6)",backdropFilter:"blur(8px)",border:"3px solid rgba(255,255,255,0.8)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px" }}>
+                          <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(2,6,23,0.66)",backdropFilter:"blur(8px)",border:"3px solid rgba(190,242,100,0.9)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px" }}>
                             <span style={{ fontSize:26,fontWeight:900,color:"#fff",fontFamily:"Geist,sans-serif",fontVariantNumeric:"tabular-nums" }}>{timer}</span>
                           </div>
-                          <div style={{ fontSize:11,color:"rgba(255,255,255,0.85)",fontWeight:700,letterSpacing:"0.06em" }}>WATCHING...</div>
+                          <div style={{ fontSize:11,color:"#d9f99d",fontWeight:800,letterSpacing:"0.06em" }}>WATCHING...</div>
                         </div>
                       )}
                       {isLocked && (
                         <div style={{ textAlign:"center" }}>
-                          <div style={{ width:48,height:48,borderRadius:"50%",background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px" }}>
+                          <div style={{ width:48,height:48,borderRadius:"50%",background:"rgba(2,6,23,0.7)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px" }}>
                             <I n="lock" s={22} c="rgba(255,255,255,0.7)"/>
                           </div>
                           <div style={{ fontSize:11,color:"rgba(255,255,255,0.7)",fontWeight:700 }}>Locked</div>
                         </div>
                       )}
                       {isReady && (
-                        <div style={{ width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.92)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                          <I n="play" s={22} c="#111"/>
+                        <div style={{ width:52,height:52,borderRadius:"50%",background:"rgba(190,242,100,0.95)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                          <I n="play" s={22} c="#052e16"/>
                         </div>
                       )}
                     </div>
 
                     {/* Progress bar at bottom */}
-                    <div style={{ position:"absolute",bottom:0,left:0,right:0,height:3,background:"rgba(255,255,255,0.15)" }}>
-                      <div style={{ height:"100%",width:`${pct}%`,background:isDone?"#059669":t.acc,borderRadius:99,transition:isActive?"width 1s linear":"width .4s ease" }}/>
+                    <div style={{ position:"absolute",bottom:0,left:0,right:0,height:3,background:"rgba(148,163,184,0.35)" }}>
+                      <div style={{ height:"100%",width:`${pct}%`,background:isDone?"#22c55e":casinoAccent,borderRadius:99,transition:isActive?"width 1s linear":"width .4s ease" }}/>
                     </div>
 
                     {/* Duration badge */}
-                    <div style={{ position:"absolute",bottom:8,right:8,padding:"2px 7px",background:"rgba(0,0,0,0.82)",borderRadius:4,fontSize:10,color:"#fff",fontWeight:700 }}>{vid.dur}</div>
+                    <div style={{ position:"absolute",bottom:8,right:8,padding:"2px 7px",background:"rgba(2,6,23,0.86)",borderRadius:4,fontSize:10,color:"#f8fafc",fontWeight:700 }}>{vid.dur}</div>
 
                     {/* Video # badge */}
-                    <div style={{ position:"absolute",top:8,left:8,padding:"3px 9px",background:isDone?"#059669":i===0?"#111":"rgba(0,0,0,0.65)",borderRadius:50,fontSize:10,fontWeight:800,color:"#fff",letterSpacing:"0.06em" }}>
+                    <div style={{ position:"absolute",top:8,left:8,padding:"3px 9px",background:isDone?"#22c55e":i===0?"#84cc16":"rgba(2,6,23,0.72)",borderRadius:50,fontSize:10,fontWeight:800,color:isDone?"#fff":"#052e16",letterSpacing:"0.06em" }}>
                       VIDEO {i+1}{i===1&&!isDone&&watched<1?" (locked)":""}
                     </div>
                   </div>
 
                   {/* Info row */}
                   <div style={{ padding:"14px 16px" }}>
-                    <div style={{ fontSize:13,fontWeight:700,color:"#111",lineHeight:1.35,marginBottom:10,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden" }}>{vid.title}</div>
+                    <div style={{ fontSize:13,fontWeight:700,color:"#f8fafc",lineHeight:1.35,marginBottom:10,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden" }}>{vid.title}</div>
                     <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:8 }}>
                       <div>
-                        <div style={{ fontSize:11,color:"#888",fontWeight:600 }}>{vid.channel}</div>
-                        <div style={{ fontSize:10,color:"#CCC",marginTop:2 }}>{vid.views} views</div>
+                        <div style={{ fontSize:11,color:"rgba(226,232,240,0.84)",fontWeight:600 }}>{vid.channel}</div>
+                        <div style={{ fontSize:10,color:"rgba(148,163,184,0.9)",marginTop:2 }}>{vid.views} views</div>
                       </div>
                       <div style={{ flexShrink:0 }}>
-                        {isDone && <div style={{ padding:"6px 12px",background:"#ECFDF5",border:"1px solid #A7F3D0",borderRadius:8,fontSize:12,fontWeight:900,color:"#059669" }}>+KES {V_PRICE} OK</div>}
+                        {isDone && <div style={{ padding:"6px 12px",background:"rgba(22,163,74,0.25)",border:"1px solid rgba(74,222,128,0.45)",borderRadius:8,fontSize:12,fontWeight:900,color:"#86efac" }}>+KES {V_PRICE} OK</div>}
                         {isActive && (
                           <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3 }}>
-                            <div style={{ display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color:t.acc }}>
-                              <div style={{ width:6,height:6,borderRadius:"50%",background:t.acc,animation:"pulse 1s infinite" }}/> Earning...
+                            <div style={{ display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color:casinoAccent }}>
+                              <div style={{ width:6,height:6,borderRadius:"50%",background:casinoAccent,animation:"pulse 1s infinite" }}/> Earning...
                             </div>
-                            <div style={{ fontSize:10,color:"#AAA" }}>{timer}s left</div>
+                            <div style={{ fontSize:10,color:"#cbd5e1" }}>{timer}s left</div>
                           </div>
                         )}
                         {isReady && (
                           <button onClick={()=>startWatch(i)}
-                            style={{ padding:"8px 16px",background:"#111",color:"#fff",border:"none",borderRadius:9,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
-                            <I n="play" s={11} c="#fff"/> Watch
+                            style={{ padding:"8px 16px",background:"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)",color:"#052e16",border:"none",borderRadius:9,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"Sora, Geist, sans-serif",display:"flex",alignItems:"center",gap:5,boxShadow:"0 8px 16px rgba(163,230,53,0.25)" }}>
+                            <I n="play" s={11} c="#052e16"/> Watch
                           </button>
                         )}
                         {isLocked && (
-                          <div style={{ padding:"7px 12px",background:"#F5F5F5",border:"1px solid #E0E0E0",borderRadius:9,fontSize:11,fontWeight:700,color:"#BBB",display:"flex",alignItems:"center",gap:5 }}>
-                            <I n="lock" s={11} c="#CCC"/> Locked
+                          <div style={{ padding:"7px 12px",background:"rgba(148,163,184,0.2)",border:"1px solid rgba(148,163,184,0.35)",borderRadius:9,fontSize:11,fontWeight:700,color:"#cbd5e1",display:"flex",alignItems:"center",gap:5 }}>
+                            <I n="lock" s={11} c="#cbd5e1"/> Locked
                           </div>
                         )}
                       </div>
@@ -4684,8 +4737,8 @@ function VideosContent({ t, onEarning, authUser }) {
 
                     {/* Unlock hint for video 2 */}
                     {i===1&&isLocked&&(
-                      <div style={{ marginTop:10,padding:"8px 12px",background:"#F7F9FF",border:"1px solid #DBEAFE",borderRadius:8,fontSize:11,color:"#3B82F6",fontWeight:600,display:"flex",alignItems:"center",gap:6 }}>
-                        <I n="lock" s={12} c="#3B82F6"/> Complete Video 1 to unlock this
+                      <div style={{ marginTop:10,padding:"8px 12px",background:"rgba(30,64,175,0.22)",border:"1px solid rgba(147,197,253,0.45)",borderRadius:8,fontSize:11,color:"#bfdbfe",fontWeight:700,display:"flex",alignItems:"center",gap:6 }}>
+                        <I n="lock" s={12} c="#bfdbfe"/> Complete Video 1 to unlock this
                       </div>
                     )}
                   </div>
@@ -4698,89 +4751,89 @@ function VideosContent({ t, onEarning, authUser }) {
 
       {/*  BONUS TAB  */}
       {activeTab === "bonus" && (
-        <div style={{ background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #111",boxShadow:"0 8px 20px rgba(0,0,0,0.08)" }}>
+        <div className="ep-casino-pop" style={{ ...casinoPanel, borderRadius:14,padding:"22px 24px" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
             <div>
-              <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em" }}>Bonus Reward - {BONUS_COUNT} {BONUS_COUNT === 1 ? "reward" : "rewards"}</h3>
-              <p style={{ fontSize:13,color:"#BBB",marginTop:4 }}>Running silently  -  30 sec each  -  KES {bonusUnit} per bonus reward</p>
+              <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em", color:"#f8fafc" }}>Bonus Reward - {BONUS_COUNT} {BONUS_COUNT === 1 ? "reward" : "rewards"}</h3>
+              <p style={{ fontSize:13,color:"rgba(203,213,225,0.82)",marginTop:4 }}>Running silently  -  30 sec each  -  KES {bonusUnit} per bonus reward</p>
             </div>
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:14,fontWeight:900,color:"#059669" }}>KES {(bonusDone*bonusUnit).toLocaleString()} earned</div>
-              <div style={{ fontSize:11,color:"#BBB",marginTop:2 }}>{bonusDone}/{BONUS_COUNT} complete  -  {Math.round(bonusPct)}%</div>
+              <div style={{ fontSize:14,fontWeight:900,color:"#4ade80" }}>KES {(bonusDone*bonusUnit).toLocaleString()} earned</div>
+              <div style={{ fontSize:11,color:"rgba(186,230,253,0.75)",marginTop:2 }}>{bonusDone}/{BONUS_COUNT} complete  -  {Math.round(bonusPct)}%</div>
             </div>
           </div>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 12px",background:watched>=MANUAL_COUNT?"#ECFDF5":"#FFF7ED",border:`1px solid ${watched>=MANUAL_COUNT?"#A7F3D0":"#FDBA74"}`,borderRadius:12,marginBottom:14,flexWrap:"wrap" }}>
-            <div style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:watched>=MANUAL_COUNT?"#059669":"#B45309" }}>
-              <I n={watched>=MANUAL_COUNT?"check":"lock"} s={13} c={watched>=MANUAL_COUNT?"#059669":"#B45309"}/>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 12px",background:watched>=MANUAL_COUNT?"rgba(16,185,129,0.2)":"rgba(249,115,22,0.18)",border:`1px solid ${watched>=MANUAL_COUNT?"rgba(74,222,128,0.45)":"rgba(251,146,60,0.5)"}`,borderRadius:12,marginBottom:14,flexWrap:"wrap" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>
+              <I n={watched>=MANUAL_COUNT?"check":"lock"} s={13} c={watched>=MANUAL_COUNT?"#86efac":"#fdba74"}/>
               {watched>=MANUAL_COUNT ? "Bonus unlocked - required videos complete" : "Complete all required videos to unlock the bonus"}
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-              <div style={{ fontSize:11,fontWeight:800,color:watched>=MANUAL_COUNT?"#059669":"#B45309" }}>{watched}/{MANUAL_COUNT}</div>
-              <div style={{ width:84,height:6,background:"rgba(0,0,0,0.1)",borderRadius:99,overflow:"hidden" }}>
-                <div style={{ height:"100%",width:`${manualUnlockPct}%`,background:watched>=MANUAL_COUNT?"#059669":"#F59E0B",borderRadius:99,transition:"width .3s ease" }}/>
+              <div style={{ fontSize:11,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>{watched}/{MANUAL_COUNT}</div>
+              <div style={{ width:84,height:6,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
+                <div style={{ height:"100%",width:`${manualUnlockPct}%`,background:watched>=MANUAL_COUNT?"#22c55e":"#f59e0b",borderRadius:99,transition:"width .3s ease" }}/>
               </div>
             </div>
           </div>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap" }}>
-            <div style={{ fontSize:12, fontWeight:700, color: bonusActive ? "#059669" : watched>=MANUAL_COUNT ? "#111" : "#B45309" }}>
+            <div style={{ fontSize:12, fontWeight:700, color: bonusActive ? "#86efac" : watched>=MANUAL_COUNT ? "#f8fafc" : "#fdba74" }}>
               {bonusActive ? "Bonus claimed today" : watched>=MANUAL_COUNT ? "Ready to activate once today." : `Finish ${MANUAL_COUNT - watched} required video${MANUAL_COUNT - watched === 1 ? "" : "s"} to enable.`}
             </div>
             <button onClick={activateBot} disabled={!canActivateBot}
-              style={{ padding:"8px 14px", background:canActivateBot?"#111":"#F5F5F5", color:canActivateBot?"#fff":"#AAA", border:canActivateBot?"none":"1px solid #E0E0E0", borderRadius:9, fontSize:12, fontWeight:800, cursor:canActivateBot?"pointer":"not-allowed", fontFamily:"Geist,sans-serif" }}>
+              style={{ padding:"8px 14px", background:canActivateBot?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)", color:canActivateBot?"#052e16":"#94a3b8", border:canActivateBot?"none":"1px solid rgba(148,163,184,0.35)", borderRadius:9, fontSize:12, fontWeight:800, cursor:canActivateBot?"pointer":"not-allowed", fontFamily:"Sora, Geist, sans-serif" }}>
               {bonusActive ? "Activated Today" : canActivateBot ? "Claim Bonus" : "Complete Required Videos"}
             </button>
           </div>
           <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:24 }}>
-            <div style={{ flex:1,height:7,background:"#F0F0F0",borderRadius:99,overflow:"hidden" }}>
-              <div style={{ height:"100%",width:`${bonusPct}%`,background:"#059669",borderRadius:99,transition:"width .2s" }}/>
+            <div style={{ flex:1,height:7,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
+              <div style={{ height:"100%",width:`${bonusPct}%`,background:"linear-gradient(90deg,#facc15 0%, #22c55e 100%)",borderRadius:99,transition:"width .2s" }}/>
             </div>
-            <span style={{ fontSize:12,fontWeight:800,color:"#059669",minWidth:40 }}>{Math.round(bonusPct)}%</span>
+            <span style={{ fontSize:12,fontWeight:800,color:"#86efac",minWidth:40 }}>{Math.round(bonusPct)}%</span>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14 }}>
             {YT_VIDEOS.slice(MANUAL_COUNT, MANUAL_COUNT + BONUS_COUNT).map((vid, i) => {
               const done = bonusActive && i < bonusDone;
               const isActive = bonusActive && i === bonusDone;
               return (
-                <div key={i} style={{ borderRadius:12,border:"1px solid #111",boxShadow:"0 4px 12px rgba(0,0,0,0.08)",overflow:"hidden",background:done?"#F0FDF4":isActive?"#FFFBEB":"#FAFAFA",transition:"all .3s" }}>
-                  <div style={{ position:"relative",paddingTop:"52%",background:"#0D1117",overflow:"hidden" }}>
+                <div key={i} style={{ borderRadius:12,border:"1px solid rgba(148,163,184,0.35)",boxShadow:"0 8px 18px rgba(2,6,23,0.44)",overflow:"hidden",background:done?"rgba(22,163,74,0.24)":isActive?"rgba(250,204,21,0.18)":"rgba(15,23,42,0.66)",transition:"all .3s" }}>
+                  <div style={{ position:"relative",paddingTop:"52%",background:"#030712",overflow:"hidden" }}>
                     {!imgErrors[`bonus-${vid.id}`] ? (
                       <>
                         {!imgLoaded[`bonus-${vid.id}`] && <div className="ep-shimmer" style={{ position:"absolute",inset:0 }} />}
                         <img src={vid.thumb} alt={vid.title}
                           onLoad={()=>setImgLoaded(s=>({...s,[`bonus-${vid.id}`]:true}))}
                           onError={()=>setImgErrors(e=>({...e,[`bonus-${vid.id}`]:true}))}
-                          style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:done?.5:isActive?.88:.35,transition:"opacity .2s" }}/>
+                          style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:done?.45:isActive?.88:.32,transition:"opacity .2s",filter:"saturate(1.2)" }}/>
                       </>
                     ) : (
-                      <div style={{ position:"absolute",inset:0,background:"#111",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      <div style={{ position:"absolute",inset:0,background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center" }}>
                         <I n="play" s={24} c="rgba(255,255,255,0.1)"/>
                       </div>
                     )}
-                    <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                      {done?<div style={{ width:28,height:28,borderRadius:"50%",background:"#059669",display:"flex",alignItems:"center",justifyContent:"center" }}><I n="check" s={13} c="#fff"/></div>
+                    <div style={{ position:"absolute",inset:0,background:"rgba(2,6,23,0.3)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      {done?<div style={{ width:28,height:28,borderRadius:"50%",background:"#22c55e",display:"flex",alignItems:"center",justifyContent:"center" }}><I n="check" s={13} c="#fff"/></div>
                       :isActive?<div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:3 }}><div style={{ width:9,height:9,borderRadius:"50%",background:"#FCD34D",animation:"pulse 0.8s infinite" }}/><div style={{ fontSize:8,color:"#FCD34D",fontWeight:800,letterSpacing:"0.1em" }}>BONUS LIVE</div></div>
                       :<I n="lock" s={15} c="rgba(255,255,255,0.35)"/>}
                     </div>
-                    <div style={{ position:"absolute",bottom:5,right:5,padding:"1px 5px",background:"rgba(0,0,0,0.8)",borderRadius:3,fontSize:9,color:"#fff",fontWeight:700 }}>{vid.dur}</div>
-                    <div style={{ position:"absolute",top:5,left:5,padding:"2px 6px",background:done?"#059669":isActive?"#F59E0B":bonusActive?"rgba(0,0,0,0.55)":"#334155",borderRadius:4,fontSize:8,fontWeight:800,color:"#fff" }}>
+                    <div style={{ position:"absolute",bottom:5,right:5,padding:"1px 5px",background:"rgba(2,6,23,0.84)",borderRadius:3,fontSize:9,color:"#f8fafc",fontWeight:700 }}>{vid.dur}</div>
+                    <div style={{ position:"absolute",top:5,left:5,padding:"2px 6px",background:done?"#22c55e":isActive?"#F59E0B":bonusActive?"rgba(2,6,23,0.64)":"#334155",borderRadius:4,fontSize:8,fontWeight:800,color:done?"#052e16":"#fff" }}>
                       {!bonusActive ? "INACTIVE" : done?"BONUS OK":isActive?"LIVE":"BONUS"}
                     </div>
                   </div>
                   <div style={{ padding:"9px 11px" }}>
-                    <div style={{ fontSize:11,fontWeight:700,color:"#111",lineHeight:1.3,marginBottom:4,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden" }}>{vid.title}</div>
+                    <div style={{ fontSize:11,fontWeight:700,color:"#f8fafc",lineHeight:1.3,marginBottom:4,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden" }}>{vid.title}</div>
                     <div style={{ display:"flex",justifyContent:"space-between" }}>
-                      <span style={{ fontSize:10,color:"#AAA" }}>{vid.channel}</span>
-                      {done?<span style={{ fontSize:10,fontWeight:800,color:"#059669" }}>+KES {bonusUnit}</span>
+                      <span style={{ fontSize:10,color:"#cbd5e1" }}>{vid.channel}</span>
+                      {done?<span style={{ fontSize:10,fontWeight:800,color:"#86efac" }}>+KES {bonusUnit}</span>
                       :isActive?<span style={{ fontSize:10,fontWeight:800,color:"#F59E0B" }}>Watching...</span>
-                      :<span style={{ fontSize:10,color:"#CCC" }}>Queued</span>}
+                      :<span style={{ fontSize:10,color:"#94a3b8" }}>Queued</span>}
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
-          <div style={{ marginTop:18,padding:"12px 16px",background:"#F7FDF9",borderRadius:10,border:"1px solid #A7F3D0",fontSize:12,color:"#065F46",display:"flex",alignItems:"center",gap:8 }}>
-            <I n="shield" s={14} c="#059669"/>
+          <div style={{ marginTop:18,padding:"12px 16px",background:"rgba(22,163,74,0.2)",borderRadius:10,border:"1px solid rgba(74,222,128,0.5)",fontSize:12,color:"#bbf7d0",display:"flex",alignItems:"center",gap:8 }}>
+            <I n="shield" s={14} c="#86efac"/>
             Activate once per day to run the bonus. Earnings credit as each video completes.
           </div>
         </div>
@@ -5202,12 +5255,33 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         });
         if (error) return false;
         const row = Array.isArray(data) ? data[0] : data;
+        let autoCompleted = false;
+        if (!MANUAL_WITHDRAWALS && row?.payout_id) {
+          try {
+            const apiBase = getApiBase();
+            const token = await getAccessToken();
+            if (apiBase) {
+              const headers = { "Content-Type": "application/json" };
+              if (token) headers.Authorization = `Bearer ${token}`;
+              const autoRes = await fetch(`${apiBase}/api/v1/payout/auto-complete`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ payout_id: row.payout_id })
+              });
+              autoCompleted = autoRes.ok;
+            }
+          } catch (e) {
+            autoCompleted = false;
+          }
+        }
         const newBalance = Number(row?.new_balance);
         if (Number.isFinite(newBalance)) onBalanceUpdate?.(newBalance);
         onNewTx?.({
           ic:"up",
-          text:"Withdrawal requested",
-          sub:`KES ${amt.toLocaleString()} via ${methodLabel || "M-Pesa"}`,
+          text:autoCompleted ? "Withdrawal paid automatically" : "Withdrawal requested",
+          sub:autoCompleted
+            ? `KES ${amt.toLocaleString()} auto-paid via ${methodLabel || "M-Pesa"}`
+            : `KES ${amt.toLocaleString()} via ${methodLabel || "M-Pesa"}`,
           time:"Just now",
           c:"#E8820C",
           amt: -amt

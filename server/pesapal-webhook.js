@@ -1,5 +1,5 @@
-// Pesapal IPN handler (Node/Express) with idempotency + wallet ledger update
-// Env: PESAPAL_CONSUMER_KEY, PESAPAL_CONSUMER_SECRET, DATABASE_URL
+// Kora webhook handler (Node/Express) with idempotency + wallet ledger update
+// Env: KORA_SECRET_KEY, DATABASE_URL
 
 const express = require("express");
 const path = require("path");
@@ -36,15 +36,18 @@ async function getSupabase() {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-function isPesapalSuccess(payload) {
+function isSuccessfulStatus(payload, eventName = "") {
   const code = Number(payload?.status_code ?? payload?.payment_status_code ?? NaN);
   const desc = String(
     payload?.payment_status_description ||
       payload?.payment_status ||
+      payload?.transaction_status ||
       payload?.status ||
       ""
   ).toLowerCase();
+  const evt = String(eventName || "").toLowerCase();
   if (Number.isFinite(code)) return code === 1;
+  if (evt === "charge.success") return true;
   return desc === "completed" || desc === "complete" || desc === "success";
 }
 
@@ -118,7 +121,7 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
           amount,
           tier_at_deposit: tierVal,
           status: "success",
-          provider: "PesaPal",
+          provider: "Kora",
           provider_reference: providerReference,
           created_at: new Date().toISOString(),
           confirmed_at: new Date().toISOString()
@@ -196,7 +199,7 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
     }
     if (dep.rowCount === 0) {
       await client.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','PesaPal',$4,now(),now())",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','Kora',$4,now(),now())",
         [userId, amount, tierVal, providerReference]
       );
     } else {
@@ -245,20 +248,26 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
   }
 }
 
-app.all("/api/v1/webhook/pesapal", async (req, res) => {
+app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) => {
   const params = { ...(req.query || {}), ...(req.body || {}) };
+  const eventName = pickParam(params, ["event", "type", "event_type"]);
+  const dataPayload =
+    params?.data && typeof params.data === "object"
+      ? params.data
+      : {};
   const orderTrackingId = pickParam(params, [
     "OrderTrackingId",
     "orderTrackingId",
     "order_tracking_id",
-    "tracking_id"
-  ]);
+    "tracking_id",
+    "reference"
+  ]) || pickParam(dataPayload, ["reference"]);
   const merchantReference = pickParam(params, [
     "OrderMerchantReference",
     "orderMerchantReference",
     "merchant_reference",
     "reference"
-  ]);
+  ]) || pickParam(dataPayload, ["reference"]);
 
   if (!orderTrackingId) {
     return res.status(400).json({ ok: false, error: "OrderTrackingId required" });
@@ -266,8 +275,8 @@ app.all("/api/v1/webhook/pesapal", async (req, res) => {
 
   try {
     const statusPayload = await getTransactionStatus(orderTrackingId);
-    const success = isPesapalSuccess(statusPayload);
-    const amount = Number(statusPayload?.amount || 0);
+    const success = isSuccessfulStatus(statusPayload, eventName);
+    const amountFromStatus = Number(statusPayload?.amount || 0);
     const refFromStatus =
       statusPayload?.merchant_reference || statusPayload?.merchantReference || merchantReference;
 
@@ -278,6 +287,10 @@ app.all("/api/v1/webhook/pesapal", async (req, res) => {
     const depRow = await loadDepositRow(refFromStatus);
     const userId = depRow?.user_id || null;
     const tierAtDeposit = depRow?.tier_at_deposit || 1;
+    const amount =
+      Number.isFinite(amountFromStatus) && amountFromStatus > 0
+        ? amountFromStatus
+        : Number(depRow?.amount || 0);
 
     if (success) {
       if (!userId) {

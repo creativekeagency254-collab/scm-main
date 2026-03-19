@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { getTransactionStatus, isPesapalConfigured } from "../../lib/pesapal.js";
+import { getTransactionStatus, isKoraConfigured } from "../../lib/pesapal.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,7 +12,12 @@ const getAdmin = () => {
 };
 
 const normalizeStatus = (payload) => {
-  const desc = String(payload?.payment_status_description || payload?.payment_status || "").toLowerCase();
+  const desc = String(
+    payload?.payment_status_description ||
+      payload?.payment_status ||
+      payload?.transaction_status ||
+      ""
+  ).toLowerCase();
   const codeRaw = payload?.status_code ?? payload?.statusCode;
   const code = Number.isFinite(Number(codeRaw)) ? Number(codeRaw) : null;
   if (code === 1 || desc === "completed") return "success";
@@ -68,8 +73,8 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: "supabase not configured" });
   }
-  if (!isPesapalConfigured()) {
-    return res.status(500).json({ error: "Pesapal is not configured." });
+  if (!isKoraConfigured()) {
+    return res.status(500).json({ error: "Kora is not configured." });
   }
 
   const supabaseAdmin = getAdmin();
@@ -79,9 +84,24 @@ export default async function handler(req, res) {
 
   const src = req.method === "GET" ? req.query : req.body || {};
   const trackingId =
-    String(src?.OrderTrackingId || src?.orderTrackingId || src?.tracking_id || "").trim();
+    String(
+      src?.OrderTrackingId ||
+        src?.orderTrackingId ||
+        src?.tracking_id ||
+        src?.reference ||
+        src?.merchant_reference ||
+        src?.data?.reference ||
+        ""
+    ).trim();
   const merchantReference =
-    String(src?.OrderMerchantReference || src?.orderMerchantReference || src?.merchant_reference || "").trim();
+    String(
+      src?.OrderMerchantReference ||
+        src?.orderMerchantReference ||
+        src?.merchant_reference ||
+        src?.reference ||
+        src?.data?.reference ||
+        ""
+    ).trim();
 
   if (!trackingId || !merchantReference) {
     return res.status(400).json({ error: "missing tracking_id or merchant_reference" });

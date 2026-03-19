@@ -289,8 +289,8 @@ begin
   returning payout_requests.payout_id into v_payout_id;
 
   v_ref := 'payout:' || v_payout_id::text;
-  select new_balance into v_balance
-  from apply_wallet_tx(v_user, 'withdrawal', -p_amount, v_payout_id, v_ref);
+  select awt.new_balance into v_balance
+  from apply_wallet_tx(v_user, 'withdrawal', -p_amount, v_payout_id, v_ref) as awt;
 
   insert into audit_logs(actor_id, action, target_table, target_id, meta)
   values (v_user, 'payout_request', 'payout_requests', v_payout_id,

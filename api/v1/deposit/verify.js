@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { getTransactionStatus, isPesapalConfigured } from "../../lib/pesapal.js";
+import { getTransactionStatus, isKoraConfigured } from "../../lib/pesapal.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -68,8 +68,8 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: "supabase not configured" });
   }
-  if (!isPesapalConfigured()) {
-    return res.status(500).json({ error: "Pesapal is not configured." });
+  if (!isKoraConfigured()) {
+    return res.status(500).json({ error: "Kora is not configured." });
   }
 
   const supabaseAdmin = getAdmin();
@@ -78,7 +78,14 @@ export default async function handler(req, res) {
   }
 
   const trackingId =
-    String(req.query?.tracking_id || req.query?.orderTrackingId || req.query?.OrderTrackingId || "").trim();
+    String(
+      req.query?.tracking_id ||
+        req.query?.orderTrackingId ||
+        req.query?.OrderTrackingId ||
+        req.query?.reference ||
+        req.query?.merchant_reference ||
+        ""
+    ).trim();
   const merchantReference =
     String(req.query?.merchant_reference || req.query?.reference || req.query?.OrderMerchantReference || "").trim();
 
@@ -98,7 +105,11 @@ export default async function handler(req, res) {
       status,
       tracking_id: trackingId,
       merchant_reference: merchantReference,
-      pesapal_status: statusPayload?.payment_status_description || statusPayload?.payment_status || ""
+      kora_status:
+        statusPayload?.payment_status_description ||
+        statusPayload?.payment_status ||
+        statusPayload?.transaction_status ||
+        ""
     });
   } catch (e) {
     return res.status(500).json({ error: e?.message || "failed to verify payment" });

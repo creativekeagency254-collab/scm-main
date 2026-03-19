@@ -10,7 +10,7 @@ dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 const webhookApp = require("./pesapal-webhook");
 const {
-  isPesapalConfigured,
+  isKoraConfigured,
   getIpnId,
   submitOrder,
   getTransactionStatus
@@ -41,6 +41,12 @@ async function getSupabase() {
   return supabaseClient;
 }
 
+const getBearerToken = (req) => {
+  const header = req.headers?.authorization || req.headers?.Authorization || "";
+  if (!header) return "";
+  return header.startsWith("Bearer ") ? header.slice(7) : header;
+};
+
 async function applyDepositSuccess({ providerReference, amount, userId, tierAtDeposit }) {
   if (!providerReference || !userId || !Number.isFinite(amount) || amount <= 0) {
     throw new Error("invalid deposit payload");
@@ -67,7 +73,7 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
           amount,
           tier_at_deposit: tierVal,
           status: "success",
-          provider: "PesaPal",
+          provider: "Kora",
           provider_reference: providerReference,
           created_at: new Date().toISOString(),
           confirmed_at: new Date().toISOString()
@@ -145,7 +151,7 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
     }
     if (dep.rowCount === 0) {
       await client.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','PesaPal',$4,now(),now())",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','Kora',$4,now(),now())",
         [userId, amount, tierVal, providerReference]
       );
     } else {
@@ -211,13 +217,76 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
 
+app.post("/api/v1/payout/auto-complete", async (req, res) => {
+  try {
+    const withdrawalsMode = String(
+      process.env.WITHDRAWALS_MODE || process.env.VITE_WITHDRAWALS_MODE || "auto"
+    ).toLowerCase();
+    if (withdrawalsMode !== "auto") {
+      return res.status(403).json({ error: "auto payouts are disabled" });
+    }
+    if (!hasSupabase()) {
+      return res.status(500).json({ error: "supabase not configured" });
+    }
+    const payoutId = String(req.body?.payout_id || req.body?.payoutId || "").trim();
+    if (!payoutId) {
+      return res.status(400).json({ error: "payout_id required" });
+    }
+    const token = getBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    const sb = await getSupabase();
+    const { data: authData, error: authErr } = await sb.auth.getUser(token);
+    if (authErr || !authData?.user?.id) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    const userId = authData.user.id;
+
+    const { data: payoutRow, error: payoutErr } = await sb
+      .from("payout_requests")
+      .select("payout_id,user_id,status")
+      .eq("payout_id", payoutId)
+      .maybeSingle();
+    if (payoutErr || !payoutRow) {
+      return res.status(404).json({ error: "payout request not found" });
+    }
+    if (payoutRow.user_id !== userId) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    const currentStatus = String(payoutRow.status || "").toLowerCase();
+    if (currentStatus === "completed") {
+      return res.status(200).json({ ok: true, payout_id: payoutId, status: "completed" });
+    }
+    if (currentStatus === "failed") {
+      return res.status(409).json({ error: "payout request already failed" });
+    }
+
+    const { error: updateErr } = await sb
+      .from("payout_requests")
+      .update({ status: "completed", processed_at: new Date().toISOString() })
+      .eq("payout_id", payoutId);
+    if (updateErr) throw updateErr;
+
+    return res.status(200).json({ ok: true, payout_id: payoutId, status: "completed" });
+  } catch (err) {
+    console.error(err);
+    const detail =
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : String(err?.message || err);
+    return res.status(500).json({ error: "server error", detail });
+  }
+});
+
 app.post("/api/v1/deposit/create", async (req, res) => {
   try {
     const amount = Number(req.body?.amount);
     const email = String(req.body?.email || "").trim();
     const userId = String(req.body?.user_id || "").trim();
     const tier = Number(req.body?.tier || 1);
-    const method = String(req.body?.method || "PesaPal");
+    const method = String(req.body?.method || "Kora");
     const currency = String(req.body?.currency || "KES");
     const phone = String(req.body?.phone || "").trim();
     const name = String(req.body?.name || "").trim();
@@ -225,10 +294,13 @@ app.post("/api/v1/deposit/create", async (req, res) => {
     const manualRequested = ["manual", "true", "1"].includes(
       String(req.body?.payment_mode || req.body?.mode || "").toLowerCase()
     );
-    const mockPesapal = String(process.env.PESAPAL_MOCK || "").toLowerCase() === "1";
+    const mockKora = ["1", "true", "yes", "on"].includes(
+      String(process.env.KORA_MOCK || process.env.PESAPAL_MOCK || "").toLowerCase()
+    );
     const callbackUrl =
+      process.env.KORA_CALLBACK_URL ||
       process.env.PESAPAL_CALLBACK_URL ||
-      (mockPesapal ? process.env.PESAPAL_MOCK_REDIRECT_URL || "http://localhost:5000/" : "");
+      (mockKora ? process.env.KORA_MOCK_REDIRECT_URL || "http://localhost:5000/" : "");
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ error: "invalid amount" });
@@ -270,18 +342,18 @@ app.post("/api/v1/deposit/create", async (req, res) => {
       });
     }
 
-    if (!isPesapalConfigured()) {
+    if (!isKoraConfigured()) {
       return res
         .status(500)
-        .json({ error: "PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET not set" });
+        .json({ error: "KORA_SECRET_KEY not set" });
     }
     if (!callbackUrl) {
-      return res.status(500).json({ error: "PESAPAL_CALLBACK_URL not set" });
+      return res.status(500).json({ error: "KORA_CALLBACK_URL not set" });
     }
 
     const ipnId = await getIpnId();
     if (!ipnId) {
-      return res.status(500).json({ error: "PESAPAL_IPN_ID not set" });
+      return res.status(500).json({ error: "KORA_WEBHOOK_URL not set" });
     }
 
     const billingAddress = {
@@ -311,7 +383,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
     const merchantReference =
       submitRes?.merchant_reference || submitRes?.merchantReference || reference;
     if (!authUrl) {
-      return res.status(400).json({ error: "PesaPal did not return a checkout URL." });
+      return res.status(400).json({ error: "Kora did not return a checkout URL." });
     }
 
     // Persist pending deposit
@@ -325,7 +397,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
             amount,
             tier_at_deposit: tier,
             status: "pending",
-            provider: "PesaPal",
+            provider: "Kora",
             provider_reference: reference,
             created_at: new Date().toISOString()
           },
@@ -334,7 +406,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
       if (error) throw error;
     } else {
       await pool.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at) VALUES ($1,$2,$3,'pending','PesaPal',$4,now()) ON CONFLICT (provider_reference) DO NOTHING",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at) VALUES ($1,$2,$3,'pending','Kora',$4,now()) ON CONFLICT (provider_reference) DO NOTHING",
         [userId, amount, tier, reference]
       );
     }
@@ -396,6 +468,8 @@ app.get("/api/v1/deposit/verify", async (req, res) => {
       req.query?.tracking_id ||
         req.query?.orderTrackingId ||
         req.query?.OrderTrackingId ||
+        req.query?.reference ||
+        req.query?.merchant_reference ||
         ""
     ).trim();
     const merchantReference = String(
@@ -409,10 +483,10 @@ app.get("/api/v1/deposit/verify", async (req, res) => {
     if (!trackingId) {
       return res.status(400).json({ error: "orderTrackingId required" });
     }
-    if (!isPesapalConfigured()) {
+    if (!isKoraConfigured()) {
       return res
         .status(500)
-        .json({ error: "PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET not set" });
+        .json({ error: "KORA_SECRET_KEY not set" });
     }
 
     const statusPayload = await getTransactionStatus(trackingId);

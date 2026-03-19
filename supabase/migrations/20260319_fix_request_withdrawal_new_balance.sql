@@ -1,20 +1,4 @@
--- 2026-03-15 Gate withdrawals by successful tier deposit (earnings unaffected)
-
-CREATE OR REPLACE FUNCTION public.has_active_deposit(p_user uuid, p_tier smallint)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-AS $$
-  select exists (
-    select 1
-    from public.deposits d
-    where d.user_id = p_user
-      and d.status = 'success'
-      and d.tier_at_deposit = p_tier
-  );
-$$;
-
-GRANT EXECUTE ON FUNCTION public.has_active_deposit(uuid, smallint) TO authenticated;
+-- 2026-03-19 Fix ambiguous "new_balance" reference in request_withdrawal
 
 CREATE OR REPLACE FUNCTION public.request_withdrawal(
   p_amount numeric,
