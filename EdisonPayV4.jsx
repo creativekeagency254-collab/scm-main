@@ -8004,6 +8004,7 @@ export default function App() {
   const [profileRow, setProfileRow] = useState(null);
   const [authMessage, setAuthMessage] = useState("");
   const [installHint, setInstallHint] = useState("");
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideTyped, setGuideTyped] = useState("");
@@ -8094,6 +8095,25 @@ export default function App() {
     observer.observe(root, { subtree: true, childList: true, characterData: true });
     return () => observer.disconnect();
   }, [displayCurrency]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event);
+    };
+    const onAppInstalled = () => {
+      setInstallHint("App installed successfully.");
+      setTimeout(() => setInstallHint(""), 2000);
+      setDeferredInstallPrompt(null);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
 
   const go = (p) => { setPrevPage(page); setPage(p); };
   const authUser = session?.user || null;
@@ -8370,18 +8390,32 @@ export default function App() {
   };
 
   const isIOSInstallClient = typeof navigator !== "undefined" && /iPad|iPhone|iPod/i.test(navigator.userAgent || "");
+  const browserInstallFallbackUrl = typeof window !== "undefined" ? window.location.origin : "";
   const installTargetUrl = isIOSInstallClient
-    ? IOS_APP_URL
-    : (ANDROID_APK_URL || IOS_APP_URL);
+    ? (IOS_APP_URL || browserInstallFallbackUrl)
+    : (ANDROID_APK_URL || IOS_APP_URL || browserInstallFallbackUrl);
   const installLabel = "APP";
-  const handleInstall = () => {
+  const handleInstall = async () => {
+    const hasApkLink = /\.apk(\?|#|$)/i.test(ANDROID_APK_URL);
     if (isIOSInstallClient && !IOS_APP_URL) {
-      setInstallHint("iOS install link is not published yet. Use Android APK for now.");
+      setInstallHint("On iPhone: tap Share, then Add to Home Screen.");
       setTimeout(() => setInstallHint(""), 3200);
       return;
     }
+    if (!isIOSInstallClient && !hasApkLink) {
+      if (deferredInstallPrompt && typeof deferredInstallPrompt.prompt === "function") {
+        try {
+          await deferredInstallPrompt.prompt();
+          await deferredInstallPrompt.userChoice;
+        } catch (e) {}
+        setDeferredInstallPrompt(null);
+        return;
+      }
+      setInstallHint("Open browser menu and tap Install App or Add to Home Screen.");
+      setTimeout(() => setInstallHint(""), 3200);
+    }
     if (!installTargetUrl) {
-      setInstallHint("APK is not published yet. Please contact support@eddisonpay.qa.");
+      setInstallHint("Install link is not available right now.");
       setTimeout(() => setInstallHint(""), 2800);
       return;
     }
@@ -8396,7 +8430,7 @@ export default function App() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setInstallHint(/\.apk(\?|#|$)/i.test(installTargetUrl) ? "Downloading APK..." : "Opening app download...");
+      setInstallHint(/\.apk(\?|#|$)/i.test(installTargetUrl) ? "Downloading APK..." : "Opening app install...");
       setTimeout(() => setInstallHint(""), 2200);
     } catch (e) {
       window.open(installTargetUrl, "_blank", "noopener,noreferrer");
