@@ -1,6 +1,6 @@
 # Supabase Setup
 
-> Note: The current MVP schema is in `supabase/migrations/20260314_mvp.sql`, the earning rules are in `supabase/migrations/20260314_claim_earning.sql`, and RLS/auth/withdrawal helpers are in `supabase/migrations/20260315_rls_and_functions.sql`. The legacy SQL section below is archival reference only and is not the source of truth.
+> Note: The source of truth is the SQL files in `supabase/migrations`. Apply every migration in order, including `20260319_fix_request_withdrawal_new_balance.sql`, `20260320_security_hardening.sql`, `20260320_payments_fraud_and_scale.sql`, `20260320_dashboard_overview_records.sql`, `20260320_loophole_and_malfunction_guards.sql`, `20260320_referral_first_deposit_guard.sql`, `20260320_payment_flags_admin_triage.sql`, `20260320_video_views_deposit_gate.sql`, `20260320_user_upgrade_security.sql`, `20260320_admin_1m_scale.sql`, and `20260320_webhook_security_hardening.sql`. The legacy SQL section below is archival reference only and is not the source of truth.
 
 This project uses Supabase for auth and data when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
 
@@ -10,8 +10,15 @@ Create a `.env` file (or set these in Vercel):
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-VITE_API_BASE=http://localhost:8787
+# Leave empty on Vercel so frontend requests use same-origin `/api/*`.
+VITE_API_BASE=
 VITE_ENABLE_TAWK_CHAT=0
+```
+
+For local development with a separate backend host, you can still set:
+
+```
+VITE_API_BASE=http://localhost:8787
 ```
 
 For E2E tests (optional):
@@ -24,6 +31,21 @@ KORA_PUBLIC_KEY=your_kora_public_key
 KORA_SECRET_KEY=your_kora_secret_key
 KORA_WEBHOOK_URL=https://your-domain.com/api/v1/webhook/kora
 API_BASE=http://localhost:8787
+KORA_WEBHOOK_ENFORCE=1
+KORA_WEBHOOK_TOKEN=your_shared_webhook_token
+KORA_WEBHOOK_HMAC_SECRET=your_webhook_hmac_secret
+KORA_WEBHOOK_REQUIRE_TIMESTAMP=1
+KORA_WEBHOOK_REPLAY_ENFORCE=1
+KORA_WEBHOOK_MAX_SKEW_SECONDS=300
+AUTO_PAYOUT_ADMIN_TOKEN=your_strong_random_admin_token
+```
+
+Quick Vercel deployment checks:
+
+```
+npm run vercel:preflight
+npm run build
+npm run vercel:deploy
 ```
 
 ## 2. Database Schema (SQL)
@@ -32,6 +54,33 @@ Run these in Supabase SQL editor, in order:
 1) `supabase/migrations/20260314_mvp.sql`
 2) `supabase/migrations/20260314_claim_earning.sql`
 3) `supabase/migrations/20260315_rls_and_functions.sql`
+4) `supabase/migrations/20260315_tier_gate.sql` OR `supabase/migrations/20260315_allow_earnings_without_deposit.sql` (choose one)
+5) `supabase/migrations/20260315_withdrawal_deposit_gate.sql`
+6) `supabase/migrations/20260319_fix_request_withdrawal_new_balance.sql`
+7) `supabase/migrations/20260320_security_hardening.sql`
+8) `supabase/migrations/20260320_payments_fraud_and_scale.sql`
+9) `supabase/migrations/20260320_dashboard_overview_records.sql`
+10) `supabase/migrations/20260320_loophole_and_malfunction_guards.sql`
+11) `supabase/migrations/20260320_referral_first_deposit_guard.sql`
+12) `supabase/migrations/20260320_payment_flags_admin_triage.sql`
+13) `supabase/migrations/20260320_video_views_deposit_gate.sql`
+14) `supabase/migrations/20260320_user_upgrade_security.sql`
+15) `supabase/migrations/20260320_admin_1m_scale.sql`
+16) `supabase/migrations/20260320_webhook_security_hardening.sql`
+
+Important:
+- If you already applied `20260315_withdrawal_deposit_gate.sql`, still run `20260319_fix_request_withdrawal_new_balance.sql`.
+- Use only one earnings-gate variant: `20260315_tier_gate.sql` or `20260315_allow_earnings_without_deposit.sql`.
+- Run `20260320_security_hardening.sql` to enforce strict tier deposit amounts, atomic deposit confirmation, and tighter anti-escalation RLS rules.
+- Run `20260320_payments_fraud_and_scale.sql` to add payment audit/flag telemetry and high-volume indexes for 1M+ users.
+- Run `20260320_dashboard_overview_records.sql` to log tier upgrades and power dashboard metrics (`get_my_dashboard_overview`).
+- Run `20260320_loophole_and_malfunction_guards.sql` to close wallet/status/referral loopholes and prevent malformed state transitions.
+- Run `20260320_referral_first_deposit_guard.sql` to enforce referral commission only on the referred user's first successful deposit.
+- Run `20260320_payment_flags_admin_triage.sql` to allow admin triage updates on `payment_flags` and auto-manage `resolved_at`.
+- Run `20260320_video_views_deposit_gate.sql` to block `video_views` inserts until the user has a successful deposit for their current tier.
+- Run `20260320_user_upgrade_security.sql` to block user-side tier/referral tampering and require confirmed deposits before tier activation.
+- Run `20260320_admin_1m_scale.sql` to add admin-scale RPCs (`get_admin_system_overview`, `get_admin_tier_distribution`) plus additional indexes for 1M+ user reporting.
+- Run `20260320_webhook_security_hardening.sql` to add durable webhook replay protection (`register_payment_webhook_receipt`) and admin visibility for webhook receipts.
 
 Legacy schema (no longer used) is below:
 

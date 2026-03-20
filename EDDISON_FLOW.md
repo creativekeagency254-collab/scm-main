@@ -1,7 +1,7 @@
 # EDDISON FLOW
 Comprehensive system report for EdisonPay MVP.
 
-Document version: 2026-03-15
+Document version: 2026-03-20
 Scope: Product logic, database, backend, frontend UX, payments, security, scaling, and operations.
 Source of truth: Current repository implementation and Supabase migrations.
 
@@ -9,7 +9,7 @@ Source of truth: Current repository implementation and Supabase migrations.
 
 **1. Executive Summary**
 
-EdisonPay is a web and mobile-first app that rewards users for completing daily video tasks within a tiered deposit model. Users sign up (email or Google), choose a tier, complete two required videos each day, and earn tier-based rewards. Tier deposits unlock withdrawals and can also be used to gate earnings depending on the deployed database migration. Deposits are processed through PesaPal in test mode, with wallet balances and a full ledger stored in Supabase Postgres. The system supports referrals with 10 percent direct-commission and includes an admin dashboard for payout review and reconciliation.
+EdisonPay is a web and mobile-first app that rewards users for completing daily video tasks within a tiered deposit model. Users sign up (email or Google), choose a tier, complete two required videos each day, and earn tier-based rewards. Tier deposits unlock withdrawals and can also be used to gate earnings depending on the deployed database migration. Deposits are processed through PesaPal in test mode, with wallet balances and a full ledger stored in Supabase Postgres. The system supports referrals with a 10 percent commission on the referred user's first successful deposit and includes an admin dashboard for payout review and reconciliation.
 
 Core commitments:
 1. Wallet math is authoritative and ledger-backed.
@@ -174,8 +174,8 @@ Important behaviors:
 **8. Referral Flow**
 
 Rules:
-1. Single-level commission: 10 percent on each direct referral deposit.
-2. Referral credit is processed when the referred user deposit succeeds.
+1. Single-level commission: 10 percent on the referred user's first successful direct deposit only.
+2. Referral credit is processed when that first qualifying referred-user deposit succeeds.
 3. Referral credit writes into `referrals` and a ledger `transactions` row.
 
 Mermaid diagram:
@@ -378,10 +378,32 @@ Recommended execution order in Supabase:
 3. `supabase/migrations/20260315_rls_and_functions.sql`
 4. `supabase/migrations/20260315_tier_gate.sql` or `20260315_allow_earnings_without_deposit.sql`
 5. `supabase/migrations/20260315_withdrawal_deposit_gate.sql`
+6. `supabase/migrations/20260319_fix_request_withdrawal_new_balance.sql`
+7. `supabase/migrations/20260320_security_hardening.sql`
+8. `supabase/migrations/20260320_payments_fraud_and_scale.sql`
+9. `supabase/migrations/20260320_dashboard_overview_records.sql`
+10. `supabase/migrations/20260320_loophole_and_malfunction_guards.sql`
+11. `supabase/migrations/20260320_referral_first_deposit_guard.sql`
+12. `supabase/migrations/20260320_payment_flags_admin_triage.sql`
+13. `supabase/migrations/20260320_video_views_deposit_gate.sql`
+14. `supabase/migrations/20260320_user_upgrade_security.sql`
+15. `supabase/migrations/20260320_admin_1m_scale.sql`
+16. `supabase/migrations/20260320_webhook_security_hardening.sql`
 
 Notes:
 1. Only one version of `claim_earning` should be active.
 2. If you want earnings without deposits, apply `20260315_allow_earnings_without_deposit.sql` last.
+3. Apply `20260319_fix_request_withdrawal_new_balance.sql` after `20260315_withdrawal_deposit_gate.sql` to patch `request_withdrawal`.
+4. Apply `20260320_security_hardening.sql` last to tighten anti-escalation and deposit-wallet integrity controls.
+5. Apply `20260320_payments_fraud_and_scale.sql` to add payment anomaly telemetry and high-volume query indexes.
+6. Apply `20260320_dashboard_overview_records.sql` to track tier upgrades and expose summary metrics for dashboard progress and account overview.
+7. Apply `20260320_loophole_and_malfunction_guards.sql` to enforce strict wallet references, transaction sign rules, and safe deposit/payout status transitions.
+8. Apply `20260320_referral_first_deposit_guard.sql` to enforce one referral payout per referred user on first successful deposit.
+9. Apply `20260320_payment_flags_admin_triage.sql` to allow admin review/resolve actions on payment flags.
+10. Apply `20260320_video_views_deposit_gate.sql` to enforce deposit-before-watch on `video_views` inserts.
+11. Apply `20260320_user_upgrade_security.sql` to block direct user tier/referral tampering and enforce deposit-backed tier activation.
+12. Apply `20260320_admin_1m_scale.sql` to add admin-only reporting RPCs and indexing optimized for 1M+ users.
+13. Apply `20260320_webhook_security_hardening.sql` to enforce durable webhook replay detection for payment callbacks.
 
 ---
 
@@ -397,6 +419,17 @@ These are the main implementation sources:
 7. `C:\Users\user\scm\scm-main\supabase\migrations\20260315_tier_gate.sql`
 8. `C:\Users\user\scm\scm-main\supabase\migrations\20260315_allow_earnings_without_deposit.sql`
 9. `C:\Users\user\scm\scm-main\supabase\migrations\20260315_withdrawal_deposit_gate.sql`
+10. `C:\Users\user\scm\scm-main\supabase\migrations\20260319_fix_request_withdrawal_new_balance.sql`
+11. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_security_hardening.sql`
+12. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_payments_fraud_and_scale.sql`
+13. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_dashboard_overview_records.sql`
+14. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_loophole_and_malfunction_guards.sql`
+15. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_referral_first_deposit_guard.sql`
+16. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_payment_flags_admin_triage.sql`
+17. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_video_views_deposit_gate.sql`
+18. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_user_upgrade_security.sql`
+19. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_admin_1m_scale.sql`
+20. `C:\Users\user\scm\scm-main\supabase\migrations\20260320_webhook_security_hardening.sql`
 
 ---
 

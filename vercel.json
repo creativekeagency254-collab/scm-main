@@ -1,12 +1,19 @@
 {
-  "redirects": [
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "headers": [
     {
-      "source": "/(.*)",
-      "has": [
-        { "type": "host", "value": "scm-main.vercel.app" }
-      ],
-      "destination": "https://muchemi222.vercel.app/$1",
-      "permanent": true
+      "source": "/service-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
     }
   ],
   "rewrites": [

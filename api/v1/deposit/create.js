@@ -6,6 +6,13 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const KORA_WEBHOOK_URL = process.env.KORA_WEBHOOK_URL || process.env.PESAPAL_IPN_URL;
 const KORA_CALLBACK_URL = process.env.KORA_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL;
+const REQUIRED_TIER_DEPOSITS = {
+  1: 5000,
+  2: 10000,
+  3: 20000,
+  4: 50000,
+  5: 100000
+};
 
 const getAdmin = () => {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
@@ -50,6 +57,8 @@ const checkoutErrorMessage = (err) => {
   return String(message || "").trim() || "Failed to start checkout.";
 };
 
+const normalizeAmount = (value) => Number(Number(value || 0).toFixed(2));
+
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
@@ -72,23 +81,14 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "supabase not configured" });
   }
 
-  let { user, error: authError } = await getAuthUser(supabaseAdmin, req);
-  if (authError) {
-    const fallbackUserId = String(req.body?.user_id || "").trim();
-    if (!fallbackUserId) {
-      return res.status(401).json({ error: "unauthorized" });
-    }
-    const { data: fallbackUserData, error: fallbackUserError } =
-      await supabaseAdmin.auth.admin.getUserById(fallbackUserId);
-    if (fallbackUserError || !fallbackUserData?.user) {
-      return res.status(401).json({ error: "unauthorized" });
-    }
-    user = fallbackUserData.user;
+  const { user, error: authError } = await getAuthUser(supabaseAdmin, req);
+  if (authError || !user?.id) {
+    return res.status(401).json({ error: "unauthorized" });
   }
 
-  const amount = Number(req.body?.amount);
+  const amount = normalizeAmount(req.body?.amount);
   const email = String(req.body?.email || "").trim();
-  const userId = String(req.body?.user_id || "").trim();
+  const userId = String(req.body?.user_id || user.id || "").trim();
   const tier = Number(req.body?.tier || 1);
   const method = String(req.body?.method || "M-Pesa");
 
@@ -103,6 +103,14 @@ export default async function handler(req, res) {
   }
   if (user?.email && String(user.email).toLowerCase() !== email.toLowerCase()) {
     return res.status(403).json({ error: "email mismatch" });
+  }
+
+  if (!Number.isInteger(tier) || !Object.prototype.hasOwnProperty.call(REQUIRED_TIER_DEPOSITS, tier)) {
+    return res.status(400).json({ error: "invalid tier" });
+  }
+  const requiredAmount = REQUIRED_TIER_DEPOSITS[tier];
+  if (amount !== requiredAmount) {
+    return res.status(400).json({ error: `invalid amount for tier ${tier}; expected ${requiredAmount}` });
   }
 
   const paymentMode = String(req.body?.payment_mode || "").toLowerCase();

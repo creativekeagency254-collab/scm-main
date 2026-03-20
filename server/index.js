@@ -29,6 +29,19 @@ const supabaseUrl = () =>
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const hasSupabase = () =>
   !!supabaseUrl() && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+const REQUIRED_TIER_DEPOSITS = {
+  1: 5000,
+  2: 10000,
+  3: 20000,
+  4: 50000,
+  5: 100000
+};
+const AUTO_PAYOUT_ADMIN_TOKEN = String(process.env.AUTO_PAYOUT_ADMIN_TOKEN || "").trim();
+const normalizeAmount = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Number(n.toFixed(2));
+};
 
 async function getSupabase() {
   if (supabaseClient) return supabaseClient;
@@ -47,6 +60,55 @@ const getBearerToken = (req) => {
   return header.startsWith("Bearer ") ? header.slice(7) : header;
 };
 
+const secureEqual = (a, b) => {
+  const left = String(a || "");
+  const right = String(b || "");
+  if (!left || !right) return false;
+  const aBuf = Buffer.from(left);
+  const bBuf = Buffer.from(right);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+};
+
+async function getAuthenticatedUser(req) {
+  if (!hasSupabase()) return { user: null, error: "supabase not configured" };
+  const token = getBearerToken(req);
+  if (!token) return { user: null, error: "unauthorized" };
+  const sb = await getSupabase();
+  const { data, error } = await sb.auth.getUser(token);
+  if (error || !data?.user?.id) return { user: null, error: "unauthorized" };
+  return { user: data.user, error: null };
+}
+
+async function isAdminUser(userId) {
+  if (!hasSupabase() || !userId) return false;
+  const sb = await getSupabase();
+  const { data, error } = await sb
+    .from("users")
+    .select("profile_data")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return false;
+  return String(data?.profile_data?.role || "").toLowerCase() === "admin";
+}
+
+async function markDepositFailed(providerReference) {
+  if (!providerReference) return;
+  if (hasSupabase()) {
+    const sb = await getSupabase();
+    await sb
+      .from("deposits")
+      .update({ status: "failed" })
+      .eq("provider_reference", providerReference)
+      .neq("status", "success");
+    return;
+  }
+  await pool.query(
+    "UPDATE deposits SET status = 'failed' WHERE provider_reference = $1 AND status <> 'success'",
+    [providerReference]
+  );
+}
+
 async function applyDepositSuccess({ providerReference, amount, userId, tierAtDeposit }) {
   if (!providerReference || !userId || !Number.isFinite(amount) || amount <= 0) {
     throw new Error("invalid deposit payload");
@@ -55,87 +117,12 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
 
   if (hasSupabase()) {
     const sb = await getSupabase();
-    const { data: depRow, error: depErr } = await sb
-      .from("deposits")
-      .select("deposit_id,status")
-      .eq("provider_reference", providerReference)
-      .maybeSingle();
-    if (depErr) throw depErr;
-    if (depRow?.status === "success") {
-      return { status: "success", already: true };
-    }
-
-    const { data: upserted, error: upsertErr } = await sb
-      .from("deposits")
-      .upsert(
-        {
-          user_id: userId,
-          amount,
-          tier_at_deposit: tierVal,
-          status: "success",
-          provider: "Kora",
-          provider_reference: providerReference,
-          created_at: new Date().toISOString(),
-          confirmed_at: new Date().toISOString()
-        },
-        { onConflict: "provider_reference" }
-      )
-      .select("deposit_id,status")
-      .maybeSingle();
-    if (upsertErr) throw upsertErr;
-    const depositId = upserted?.deposit_id || depRow?.deposit_id || null;
-
-    const { error: depTxErr } = await sb.rpc("apply_wallet_tx", {
-      p_user_id: userId,
-      p_type: "deposit",
-      p_amount: amount,
-      p_related_id: null,
-      p_reference: `dep:${providerReference}`
+    const { data, error } = await sb.rpc("confirm_deposit_success", {
+      p_provider_reference: providerReference
     });
-    if (depTxErr) throw depTxErr;
-
-    const { data: refRow, error: refErr } = await sb
-      .from("users")
-      .select("referrer_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (refErr) throw refErr;
-    const referrerId = refRow?.referrer_id;
-    if (referrerId) {
-      let hasReferral = false;
-      if (depositId) {
-        const { data: existingRef, error: existingErr } = await sb
-          .from("referrals")
-          .select("ref_id")
-          .eq("deposit_id", depositId)
-          .maybeSingle();
-        if (existingErr) throw existingErr;
-        hasReferral = !!existingRef;
-      }
-      if (!hasReferral) {
-        const commission = Number((amount * 0.1).toFixed(2));
-        const { error: refInsErr } = await sb
-          .from("referrals")
-          .insert({
-            referrer_id: referrerId,
-            referred_user_id: userId,
-            deposit_id: depositId,
-            commission_amount: commission,
-            created_at: new Date().toISOString()
-          });
-        if (refInsErr) throw refInsErr;
-        const { error: refTxErr } = await sb.rpc("apply_wallet_tx", {
-          p_user_id: referrerId,
-          p_type: "referral",
-          p_amount: commission,
-          p_related_id: null,
-          p_reference: `ref:${providerReference}`
-        });
-        if (refTxErr) throw refTxErr;
-      }
-    }
-
-    return { status: "success", already: false };
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { status: "success", already: !!row?.already };
   }
 
   const client = await pool.connect();
@@ -167,26 +154,32 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
     );
 
     const ref = await client.query(
-      "SELECT referrer_id FROM users WHERE user_id = $1",
+      "SELECT referrer_id FROM users WHERE user_id = $1 FOR UPDATE",
       [userId]
     );
     const referrerId = ref.rows[0]?.referrer_id;
     if (referrerId) {
-      const existingRef = await client.query(
-        "SELECT 1 FROM referrals WHERE deposit_id = (SELECT deposit_id FROM deposits WHERE provider_reference = $1)",
-        [providerReference]
+      const priorSuccess = await client.query(
+        "SELECT 1 FROM deposits WHERE user_id = $1 AND status = 'success' AND provider_reference <> $2 LIMIT 1",
+        [userId, providerReference]
       );
-      if (existingRef.rowCount === 0) {
-        const commission = Number((amount * 0.10).toFixed(2));
-        await client.query(
-          "INSERT INTO referrals (referrer_id, referred_user_id, deposit_id, commission_amount, created_at) VALUES ($1,$2,(SELECT deposit_id FROM deposits WHERE provider_reference=$3),$4,now())",
-          [referrerId, userId, providerReference, commission]
+      if (priorSuccess.rowCount === 0) {
+        const existingRef = await client.query(
+          "SELECT 1 FROM referrals WHERE referred_user_id = $1 AND deposit_id IS NOT NULL LIMIT 1",
+          [userId]
         );
+        if (existingRef.rowCount === 0) {
+          const commission = Number((amount * 0.10).toFixed(2));
+          await client.query(
+            "INSERT INTO referrals (referrer_id, referred_user_id, deposit_id, commission_amount, created_at) VALUES ($1,$2,(SELECT deposit_id FROM deposits WHERE provider_reference=$3),$4,now())",
+            [referrerId, userId, providerReference, commission]
+          );
 
-        await client.query(
-          "SELECT apply_wallet_tx($1, 'referral', $2, NULL, $3)",
-          [referrerId, commission, `ref:${providerReference}`]
-        );
+          await client.query(
+            "SELECT apply_wallet_tx($1, 'referral', $2, NULL, $3)",
+            [referrerId, commission, `ref:${providerReference}`]
+          );
+        }
       }
     }
 
@@ -233,15 +226,21 @@ app.post("/api/v1/payout/auto-complete", async (req, res) => {
       return res.status(400).json({ error: "payout_id required" });
     }
     const token = getBearerToken(req);
-    if (!token) {
-      return res.status(401).json({ error: "unauthorized" });
-    }
+    if (!token) return res.status(401).json({ error: "unauthorized" });
     const sb = await getSupabase();
-    const { data: authData, error: authErr } = await sb.auth.getUser(token);
-    if (authErr || !authData?.user?.id) {
-      return res.status(401).json({ error: "unauthorized" });
+    const isAutomationCall =
+      AUTO_PAYOUT_ADMIN_TOKEN &&
+      secureEqual(token, AUTO_PAYOUT_ADMIN_TOKEN);
+    if (!isAutomationCall) {
+      const { data: authData, error: authErr } = await sb.auth.getUser(token);
+      if (authErr || !authData?.user?.id) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const adminAccess = await isAdminUser(authData.user.id);
+      if (!adminAccess) {
+        return res.status(403).json({ error: "admin required" });
+      }
     }
-    const userId = authData.user.id;
 
     const { data: payoutRow, error: payoutErr } = await sb
       .from("payout_requests")
@@ -251,9 +250,6 @@ app.post("/api/v1/payout/auto-complete", async (req, res) => {
     if (payoutErr || !payoutRow) {
       return res.status(404).json({ error: "payout request not found" });
     }
-    if (payoutRow.user_id !== userId) {
-      return res.status(403).json({ error: "forbidden" });
-    }
 
     const currentStatus = String(payoutRow.status || "").toLowerCase();
     if (currentStatus === "completed") {
@@ -261,6 +257,9 @@ app.post("/api/v1/payout/auto-complete", async (req, res) => {
     }
     if (currentStatus === "failed") {
       return res.status(409).json({ error: "payout request already failed" });
+    }
+    if (!["queued", "processing"].includes(currentStatus)) {
+      return res.status(409).json({ error: "payout request not in completable state" });
     }
 
     const { error: updateErr } = await sb
@@ -282,9 +281,9 @@ app.post("/api/v1/payout/auto-complete", async (req, res) => {
 
 app.post("/api/v1/deposit/create", async (req, res) => {
   try {
-    const amount = Number(req.body?.amount);
+    const amount = normalizeAmount(req.body?.amount);
     const email = String(req.body?.email || "").trim();
-    const userId = String(req.body?.user_id || "").trim();
+    let userId = String(req.body?.user_id || "").trim();
     const tier = Number(req.body?.tier || 1);
     const method = String(req.body?.method || "Kora");
     const currency = String(req.body?.currency || "KES");
@@ -307,6 +306,33 @@ app.post("/api/v1/deposit/create", async (req, res) => {
     }
     if (!email || !userId) {
       return res.status(400).json({ error: "email and user_id required" });
+    }
+    if (!Number.isInteger(tier) || !Object.prototype.hasOwnProperty.call(REQUIRED_TIER_DEPOSITS, tier)) {
+      return res.status(400).json({ error: "invalid tier" });
+    }
+    const requiredAmount = REQUIRED_TIER_DEPOSITS[tier];
+    if (amount !== requiredAmount) {
+      return res.status(400).json({ error: `invalid amount for tier ${tier}; expected ${requiredAmount}` });
+    }
+
+    if (hasSupabase()) {
+      const token = getBearerToken(req);
+      if (!token) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const sb = await getSupabase();
+      const { data: authData, error: authErr } = await sb.auth.getUser(token);
+      if (authErr || !authData?.user?.id) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const authUser = authData.user;
+      if (userId && authUser.id !== userId) {
+        return res.status(403).json({ error: "user mismatch" });
+      }
+      if (authUser.email && String(authUser.email).toLowerCase() !== email.toLowerCase()) {
+        return res.status(403).json({ error: "email mismatch" });
+      }
+      userId = authUser.id;
     }
 
     const reference = `ep_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -432,6 +458,11 @@ app.get("/api/v1/deposit/status", async (req, res) => {
     const reference = String(req.query?.reference || "").trim();
     if (!reference) return res.status(400).json({ error: "reference required" });
     if (hasSupabase()) {
+      const { user, error: authError } = await getAuthenticatedUser(req);
+      if (authError || !user?.id) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const adminAccess = await isAdminUser(user.id);
       const sb = await getSupabase();
       const { data, error } = await sb
         .from("deposits")
@@ -440,6 +471,9 @@ app.get("/api/v1/deposit/status", async (req, res) => {
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ error: "not found" });
+      if (!adminAccess && String(data.user_id || "") !== String(user.id)) {
+        return res.status(403).json({ error: "forbidden" });
+      }
       return res.status(200).json(data);
     }
     const result = await pool.query(
@@ -489,6 +523,17 @@ app.get("/api/v1/deposit/verify", async (req, res) => {
         .json({ error: "KORA_SECRET_KEY not set" });
     }
 
+    let authUserId = null;
+    let adminAccess = false;
+    if (hasSupabase()) {
+      const authResult = await getAuthenticatedUser(req);
+      if (authResult.error || !authResult.user?.id) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      authUserId = authResult.user.id;
+      adminAccess = await isAdminUser(authUserId);
+    }
+
     const statusPayload = await getTransactionStatus(trackingId);
     const statusCode = Number(
       statusPayload?.status_code ?? statusPayload?.payment_status_code ?? NaN
@@ -499,18 +544,22 @@ app.get("/api/v1/deposit/verify", async (req, res) => {
         statusPayload?.status ||
         ""
     ).toLowerCase();
+    const normalizedStatus = statusDesc || (Number.isFinite(statusCode) ? (statusCode === 2 ? "failed" : "pending") : "pending");
     const isSuccess = Number.isFinite(statusCode)
       ? statusCode === 1
       : statusDesc === "completed" || statusDesc === "complete" || statusDesc === "success";
-
-    if (!isSuccess) {
-      return res.status(200).json({ status: statusDesc || "pending" });
-    }
 
     const refFromStatus =
       statusPayload?.merchant_reference ||
       statusPayload?.merchantReference ||
       merchantReference;
+    if (!isSuccess) {
+      if (normalizedStatus === "failed" || normalizedStatus === "invalid" || normalizedStatus === "reversed") {
+        await markDepositFailed(refFromStatus || merchantReference);
+      }
+      return res.status(200).json({ status: normalizedStatus || "pending" });
+    }
+
     if (!refFromStatus) {
       return res.status(400).json({ error: "merchant reference required" });
     }
@@ -528,6 +577,9 @@ app.get("/api/v1/deposit/verify", async (req, res) => {
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ error: "deposit not found" });
+      if (!adminAccess && String(data.user_id || "") !== String(authUserId || "")) {
+        return res.status(403).json({ error: "forbidden" });
+      }
       userId = data.user_id;
       tierAtDeposit = data.tier_at_deposit;
       if (!Number.isFinite(amount) || amount <= 0) amount = Number(data.amount || 0);
@@ -540,6 +592,26 @@ app.get("/api/v1/deposit/verify", async (req, res) => {
       userId = result.rows[0].user_id;
       tierAtDeposit = result.rows[0].tier_at_deposit;
       if (!Number.isFinite(amount) || amount <= 0) amount = Number(result.rows[0].amount || 0);
+    }
+
+    const expectedAmount = normalizeAmount(amount);
+    const providerAmount = normalizeAmount(
+      statusPayload?.amount ??
+      statusPayload?.data?.amount ??
+      statusPayload?.amount_paid ??
+      statusPayload?.data?.amount_paid
+    );
+    if (
+      providerAmount !== null &&
+      expectedAmount !== null &&
+      Math.abs(providerAmount - expectedAmount) > 0.009
+    ) {
+      await markDepositFailed(refFromStatus);
+      return res.status(409).json({
+        error: "payment amount mismatch",
+        expected_amount: expectedAmount,
+        provider_amount: providerAmount
+      });
     }
 
     await applyDepositSuccess({

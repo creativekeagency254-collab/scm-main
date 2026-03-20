@@ -41,6 +41,13 @@ const BRUTAL_RETRY_DELAY_MS = Number(process.env.BRUTAL_RETRY_DELAY_MS || "5000"
 const BRUTAL_FORCE_LOCAL = String(process.env.BRUTAL_FORCE_LOCAL || "") === "1";
 const TEST_PASSWORD = process.env.TEST_PASSWORD || "Passw0rd!";
 const CLEANUP = process.env.CLEANUP || "0";
+const REQUIRED_TIER_DEPOSITS = {
+  1: 5000,
+  2: 10000,
+  3: 20000,
+  4: 50000,
+  5: 100000
+};
 
 function must(name, value) {
   if (!value) throw new Error(`Missing ${name} env var`);
@@ -147,13 +154,16 @@ async function claimEarning(client, kind = "manual") {
   return data;
 }
 
-async function depositAndVerify(base, userId, email, amount, tier) {
+async function depositAndVerify(base, accessToken, userId, email, amount, tier) {
   let data = null;
   let lastErr = null;
   for (let attempt = 0; attempt <= BRUTAL_RETRIES; attempt++) {
     const res = await fetch(`${base}/api/v1/deposit/create`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`
+      },
       body: JSON.stringify({ amount, user_id: userId, email, tier, method: "PesaPal" })
     });
     data = await res.json().catch(() => ({}));
@@ -266,8 +276,9 @@ async function runBatch(batchIndex, base) {
   for (const u of users) {
     const session = await signIn(u.email, TEST_PASSWORD);
     const client = authedClient(session.access_token);
+    const depositAmount = REQUIRED_TIER_DEPOSITS[u.tier] || REQUIRED_TIER_DEPOSITS[1];
 
-    const reference = await depositAndVerify(base, u.id, u.email, 1000, u.tier);
+    const reference = await depositAndVerify(base, session.access_token, u.id, u.email, depositAmount, u.tier);
     await insertViews(client, u.id, u.tier, 2, u.tier === 2 ? 1 : 0);
     await claimEarning(client, "manual");
     if (u.tier === 2) {

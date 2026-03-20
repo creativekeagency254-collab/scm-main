@@ -9,3 +9,5 @@ pnpm-debug.log*
 .env.*
 .DS_Store
 .vercel
+.vercel.backup.*/
+supabase/.temp/

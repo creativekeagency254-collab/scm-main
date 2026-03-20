@@ -1,13 +1,10 @@
 const clean = (value) => String(value || "").trim().replace(/^['"]|['"]$/g, "");
-const KORA_TEST_SECRET_FALLBACK = "sk_test_AbiBDoPaW7uKjyZpkXztMxf2MuKatkB5TNvhkvHc";
-
 const KORA_BASE = clean(process.env.KORA_BASE_URL || "https://api.korapay.com");
 const KORA_SECRET_KEY = clean(
   process.env.KORA_SECRET_KEY ||
     process.env.KORA_SECRET ||
     process.env.PESAPAL_CONSUMER_SECRET ||
-    process.env.PESAPAL_CONSUMER_KEY ||
-    KORA_TEST_SECRET_FALLBACK
+    process.env.PESAPAL_CONSUMER_KEY
 );
 const KORA_CALLBACK_URL = clean(process.env.KORA_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL);
 const KORA_WEBHOOK_URL = clean(process.env.KORA_WEBHOOK_URL || process.env.PESAPAL_IPN_URL);

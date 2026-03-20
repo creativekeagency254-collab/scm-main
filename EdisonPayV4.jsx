@@ -1,8 +1,8 @@
-﻿import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import React from "react";
 import { createClient } from "@supabase/supabase-js";
 import { Fonts, GlobalStyles } from "./src/features/layout/AppStyles.jsx";
-import { I, PaymentLogo, BrandMark, PAYMENT_ICON_SOURCES, AnimNum, LazyVideo, Donut } from "./src/features/shared/ui-primitives.jsx";
+import { I, PaymentLogo, BrandMark, PAYMENT_ICON_SOURCES, AnimNum, LazyVideo } from "./src/features/shared/ui-primitives.jsx";
 import { TIERS, V_PRICE, getTierRequiredEarn, getTierDailyTotal, getTierBonusUnit } from "./src/features/config/tiers.js";
 import { AVATAR_PRESETS } from "./src/features/profile/avatar-presets.js";
 
@@ -10,9 +10,139 @@ import { AVATAR_PRESETS } from "./src/features/profile/avatar-presets.js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const API_BASE = import.meta.env.VITE_API_BASE || "";
+const ANDROID_APK_URL = String(import.meta.env.VITE_ANDROID_APK_URL || "").trim();
+const IOS_APP_URL = String(import.meta.env.VITE_IOS_APP_URL || "").trim();
 const PAYMENTS_MODE = String(import.meta.env.VITE_PAYMENTS_MODE || "live").toLowerCase();
 const WITHDRAWALS_MODE = String(import.meta.env.VITE_WITHDRAWALS_MODE || PAYMENTS_MODE || "auto").toLowerCase();
 const MANUAL_WITHDRAWALS = WITHDRAWALS_MODE !== "auto";
+const FX_KES_PER_USD = 130;
+const CURRENCY_STORAGE_KEY = "ep:currency";
+const DISPLAY_CURRENCIES = { KES: "KES", USD: "USD" };
+let ACTIVE_DISPLAY_CURRENCY = DISPLAY_CURRENCIES.KES;
+const ORIGINAL_CURRENCY_TEXT = new WeakMap();
+
+const normalizeDisplayCurrency = (value) => {
+  const raw = String(value || "").trim().toUpperCase();
+  return raw === DISPLAY_CURRENCIES.USD ? DISPLAY_CURRENCIES.USD : DISPLAY_CURRENCIES.KES;
+};
+const setActiveDisplayCurrency = (value) => {
+  ACTIVE_DISPLAY_CURRENCY = normalizeDisplayCurrency(value);
+};
+const getActiveDisplayCurrency = () => ACTIVE_DISPLAY_CURRENCY;
+const toDisplayAmount = (kesAmount, currency = getActiveDisplayCurrency()) => {
+  const n = Number(kesAmount);
+  if (!Number.isFinite(n)) return 0;
+  return currency === DISPLAY_CURRENCIES.USD ? (n / FX_KES_PER_USD) : n;
+};
+const toKesAmount = (amount, currency = getActiveDisplayCurrency()) => {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return NaN;
+  if (currency === DISPLAY_CURRENCIES.USD) return Math.round(n * FX_KES_PER_USD);
+  return n;
+};
+const formatMoney = (kesAmount, opts = {}) => {
+  const {
+    currency = getActiveDisplayCurrency(),
+    compact = false,
+    minFractionDigits,
+    maxFractionDigits
+  } = opts || {};
+  const kes = Number(kesAmount);
+  const safeKes = Number.isFinite(kes) ? kes : 0;
+  if (currency === DISPLAY_CURRENCIES.USD) {
+    const usd = safeKes / FX_KES_PER_USD;
+    const min = Number.isFinite(minFractionDigits) ? minFractionDigits : 2;
+    const max = Number.isFinite(maxFractionDigits) ? maxFractionDigits : 2;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      notation: compact ? "compact" : "standard",
+      minimumFractionDigits: min,
+      maximumFractionDigits: max
+    }).format(usd);
+  }
+  const min = Number.isFinite(minFractionDigits) ? minFractionDigits : 0;
+  const max = Number.isFinite(maxFractionDigits) ? maxFractionDigits : 0;
+  const value = new Intl.NumberFormat("en-US", {
+    notation: compact ? "compact" : "standard",
+    minimumFractionDigits: min,
+    maximumFractionDigits: max
+  }).format(safeKes);
+  return `KES ${value}`;
+};
+const parseKesNumberWithSuffix = (numPart = "", suffix = "") => {
+  const n = Number(String(numPart || "").replace(/,/g, ""));
+  if (!Number.isFinite(n)) return NaN;
+  const tag = String(suffix || "").toUpperCase();
+  if (tag === "K") return n * 1_000;
+  if (tag === "M") return n * 1_000_000;
+  if (tag === "B") return n * 1_000_000_000;
+  return n;
+};
+const convertKesTextToSelectedCurrency = (text, currency = getActiveDisplayCurrency()) => {
+  const raw = String(text || "");
+  if (currency !== DISPLAY_CURRENCIES.USD) return raw;
+  const withAmounts = raw.replace(/([+-]?)\s*(KES|KSH)\s*([0-9][0-9,]*(?:\.[0-9]+)?)([KMBkmb]?)(\+?)/gi, (full, sign, _cur, numPart, suffix, trailingPlus) => {
+    const unsignedKes = parseKesNumberWithSuffix(numPart, suffix);
+    if (!Number.isFinite(unsignedKes)) return full;
+    const signedKes = sign === "-" ? -unsignedKes : unsignedKes;
+    const useCompact = !!suffix;
+    const usdLabel = formatMoney(signedKes, {
+      currency: DISPLAY_CURRENCIES.USD,
+      compact: useCompact,
+      minFractionDigits: useCompact ? 0 : 2,
+      maxFractionDigits: useCompact ? 1 : 2
+    });
+    const plusPrefix = sign === "+" ? "+" : "";
+    return `${plusPrefix}${usdLabel}${trailingPlus || ""}`;
+  });
+  return withAmounts
+    .replace(/\bKSH\b/gi, "USD")
+    .replace(/\bKES\b/gi, "USD");
+};
+const isCurrencyStaticNode = (node) => {
+  let el = node?.parentElement || null;
+  while (el) {
+    if (el?.dataset?.currencyStatic === "1") return true;
+    const tag = String(el.tagName || "").toUpperCase();
+    if (tag === "SCRIPT" || tag === "STYLE") return true;
+    el = el.parentElement;
+  }
+  return false;
+};
+const applyCurrencyToTextNode = (textNode, currency = getActiveDisplayCurrency()) => {
+  if (!textNode || textNode.nodeType !== 3) return;
+  if (isCurrencyStaticNode(textNode)) return;
+  const current = String(textNode.nodeValue || "");
+  if (!current) return;
+  if (currency === DISPLAY_CURRENCIES.USD) {
+    if (/(KES|KSH)/i.test(current)) ORIGINAL_CURRENCY_TEXT.set(textNode, current);
+    const source = ORIGINAL_CURRENCY_TEXT.get(textNode) || current;
+    const converted = convertKesTextToSelectedCurrency(source, currency);
+    if (converted !== current) textNode.nodeValue = converted;
+    return;
+  }
+  if (!ORIGINAL_CURRENCY_TEXT.has(textNode)) return;
+  const original = ORIGINAL_CURRENCY_TEXT.get(textNode);
+  if (typeof original === "string" && original !== current) {
+    textNode.nodeValue = original;
+  }
+};
+const applyCurrencyToSubtree = (rootNode, currency = getActiveDisplayCurrency()) => {
+  if (!rootNode) return;
+  if (rootNode.nodeType === 3) {
+    applyCurrencyToTextNode(rootNode, currency);
+    return;
+  }
+  if (rootNode.nodeType !== 1) return;
+  if (rootNode?.dataset?.currencyStatic === "1") return;
+  const walker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    applyCurrencyToTextNode(node, currency);
+    node = walker.nextNode();
+  }
+};
 const DEPOSIT_METHODS = [
   { id: "mpesa", value: "M-Pesa", title: "M-Pesa", subtitle: "M-Pesa", logo: "M-Pesa" },
   { id: "airtel", value: "Airtel Money", title: "Airtel Money", subtitle: "Airtel Money", logo: "Airtel Money" },
@@ -34,6 +164,7 @@ const ADMIN_DASH_TAB_ITEMS = [
   { id: "users", label: "Users", ic: "users" },
   { id: "transactions", label: "Transactions", ic: "wallet" },
   { id: "withdrawals", label: "Withdrawals", ic: "up" },
+  { id: "risk", label: "Fraud Flags", ic: "shield" },
   { id: "settings", label: "Settings", ic: "settings" }
 ];
 const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON, {
@@ -111,6 +242,20 @@ async function fetchTable(table, opts = {}) {
   }
     }
 
+async function fetchDashboardOverviewRow(activeTierId) {
+  if (!supabase) return null;
+  try {
+    const tier = Number(activeTierId);
+    const params = Number.isInteger(tier) && tier > 0 ? { p_tier: tier } : {};
+    const { data, error } = await supabase.rpc("get_my_dashboard_overview", params);
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row && typeof row === "object" ? row : null;
+  } catch (e) {
+    return null;
+  }
+    }
+
 async function loadProfileRow(userId) {
   if (!supabase || !userId) return null;
   try {
@@ -136,7 +281,7 @@ async function loadProfileRow(userId) {
       referred_by: meta.referred_by || "",
       tier_selected: meta.tier_selected === true,
       tier_selected_at: meta.tier_selected_at || null,
-      role: meta.role || "client",
+      role: String(meta.role || "client").toLowerCase(),
       category: meta.category || "Client",
       status,
       tier: data.tier ?? 1,
@@ -161,15 +306,24 @@ async function upsertProfileRow(payload) {
     const status = statusRaw.startsWith("susp") ? "suspended" : statusRaw.startsWith("ban") ? "banned" : "active";
 
     let prevMeta = {};
+    let prevTier = 1;
+    let prevReferralCode = null;
+    let prevStatus = "active";
     try {
       const { data: prev } = await supabase
         .from("users")
-        .select("profile_data")
+        .select("profile_data,tier,referral_code,status")
         .eq("user_id", userId)
         .maybeSingle();
       prevMeta = prev?.profile_data || {};
+      prevTier = Number.isFinite(Number(prev?.tier)) ? Number(prev.tier) : 1;
+      prevReferralCode = prev?.referral_code ?? null;
+      prevStatus = String(prev?.status || "active").toLowerCase();
     } catch (e) {
       prevMeta = {};
+      prevTier = 1;
+      prevReferralCode = null;
+      prevStatus = "active";
     }
 
     const nextMeta = {
@@ -188,11 +342,12 @@ async function upsertProfileRow(payload) {
       email: payload.email ?? null,
       phone: payload.phone ?? null,
       full_name: payload.name ?? payload.full_name ?? null,
-      tier: tierVal,
-      referral_code: payload.ref_code ?? payload.referral_code ?? null,
-      status,
       profile_data: nextMeta
     };
+
+    row.tier = (payload.tier === undefined || payload.tier === null) ? prevTier : tierVal;
+    row.referral_code = payload.ref_code ?? payload.referral_code ?? prevReferralCode ?? null;
+    row.status = (payload.status === undefined || payload.status === null) ? prevStatus : status;
 
     const { error } = await supabase
       .from("users")
@@ -397,7 +552,7 @@ function Landing({ go }) {
     { icon: "wallet", title: "Deposit", desc: "Pay the fixed starting balance for your tier.", timeline: "Secure Deposit" },
     { icon: "play", title: "Watch Videos", desc: "Earn KES 50 per video and unlock bonuses automatically.", timeline: "Daily Earnings" },
     { icon: "gift", title: "Refer Friends", desc: "Get 10% bonus whenever someone joins using your code.", timeline: "Referral Boost" },
-    { icon: "up", title: "Withdraw", desc: "Cash out every Tuesday and Friday to your phone.", timeline: "Payout Window" }
+    { icon: "up", title: "Withdraw", desc: "Cash out from KES 1,000 every Tuesday and Friday to your phone.", timeline: "Payout Window" }
   ];
   const [activeProcessStep, setActiveProcessStep] = useState(0);
   const [processAutoPaused, setProcessAutoPaused] = useState(false);
@@ -444,7 +599,6 @@ function Landing({ go }) {
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
-
   const anim = (delay = 0) => ({ animation: `fadeUp .55s ease both`, animationDelay: `${delay}ms`, opacity: heroVisible ? 1 : 0 });
   const heroHighlights = [
     "Choose your tier and activate your account in minutes.",
@@ -588,8 +742,8 @@ function Landing({ go }) {
       <section id="landing-features" className="ep-landing-balance-video-wrap">
         <div className="ep-landing-balance-video-card">
           <div className="ep-landing-balance-video-head">
-            <span>YOUR BALANCE TODAY</span>
-            <span style={{ color:"#86efac" }}>LIVE VIEW</span>
+            <span style={{ color:"#ede9fe" }}>YOUR BALANCE TODAY</span>
+            <span style={{ color:"#c4b5fd" }}>LIVE VIEW</span>
           </div>
           <div className="ep-landing-balance-video-frame">
             {HOME_BALANCE_VIDEO ? (
@@ -604,9 +758,9 @@ function Landing({ go }) {
                 style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"contain", background:"#020617", zIndex:1 }}
               />
             ) : (
-              <div style={{ position:"absolute", inset:0, background:"linear-gradient(130deg, #0f172a 0%, #14532d 52%, #0f172a 100%)", zIndex:1 }} />
+              <div style={{ position:"absolute", inset:0, background:"linear-gradient(130deg, #0f172a 0%, #6d28d9 52%, #0f172a 100%)", zIndex:1 }} />
             )}
-            <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(2,6,23,0.18) 0%, rgba(2,6,23,0.54) 100%)", zIndex:2 }} />
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(2,6,23,0.2) 0%, rgba(2,6,23,0.62) 100%)", zIndex:2 }} />
             <img
               className="ep-landing-balance-video-side-art"
               src={HOME_BALANCE_SIDE_IMAGE.primary}
@@ -614,9 +768,6 @@ function Landing({ go }) {
               referrerPolicy="no-referrer"
               onError={(e) => setFallbackSrc(e, HOME_BALANCE_SIDE_IMAGE)}
             />
-            <div style={{ position:"absolute", left:18, bottom:16, zIndex:4, color:"#f8fafc", fontSize:12, fontWeight:800, letterSpacing:"0.08em" }}>
-              WATCHED TODAY: 4 VIDEOS · BALANCE BOOSTED
-            </div>
           </div>
         </div>
       </section>
@@ -646,7 +797,7 @@ function Landing({ go }) {
             <div style={{ maxWidth: 320 }}>
               <p style={{ fontSize: 15, color: "#666", lineHeight: 1.7 }}>Daily rewards are based on your tier, required videos, and referral bonuses.</p>
               <div style={{ display: "flex", gap: 24, marginTop: 16 }}>
-                {[["KES 50","per required video"],["Tiered","daily rewards"],["Tue & Fri","withdrawals"]].map(([v,l],i) => (
+                {[["KES 50","per required video"],["Tiered","daily rewards"],["KES 1,000+","min withdrawal"]].map(([v,l],i) => (
                   <div key={i}>
                     <div style={{ fontSize: 18, fontWeight: 900, color: "#111", letterSpacing: "-0.04em" }}>{v}</div>
                     <div style={{ fontSize: 11, color: "#BBB", marginTop: 2 }}>{l}</div>
@@ -781,6 +932,13 @@ function Landing({ go }) {
             <span style={{ fontSize:11, color:"#808080" }}>(c) 2025 EdisonPay Ltd. All rights reserved.</span>
             <div style={{ display:"flex", gap:12, fontSize:11, color:"#808080", flexWrap:"wrap" }}>
               {["Privacy","Terms","Cookies"].map((item) => <span key={item} style={{ cursor:"pointer" }}>{item}</span>)}
+              <button
+                type="button"
+                onClick={() => go("login")}
+                style={{ cursor:"pointer", background:"transparent", border:"none", color:"#A3E635", fontSize:11, fontWeight:800, padding:0, fontFamily:"inherit" }}
+              >
+                Admin
+              </button>
             </div>
           </div>
         </div>
@@ -791,6 +949,7 @@ function Landing({ go }) {
 
 function TierRow({ t, go, onSelectTier }) {
   const [hov, setHov] = useState(false);
+  const currency = getActiveDisplayCurrency();
   const handlePick = () => {
     if (onSelectTier) { onSelectTier(t?.id); return; }
     go("signup");
@@ -806,7 +965,13 @@ function TierRow({ t, go, onSelectTier }) {
         <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>{t.videos} videos/day  -  {t.bonus} bonus rewards</div>
       </div>
       <div style={{ textAlign: "right" }}>
-        <div style={{ fontWeight: 900, fontSize: 16, color: "#111", letterSpacing: "-0.03em" }}>KES {t.deposit.toLocaleString()}</div>
+        <div style={{ fontWeight: 900, fontSize: 16, color: "#111", letterSpacing: "-0.03em" }}>
+          {formatMoney(t.deposit, {
+            currency,
+            minFractionDigits: currency === DISPLAY_CURRENCIES.USD ? 2 : 0,
+            maxFractionDigits: currency === DISPLAY_CURRENCIES.USD ? 2 : 0
+          })}
+        </div>
         <div style={{ fontSize: 11, color: "#BBB" }}>starting balance</div>
       </div>
       <I n="chevR" s={16} c={hov ? "#111" : "#DDD"} />
@@ -816,79 +981,100 @@ function TierRow({ t, go, onSelectTier }) {
 
 function TierCard({ t, go, featured, onSelectTier }) {
   const [hov, setHov] = useState(false);
+  const currency = getActiveDisplayCurrency();
   const daily = getTierDailyTotal(t);
-  const goal = getTierDailyTotal(t) * 7;
-  const days = Math.ceil(goal / Math.max(daily, 1));
-  const hasGlare = t.name === "Regular" || t.name === "Standard" || t.name === "Deluxe";
-  const glareTone = t.name === "Deluxe" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
-  const tierGlowSoft = `${t.acc}3D`;
-  const tierGlowStrong = `${t.acc}66`;
-  const baseShadow = hov
-    ? "0 8px 24px rgba(0,0,0,0.12)"
-    : featured
-      ? "0 4px 16px rgba(0,0,0,0.08)"
-      : "0 1px 4px rgba(0,0,0,0.04)";
+  const amountLabel = formatMoney(t.deposit, {
+    currency,
+    minFractionDigits: currency === DISPLAY_CURRENCIES.USD ? 2 : 0,
+    maxFractionDigits: currency === DISPLAY_CURRENCIES.USD ? 2 : 0
+  });
+  const dailyLabel = formatMoney(daily, {
+    currency,
+    minFractionDigits: currency === DISPLAY_CURRENCIES.USD ? 2 : 0,
+    maxFractionDigits: currency === DISPLAY_CURRENCIES.USD ? 2 : 0
+  });
+  const themePurple = "#6d28d9";
+  const baseShadow = hov ? "0 24px 38px rgba(109,40,217,0.28)" : "0 16px 30px rgba(15,23,42,0.24)";
   const cardStyle = {
-    borderRadius: 16,
-    border: featured ? "2px solid #111" : `1.5px solid ${hov ? "#111" : "#E0E0E0"}`,
-    background: hov ? "#FAFAFA" : "#fff",
-    padding: "clamp(20px, 3.5vw, 30px) clamp(16px, 3vw, 24px)",
+    borderRadius: 24,
+    border: "1.5px solid rgba(167,139,250,0.6)",
+    background: hov
+      ? "linear-gradient(180deg, #7c3aed 0%, #0B1220 100%)"
+      : "linear-gradient(180deg, #6d28d9 0%, #090F1B 100%)",
+    padding: "8px",
     cursor: "pointer",
-    transition: "all .2s ease",
+    transition: "all .24s ease",
     transform: hov ? "translateY(-3px)" : "none",
-    boxShadow: `${baseShadow}, inset 0 -34px 60px -50px ${hov ? tierGlowStrong : tierGlowSoft}`,
+    boxShadow: baseShadow,
     position: "relative",
     overflow: "hidden",
+    minHeight: 430
   };
-  if (hasGlare) cardStyle["--glare"] = glareTone;
   const handlePick = () => {
     if (onSelectTier) { onSelectTier(t?.id); return; }
     go("signup");
   };
   const tierArt = getTierCardImage(t?.id);
-  const cardClasses = [hasGlare ? "ep-tier-glare" : "", "ep-tier-mobile-image-host", "ep-tier-mobile-image-host-landing"].filter(Boolean).join(" ");
+  const cardClasses = ["ep-tier-mobile-image-host", "ep-tier-mobile-image-host-landing"].join(" ");
+  const includes = [
+    `${t.videos} required videos per day`,
+    t.bonus > 0 ? `${t.bonus} bonus reward${t.bonus > 1 ? "s" : ""} per day` : "No bonus rewards",
+    `${dailyLabel} projected daily total`,
+    "Live wallet sync + secure payout cycle"
+  ];
   return (
     <div className="ep-tier-card-shell">
       <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={handlePick}
         className={`${cardClasses} ep-tier-card-lively`}
         style={cardStyle}>
-        <div className="ep-tier-mobile-image-content ep-tier-mobile-image-content-landing">
-          {featured && (
-            <div style={{ position: "absolute", top: 16, right: 16, padding: "3px 10px", background: "#111", borderRadius: 50, fontSize: 9, fontWeight: 900, color: "#fff", letterSpacing: "0.1em" }}>POPULAR</div>
-          )}
-
-          {/* Tier badge + icon row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 11, background: hov ? "#111" : t.lgt, border: hov ? "none" : `1.5px solid ${t.mid}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s" }}>
-              <I n="bolt" s={17} c={hov ? "#fff" : t.acc} />
-            </div>
-            <div>
-              <div style={{ fontSize: 9, fontWeight: 800, color: hov ? "#999" : t.acc, letterSpacing: "0.12em" }}>TIER {t.id}</div>
-              <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em", color: "#111" }}>{t.name}</div>
-            </div>
-          </div>
-
-          {/* Price */}
-          <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #F0F0F0" }}>
-            <div style={{ fontSize: 28, fontWeight: 900, color: "#111", letterSpacing: "-0.05em", lineHeight: 1 }}>KES {(t.deposit/1000).toFixed(0)}K</div>
-            <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>starting deposit - daily rewards by tier</div>
-          </div>
-
-          {/* Features */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-            {[[`${t.videos} required videos/day`, "play"], [`${t.bonus} bonus rewards/day`, "activity"], [`KES ${daily.toLocaleString()} earned daily`, "trendUp"], [`~${days} days to weekly target`, "star"]].map(([label, icon], i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "#444" }}>
-                <div style={{ width: 20, height: 20, borderRadius: 6, background: "#F5F5F5", border: "1px solid #E8E8E8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <I n={icon} s={11} c="#888" />
-                </div>
-                {label}
+        <div className="ep-tier-mobile-image-content ep-tier-mobile-image-content-landing" style={{ display:"flex", flexDirection:"column", minHeight:"100%", width:"100%", maxWidth:"100%", position:"relative", zIndex:2 }}>
+          <div style={{ background:"linear-gradient(90deg, #ffffff 0%, #ffffff 66%, rgba(255,255,255,0.88) 84%, rgba(255,255,255,0.52) 100%)", border:"1px solid #ddd6fe", borderRadius:18, padding:"16px 14px 14px", paddingRight:"40%", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.9), 0 8px 16px rgba(15,23,42,0.1)", minHeight:330 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
+              <div>
+                <div style={{ fontSize:"clamp(22px, 2.6vw, 34px)", lineHeight:1.06, fontWeight:900, letterSpacing:"-0.04em", color:"#0B1220", maxWidth:260, textWrap:"balance" }}>{t.name}</div>
+                <div style={{ marginTop:3, fontSize:12, fontWeight:700, color:"#64748B" }}>Billed yearly</div>
               </div>
-            ))}
+              {featured && (
+                <div style={{ display:"inline-flex", alignItems:"center", gap:7, borderRadius:999, border:`1.5px solid ${themePurple}`, background:"#f5f3ff", padding:"5px 10px", fontSize:10, fontWeight:900, color:themePurple, letterSpacing:"0.06em", boxShadow:"0 8px 14px rgba(109,40,217,0.16)" }}>
+                  <span style={{ width:16, height:16, borderRadius:"50%", background:themePurple, color:"#fff", display:"grid", placeItems:"center", fontSize:9 }}>
+                    <I n="star" s={9} c="#fff" />
+                  </span>
+                  MOST PICKED
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop:12, paddingTop:12, borderTop:"1px solid #ddd6fe", display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); handlePick(); }}
+                style={{ padding:"9px 15px", borderRadius:999, border:"none", background:"linear-gradient(140deg,#6d28d9 0%, #1f143f 100%)", color:"#fff", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 8px 14px rgba(109,40,217,0.32)", fontFamily:"Geist,sans-serif" }}
+              >
+                Get Started
+              </button>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:"clamp(20px, 2.4vw, 26px)", lineHeight:1, fontWeight:900, letterSpacing:"-0.04em", color:"#0B1220" }}>{amountLabel}</div>
+                <div style={{ marginTop:3, fontSize:11, color:"#64748B", fontWeight:700 }}>per user / month</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop:12, fontSize:12, fontWeight:900, color:"#0B1220" }}>Includes</div>
+            <div style={{ marginTop:10, display:"grid", gap:8, maxWidth:320 }}>
+              {includes.map((label, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"#334155", fontWeight:700 }}>
+                  <div style={{ width:19, height:19, borderRadius:"50%", background:"#ede9fe", border:"1px solid #c4b5fd", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <I n="check" s={11} c="#6d28d9" />
+                  </div>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <button onClick={e => { e.stopPropagation(); handlePick(); }}
-            style={{ width: "100%", padding: "11px", background: hov ? "#111" : "#fff", color: hov ? "#fff" : "#111", border: "1.5px solid #111", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "Geist,sans-serif", transition: "all .2s", letterSpacing: "-0.01em" }}>
-            Get Started
+          <button
+            onClick={(e) => { e.stopPropagation(); handlePick(); }}
+            style={{ marginTop:10, width:"100%", padding:"13px 12px", borderRadius:14, border:"1.5px solid rgba(196,181,253,0.5)", background:"linear-gradient(96deg, #100826 0%, #6d28d9 56%, #251148 100%)", color:"#f5f3ff", fontSize:14, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", letterSpacing:"-0.01em", boxShadow:"0 10px 18px rgba(2,6,23,0.34)" }}
+          >
+            Upgrade to {t.name}
           </button>
         </div>
 
@@ -898,6 +1084,20 @@ function TierCard({ t, go, featured, onSelectTier }) {
           alt=""
           referrerPolicy="no-referrer"
           onError={(e) => setFallbackSrc(e, tierArt)}
+          style={{ opacity:1, zIndex:3, filter:"saturate(1.05) contrast(1.06) drop-shadow(0 18px 28px rgba(2,6,23,0.38))" }}
+        />
+        <div
+          aria-hidden="true"
+          style={{
+            position:"absolute",
+            left:0,
+            right:0,
+            bottom:0,
+            height:"30%",
+            background:"linear-gradient(0deg, rgba(2,6,23,0.9) 0%, rgba(2,6,23,0.72) 38%, rgba(109,40,217,0.26) 76%, rgba(109,40,217,0) 100%)",
+            pointerEvents:"none",
+            zIndex:1
+          }}
         />
       </div>
     </div>
@@ -1093,14 +1293,23 @@ function Auth({ type, go, from, authMessage }) {
     });
     if (error) { setErr(error.message); setLoading(false); }
   };
+  const authTitle = recoveryMode ? "Set new password" : resetMode ? "Forgot password" : (isLogin ? "Welcome back" : "Create account");
+  const authSubtitle = recoveryMode
+    ? "Choose a new secure password for your account."
+    : resetMode
+      ? "We will email you a secure reset link."
+      : (isLogin ? "Sign in to your EdisonPay account." : "Start earning in under 2 minutes.");
+  const submitLabel = loading
+    ? (recoveryMode ? "Updating password..." : resetMode ? "Sending link..." : (isLogin ? "Signing in..." : "Creating account..."))
+    : (recoveryMode ? "Update Password" : resetMode ? "Send Reset Link" : (isLogin ? "Sign In" : "Create Account"));
 
   return (
-    <div className="ep-auth-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", fontFamily: "Geist,sans-serif" }}>
+    <div className="ep-auth-grid ep-auth-shell" style={{ minHeight: "100%", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.08fr 0.92fr", fontFamily: "IBM Plex Sans, Geist, sans-serif", background: "linear-gradient(145deg,#f7fbff 0%, #eff6ff 48%, #ecfeff 100%)", position: "relative", overflow: "hidden" }}>
 
       {/* LEFT - brand panel */}
-      <div className="ep-auth-left" style={{ background: "#0D1117", display: "flex", flexDirection: "column", padding: isMobile ? "32px 28px" : "48px 56px", position: "relative", overflow: "hidden", minHeight: isMobile ? 320 : "auto" }}>
+      <div className="ep-auth-left" style={{ background: "linear-gradient(160deg,#0f172a 0%, #111827 54%, #052e16 100%)", display: isMobile ? "none" : "flex", flexDirection: "column", padding: "44px 48px", position: "relative", overflow: "hidden" }}>
         {/* Subtle grid */}
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)", backgroundSize: "36px 36px", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.05) 1px,transparent 1px)", backgroundSize: "36px 36px", opacity: 0.24, pointerEvents: "none" }} />
 
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 64, zIndex: 1 }}>
@@ -1112,38 +1321,36 @@ function Auth({ type, go, from, authMessage }) {
           <h2 style={{ fontSize: 40, fontWeight: 900, color: "#fff", letterSpacing: "-0.04em", lineHeight: 1.1, marginBottom: 20 }}>
             Earn while<br /><span style={{ fontFamily: "Instrument Serif,serif", fontStyle: "italic", fontWeight: 400, color: "#0066FF" }}>you sleep.</span>
           </h2>
-          <p style={{ color: "#666", fontSize: 15, lineHeight: 1.7, marginBottom: 40, maxWidth: 340 }}>Join 1,000+ earners across Kenya collecting daily passive income from video watching and referrals.</p>
+          <p style={{ color: "rgba(226,232,240,0.82)", fontSize: 15, lineHeight: 1.7, marginBottom: 40, maxWidth: 420 }}>Join 1,000+ earners across Kenya collecting daily passive income from video watching and referrals.</p>
 
           {/* Feature pills */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[["play","KES 50 earned per video watched"],["users","10% referral bonus - earn from your network"],["shield","Secure withdrawals  -  Tue & Fri"]].map(([ic, t], i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(0,102,255,0.15)", border: "1px solid rgba(0,102,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <I n={ic} s={13} c="#0066FF" />
+            {[["play","KES 50 earned per video watched"],["users","10% referral bonus - earn from your network"],["shield","Secure withdrawals - Tue & Fri"]].map(([ic, t], i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "rgba(15,23,42,0.44)", border: "1px solid rgba(148,163,184,0.28)", borderRadius: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(12,74,110,0.35)", border: "1px solid rgba(125,211,252,0.5)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <I n={ic} s={13} c="#7DD3FC" />
                 </div>
-                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{t}</span>
+                <span style={{ fontSize: 13, color: "rgba(241,245,249,0.9)" }}>{t}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ fontSize: 12, color: "#444", zIndex: 1 }}>(c) 2025 EdisonPay Ltd.</div>
+        <div style={{ fontSize: 12, color: "rgba(148,163,184,0.7)", zIndex: 1 }}>(c) 2025 EdisonPay Ltd.</div>
       </div>
 
       {/* RIGHT - form */}
-      <div style={{ background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "32px 22px 48px" : 48 }}>
-        <div style={{ width: "100%", maxWidth: 400, animation: "scaleIn .35s ease both" }}>
-          <div style={{ marginBottom: 36 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", color: "#111", marginBottom: 8 }}>
-              {recoveryMode ? "Set new password" : resetMode ? "Forgot password" : (isLogin ? "Welcome back" : "Create account")}
+      <div className="ep-auth-right" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "28px 18px 36px" : "48px 56px" }}>
+        <div className="ep-auth-form-card" style={{ width: "100%", maxWidth: 560, animation: "scaleIn .35s ease both", borderRadius: isMobile ? 18 : 24, border: "1.5px solid #111", background: "#FFFFFF", boxShadow: "0 10px 0 #111, 0 24px 34px rgba(15,23,42,0.18)", padding: isMobile ? "21px 18px" : "31px 30px" }}>
+          <div style={{ marginBottom: 26 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, border: "1px solid #BFDBFE", background: "#EFF6FF", marginBottom: 10 }}>
+              <I n="shield" s={10} c="#1D4ED8" />
+              <span style={{ fontSize: 10, fontWeight: 900, color: "#1D4ED8", letterSpacing: "0.08em" }}>SECURE ACCESS</span>
+            </div>
+            <h1 style={{ fontSize: isMobile ? 28 : 34, fontWeight: 900, letterSpacing: "-0.04em", color: "#111", marginBottom: 10 }}>
+              {authTitle}
             </h1>
-            <p style={{ fontSize: 14, color: "#999" }}>
-              {recoveryMode
-                ? "Choose a new secure password for your account."
-                : resetMode
-                  ? "We'll email you a secure reset link."
-                  : (isLogin ? "Sign in to your EdisonPay account" : "Start earning in under 2 minutes")}
-            </p>
+            <p style={{ fontSize: isMobile ? 13 : 14, color: "#64748B", lineHeight: 1.62, maxWidth: 420 }}>{authSubtitle}</p>
           </div>
 
           {!isLogin && !resetMode && !recoveryMode && <Field label="Full Name" ph="Alex Johnson" val={f.name} set={set("name")} ic="user" />}
@@ -1159,9 +1366,9 @@ function Auth({ type, go, from, authMessage }) {
           )}
 
           {isLogin && !resetMode && !recoveryMode && (
-            <div style={{ textAlign: "right", marginBottom: 20 }}>
+            <div style={{ textAlign: "right", marginBottom: 14 }}>
               <span
-                style={{ fontSize: 13, color: "#0066FF", fontWeight: 600, cursor: "pointer" }}
+                style={{ fontSize: 12, color: "#1D4ED8", fontWeight: 800, cursor: "pointer" }}
                 onClick={() => { setResetMode(true); setInfo(""); setErr(""); }}
               >
                 Forgot password?
@@ -1170,59 +1377,59 @@ function Auth({ type, go, from, authMessage }) {
           )}
 
           {err && (
-            <div style={{ padding: "10px 14px", background: "#FFF0F0", border: "1px solid #FCA5A5", borderRadius: 9, fontSize: 13, color: "#DC2626", fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-              <I n="xmark" s={14} c="#DC2626" /> {err}
+            <div style={{ padding: "10px 12px", background: "#FFF1F2", border: "1px solid #FECACA", borderRadius: 10, fontSize: 12, color: "#B91C1C", fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>
+              <I n="xmark" s={12} c="#B91C1C" /> {err}
             </div>
           )}
           {info && (
-            <div style={{ padding: "10px 14px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 9, fontSize: 13, color: "#1D4ED8", fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-              <I n="check" s={14} c="#1D4ED8" /> {info}
+            <div style={{ padding: "10px 12px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, fontSize: 12, color: "#1D4ED8", fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>
+              <I n="check" s={12} c="#1D4ED8" /> {info}
             </div>
           )}
 
           {(!resetMode && !recoveryMode) && (
             <>
             <button onClick={handleGoogle} disabled={loading || !SUPABASE_ENABLED}
-              style={{ width: "100%", padding: "12px 16px", background: "#fff", color: "#111", border: "1.5px solid #111", borderRadius: 999, fontWeight: 700, fontSize: 14, cursor: (loading || !SUPABASE_ENABLED) ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, opacity: !SUPABASE_ENABLED ? 0.7 : 1, boxShadow: "0 3px 0 #111" }}>
+              style={{ width: "100%", padding: "11px 14px", background: "#fff", color: "#111", border: "1.5px solid #CBD5E1", borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: (loading || !SUPABASE_ENABLED) ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, opacity: !SUPABASE_ENABLED ? 0.7 : 1 }}>
               <span style={{ width: 18, height: 18, borderRadius: "50%", background: "conic-gradient(#4285F4 0 90deg, #34A853 90deg 180deg, #FBBC05 180deg 270deg, #EA4335 270deg 360deg)", display: "grid", placeItems: "center" }}>
                 <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", display: "grid", placeItems: "center", fontSize: 9, fontWeight: 800, color: "#4285F4", fontFamily: "Geist,sans-serif" }}>G</span>
               </span>
               Continue with Google
             </button>
             {!SUPABASE_ENABLED && (
-              <div style={{ fontSize: 11, color: "#AAA", fontWeight: 600, marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700, marginBottom: 10 }}>
                 Connect Google in Supabase to enable.
               </div>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <div style={{ height: 1, background: "#EEE", flex: 1 }} />
-              <span style={{ fontSize: 11, color: "#999", fontWeight: 600 }}>OR</span>
-              <div style={{ height: 1, background: "#EEE", flex: 1 }} />
+              <div style={{ height: 1, background: "#E2E8F0", flex: 1 }} />
+              <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 800, letterSpacing: "0.08em" }}>OR</span>
+              <div style={{ height: 1, background: "#E2E8F0", flex: 1 }} />
             </div>
             </>
           )}
 
-          <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "14px", background: loading ? "#888" : "#111", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 20, letterSpacing: "-0.01em", transition: "all .15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "13px", background: loading ? "#94A3B8" : "linear-gradient(120deg,#0f172a 0%, #1e293b 52%, #0f172a 100%)", color: "#fff", border: "1px solid #111", borderRadius: 12, fontWeight: 900, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", fontFamily: "Geist,sans-serif", marginBottom: 14, letterSpacing: "-0.01em", transition: "all .15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: loading ? "none" : "0 8px 14px rgba(15,23,42,0.24)" }}>
             {loading ? (
-              <><div style={{ width: 16, height: 16, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .7s linear infinite" }} /> {recoveryMode ? "Updating password..." : resetMode ? "Sending link..." : (isLogin ? "Signing in..." : "Creating account...")}</>
-            ) : (recoveryMode ? "Update Password" : resetMode ? "Send Reset Link" : (isLogin ? "Sign In" : "Create Account"))}
+              <><div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .7s linear infinite" }} /> {submitLabel}</>
+            ) : submitLabel}
           </button>
 
           {(!resetMode && !recoveryMode) && (
-            <div style={{ textAlign: "center", fontSize: 13, color: "#999" }}>
+            <div style={{ textAlign: "center", fontSize: 12, color: "#64748B", fontWeight: 700 }}>
               {isLogin ? "No account? " : "Have an account? "}
-              <span onClick={() => go(isLogin ? "signup" : "login")} style={{ color: "#111", fontWeight: 700, cursor: "pointer" }}>{isLogin ? "Sign Up" : "Sign In"}</span>
+              <span onClick={() => go(isLogin ? "signup" : "login")} style={{ color: "#0F172A", fontWeight: 900, cursor: "pointer" }}>{isLogin ? "Sign Up" : "Sign In"}</span>
             </div>
           )}
 
           {(resetMode || recoveryMode) && (
-            <div style={{ textAlign: "center", fontSize: 13, color: "#999" }}>
-              <span onClick={() => { setResetMode(false); clearRecovery(); setErr(""); setInfo(""); }} style={{ color: "#111", fontWeight: 700, cursor: "pointer" }}>Back to sign in</span>
+            <div style={{ textAlign: "center", fontSize: 12, color: "#64748B", fontWeight: 700 }}>
+              <span onClick={() => { setResetMode(false); clearRecovery(); setErr(""); setInfo(""); }} style={{ color: "#0F172A", fontWeight: 900, cursor: "pointer" }}>Back to sign in</span>
             </div>
           )}
 
-          <div onClick={() => go("landing")} style={{ textAlign: "center", marginTop: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, cursor: "pointer", color: "#CCC", fontSize: 13, fontWeight: 500 }}>
-            <I n="chevL" s={13} c="#CCC" /> Back to home
+          <div onClick={() => go("landing")} style={{ textAlign: "center", marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "#334155", border: "1px solid #CBD5E1", borderRadius: 11, padding: "9px 12px", background: "#F8FAFC", fontSize: 12, fontWeight: 800 }}>
+            <I n="chevL" s={12} c="#334155" /> Back to home
           </div>
         </div>
       </div>
@@ -1291,12 +1498,11 @@ function FixedPromoSticker({ src, alt, onClose, showClose = true, style }) {
   );
     }
 
-function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos }) {
+function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
   const [selected, setSelected] = useState(() => {
     const intent = getTierIntent();
     return Number(profileRow?.tier) || intent || 1;
   });
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [panel, setPanel] = useState("");
   const [depPhone, setDepPhone] = useState("");
@@ -1320,6 +1526,8 @@ function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos 
     }
   }, [profileRow?.phone, profileRow?.name, profileRow?.full_name]);
   const profileTierSelected = profileRow?.tier_selected === true;
+  const currency = getActiveDisplayCurrency();
+  const currencyFractionDigits = currency === DISPLAY_CURRENCIES.USD ? 2 : 0;
 
   const handlePick = (tierId) => {
     if (!tierId) return;
@@ -1330,23 +1538,6 @@ function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos 
     storeTierIntent(tierId);
   };
 
-  const commitTier = async (tierId, { navigate = false } = {}) => {
-    if (!onSelectTier) {
-      if (navigate) go("dashboard");
-      return true;
-    }
-    setSaving(true);
-    const ok = await onSelectTier(tierId);
-    setSaving(false);
-    if (!ok) {
-      setErr("Unable to save tier. Please try again.");
-      return false;
-    }
-    clearTierIntent();
-    if (navigate) go("dashboard");
-    return true;
-  };
-
   const togglePanel = (next) => {
     setPanel((prev) => (prev === next ? "" : next));
   };
@@ -1355,16 +1546,17 @@ function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos 
     if (!tier) return;
     setErr("");
     setDepError("");
-    const ok = await commitTier(tier.id, { navigate: false });
-    if (!ok) return;
+    storeTierIntent(tier.id);
     await submitTierDeposit(tier);
   };
 
   const handlePreview = async (tierId) => {
     setErr("");
     setDepError("");
-    const ok = await commitTier(tierId, { navigate: false });
-    if (!ok) return;
+    if (profileTierSelected !== true) {
+      setErr("Complete your tier deposit first to unlock dashboard access.");
+      return;
+    }
     if (typeof onPreviewToVideos === "function") {
       onPreviewToVideos();
       return;
@@ -1438,10 +1630,10 @@ function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos 
   };
 
   return (
-    <div style={{ minHeight:"100vh", background:"#F8FAFC", display:"flex", alignItems:"center", justifyContent:"center", padding:"48px 16px", fontFamily:"Geist,sans-serif" }}>
-      <div style={{ width:"min(980px, 92vw)" }}>
-        <div style={{ textAlign:"center", marginBottom:30 }}>
-          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.16em", color:"#0066FF", textTransform:"uppercase", marginBottom:10 }}>Choose Your Tier</div>
+    <div style={{ minHeight:"100vh", background:"linear-gradient(180deg,#F6F3FF 0%, #F8FAFC 52%, #F1EDFF 100%)", display:"flex", justifyContent:"center", padding:"56px 16px 64px", fontFamily:"Geist,sans-serif" }}>
+      <div style={{ width:"min(1220px, 94vw)" }}>
+        <div style={{ textAlign:"center", marginBottom:34 }}>
+          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.16em", color:"#6d28d9", textTransform:"uppercase", marginBottom:10 }}>Choose Your Tier</div>
           <div style={{ fontSize:"clamp(26px,3vw,38px)", fontWeight:900, letterSpacing:"-0.04em", color:"#111", marginBottom:10 }}>
             Pick a tier to enter your dashboard
           </div>
@@ -1451,168 +1643,219 @@ function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos 
         </div>
 
         {err && (
-          <div style={{ padding:"10px 14px", background:"#FFF0F0", border:"1px solid #FCA5A5", borderRadius:9, fontSize:13, color:"#DC2626", fontWeight:600, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ padding:"10px 14px", background:"#FFF0F0", borderRadius:11, fontSize:13, color:"#DC2626", fontWeight:600, marginBottom:16, display:"flex", alignItems:"center", gap:8, boxShadow:"0 8px 18px rgba(220,38,38,0.12)" }}>
             <I n="xmark" s={14} c="#DC2626" /> {err}
           </div>
         )}
 
-        <div className="ep-tier-grid" style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:16 }}>
+        <div className="ep-tier-grid" style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:22, alignItems:"stretch" }}>
           {TIERS.map((tier) => {
             const isActive = Number(selected) === Number(tier.id);
             const daily = getTierDailyTotal(tier);
             const tierArt = getTierCardImage(tier.id);
             const showDepositCta = !profileTierSelected;
+            const depositLabel = formatMoney(tier.deposit, {
+              currency,
+              minFractionDigits: currencyFractionDigits,
+              maxFractionDigits: currencyFractionDigits
+            });
+            const dailyLabel = formatMoney(daily, {
+              currency,
+              minFractionDigits: currencyFractionDigits,
+              maxFractionDigits: currencyFractionDigits
+            });
+            const perVideoLabel = formatMoney(V_PRICE, {
+              currency,
+              minFractionDigits: currencyFractionDigits,
+              maxFractionDigits: currencyFractionDigits
+            });
+            const bonusLabel = tier.bonusType === "none"
+              ? "No bonus"
+              : formatMoney(tier.bonusAmount, {
+                  currency,
+                  minFractionDigits: currencyFractionDigits,
+                  maxFractionDigits: currencyFractionDigits
+                });
             return (
               <div
                 key={tier.id}
                 className="ep-tier-mobile-image-host ep-tier-mobile-image-host-select"
                 style={{
-                  background:"linear-gradient(145deg,#FFFFFF 0%, #F8FAFC 56%, #EEF2FF 100%)",
-                  borderRadius:16,
-                  border:isActive ? "2px solid #0F172A" : "1.5px solid #E5E7EB",
-                  padding:"22px 22px 20px",
-                  boxShadow:isActive ? "0 10px 24px rgba(15,23,42,0.14)" : "0 4px 14px rgba(15,23,42,0.08)",
+                  background:"linear-gradient(154deg,#FFFFFF 0%, #FAF5FF 56%, #F5F3FF 100%)",
+                  borderRadius:22,
+                  border:"none",
+                  padding:"26px 24px 22px",
+                  minHeight:372,
+                  boxShadow:isActive ? "0 20px 34px rgba(15,23,42,0.16)" : "0 10px 24px rgba(15,23,42,0.1)",
                   position:"relative",
-                  overflow:"hidden"
+                  overflow:"visible",
+                  transition:"transform .22s ease, box-shadow .22s ease"
                 }}
               >
-                <div style={{ position:"absolute", right:0, top:0, bottom:0, width:"44%", background:"linear-gradient(165deg, rgba(15,23,42,0.02) 0%, rgba(59,130,246,0.1) 100%)", pointerEvents:"none", zIndex:1 }} />
-                <div className="ep-tier-mobile-image-content" style={{ maxWidth:"58%" }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-                  <div>
-                    <div style={{ fontSize:10, letterSpacing:"0.12em", fontWeight:800, color:tier.acc }}>TIER {tier.id}</div>
-                    <div style={{ fontSize:18, fontWeight:900, letterSpacing:"-0.03em", color:"#111" }}>{tier.name}</div>
+                <div style={{ position:"absolute", right:-12, top:10, bottom:6, width:"47%", background:"linear-gradient(170deg, rgba(15,23,42,0.01) 0%, rgba(109,40,217,0.2) 100%)", pointerEvents:"none", zIndex:1, borderRadius:24 }} />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position:"absolute",
+                    left:0,
+                    right:0,
+                    top:0,
+                    height:"28%",
+                    background:"linear-gradient(180deg, rgba(2,6,23,0.82) 0%, rgba(2,6,23,0.78) 28%, rgba(109,40,217,0.32) 70%, rgba(109,40,217,0) 100%)",
+                    pointerEvents:"none",
+                    zIndex:2,
+                    borderTopLeftRadius:22,
+                    borderTopRightRadius:22
+                  }}
+                />
+                <div className="ep-tier-mobile-image-content" style={{ maxWidth:"58%", position:"relative", zIndex:4 }}>
+                  <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10, marginBottom:14, paddingBottom:12 }}>
+                    <div>
+                      <div style={{ fontSize:10, letterSpacing:"0.12em", fontWeight:800, color:"#6d28d9" }}>TIER {tier.id}</div>
+                      <div style={{ fontSize:18, fontWeight:900, letterSpacing:"-0.03em", color:"#111", marginTop:2 }}>{tier.name}</div>
+                      <div style={{ fontSize:30, fontWeight:900, color:"#0F172A", letterSpacing:"-0.05em", lineHeight:1, marginTop:8 }}>{depositLabel}</div>
+                      <div style={{ fontSize:11, color:"#6B7280", marginTop:3 }}>starting deposit</div>
+                    </div>
+                    {isActive && (
+                      <div style={{ padding:"4px 10px", borderRadius:999, background:"#0F172A", color:"#fff", fontSize:10, fontWeight:800, whiteSpace:"nowrap" }}>
+                        Selected
+                      </div>
+                    )}
                   </div>
-                  {isActive && (
-                    <div style={{ padding:"4px 10px", borderRadius:999, background:"#111", color:"#fff", fontSize:10, fontWeight:800 }}>Selected</div>
+
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8, marginBottom:14 }}>
+                    <div style={{ borderRadius:11, background:"rgba(255,255,255,0.86)", padding:"8px 10px", boxShadow:"0 6px 14px rgba(15,23,42,0.06)" }}>
+                      <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Daily earning</div>
+                      <div style={{ fontSize:13, fontWeight:800, color:"#0F172A", marginTop:2 }}>{dailyLabel}</div>
+                    </div>
+                    <div style={{ borderRadius:11, background:"rgba(255,255,255,0.86)", padding:"8px 10px", boxShadow:"0 6px 14px rgba(15,23,42,0.06)" }}>
+                      <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Videos per day</div>
+                      <div style={{ fontSize:13, fontWeight:800, color:"#0F172A", marginTop:2 }}>{tier.videos}</div>
+                    </div>
+                  </div>
+
+                  {!isActive && (
+                    <button
+                      disabled={depLoading}
+                      onClick={() => handlePick(tier.id)}
+                      style={{
+                        width:"100%",
+                        padding:"11px 14px",
+                        borderRadius:11,
+                        border:"none",
+                        background:"#6d28d9",
+                        color:"#FFFFFF",
+                        fontWeight:900,
+                        fontSize:13,
+                        cursor:depLoading ? "not-allowed" : "pointer",
+                        fontFamily:"Geist,sans-serif",
+                        boxShadow:"0 8px 16px rgba(109,40,217,0.26)"
+                      }}
+                    >
+                      Select Tier
+                    </button>
                   )}
-                </div>
-                <div style={{ fontSize:13, color:"#6B7280", marginBottom:12 }}>
-                  Self deposit: <strong style={{ color:"#111" }}>KES {tier.deposit.toLocaleString()}</strong>
-                </div>
-                <div style={{ fontSize:13, color:"#6B7280", marginBottom:16 }}>
-                  Daily earning: <strong style={{ color:"#111" }}>KES {daily.toLocaleString()}</strong>
-                </div>
-                {!isActive && (
-                  <button
-                    disabled={saving}
-                    onClick={() => handlePick(tier.id)}
-                    style={{
-                      width:"100%",
-                      padding:"10px 14px",
-                      borderRadius:10,
-                      border:"1.5px solid #111",
-                      background:"#fff",
-                      color:"#111",
-                      fontWeight:800,
-                      fontSize:13,
-                      cursor:saving ? "not-allowed" : "pointer",
-                      fontFamily:"Geist,sans-serif"
-                    }}
-                  >
-                    Select Tier
-                  </button>
-                )}
-                {isActive && (
-                  <>
-                    <div style={{ display:"grid", gridTemplateColumns:showDepositCta ? "repeat(3,1fr)" : "repeat(2,1fr)", gap:8, marginBottom:10 }}>
-                      <button
-                        disabled={saving || depLoading}
-                        onClick={() => togglePanel("earn")}
-                        style={{
-                          padding:"9px 8px",
-                          borderRadius:9,
-                          border:`1.5px solid ${panel==="earn" ? "#111" : "#E2E8F0"}`,
-                          background:panel==="earn" ? "#111" : "#fff",
-                          color:panel==="earn" ? "#fff" : "#111",
-                          fontWeight:800,
-                          fontSize:12,
-                          cursor:(saving || depLoading) ? "not-allowed" : "pointer",
-                          fontFamily:"Geist,sans-serif"
-                        }}
-                      >
-                        Earnings
-                      </button>
-                      {showDepositCta && (
+                  {isActive && (
+                    <>
+                      <div style={{ display:"grid", gridTemplateColumns:showDepositCta ? "repeat(3,minmax(0,1fr))" : "repeat(2,minmax(0,1fr))", gap:8, marginBottom:10 }}>
                         <button
-                          className="ep-tier-deposit-btn"
-                          disabled={saving || depLoading}
-                          onClick={() => handlePayNow(tier)}
+                          disabled={depLoading}
+                          onClick={() => togglePanel("earn")}
                           style={{
                             padding:"9px 8px",
-                            borderRadius:9,
-                            border:"1.5px solid #166534",
-                            background:depLoading ? "#14532D" : "linear-gradient(135deg,#16A34A 0%, #15803D 56%, #166534 100%)",
-                            color:"#ECFDF5",
-                            fontWeight:900,
+                            borderRadius:10,
+                            border:"none",
+                            background:panel==="earn" ? "#0F172A" : "#FFFFFF",
+                            color:panel==="earn" ? "#FFFFFF" : "#0F172A",
+                            fontWeight:800,
                             fontSize:12,
-                            letterSpacing:"0.01em",
-                            cursor:(saving || depLoading) ? "not-allowed" : "pointer",
+                            cursor:depLoading ? "not-allowed" : "pointer",
                             fontFamily:"Geist,sans-serif",
-                            boxShadow:depLoading
-                              ? "inset 0 2px 6px rgba(15,23,42,0.45)"
-                              : "0 10px 16px rgba(22,163,74,0.28), inset 0 1px 0 rgba(255,255,255,0.26)"
+                            boxShadow:panel==="earn" ? "0 8px 16px rgba(15,23,42,0.24)" : "0 6px 12px rgba(15,23,42,0.08)"
                           }}
                         >
-                          {saving ? "Saving..." : (depLoading ? "Opening..." : "Deposit Now")}
+                          Earnings
                         </button>
-                      )}
-                      <button
-                        disabled={saving || depLoading}
-                        onClick={() => handlePreview(tier.id)}
-                        style={{
-                          padding:"9px 8px",
-                          borderRadius:9,
-                          border:"1.5px solid #E2E8F0",
-                          background:"#F8FAFC",
-                          color:"#475569",
-                          fontWeight:800,
-                          fontSize:12,
-                          cursor:(saving || depLoading) ? "not-allowed" : "pointer",
-                          fontFamily:"Geist,sans-serif"
-                        }}
-                      >
-                        Preview Videos
-                      </button>
-                    </div>
+                        {showDepositCta && (
+                          <button
+                            className="ep-tier-deposit-btn"
+                            disabled={depLoading}
+                            onClick={() => handlePayNow(tier)}
+                            style={{
+                              padding:"9px 8px",
+                              borderRadius:10,
+                              border:"none",
+                              background:depLoading ? "#14532D" : "linear-gradient(135deg,#16A34A 0%, #15803D 56%, #166534 100%)",
+                              color:"#ECFDF5",
+                              fontWeight:900,
+                              fontSize:12,
+                              letterSpacing:"0.01em",
+                              cursor:depLoading ? "not-allowed" : "pointer",
+                              fontFamily:"Geist,sans-serif",
+                              boxShadow:depLoading
+                                ? "inset 0 2px 6px rgba(15,23,42,0.45)"
+                                : "0 10px 16px rgba(22,163,74,0.28), inset 0 1px 0 rgba(255,255,255,0.26)"
+                            }}
+                          >
+                            {depLoading ? "Opening..." : "Deposit Now"}
+                          </button>
+                        )}
+                        <button
+                          disabled={depLoading || !profileTierSelected}
+                          onClick={() => handlePreview(tier.id)}
+                          style={{
+                            padding:"9px 8px",
+                            borderRadius:10,
+                            border:"none",
+                            background:"#f5f3ff",
+                            color:"#4c1d95",
+                            fontWeight:800,
+                            fontSize:12,
+                            cursor:(depLoading || !profileTierSelected) ? "not-allowed" : "pointer",
+                            opacity: profileTierSelected ? 1 : 0.55,
+                            fontFamily:"Geist,sans-serif",
+                            boxShadow:"0 6px 12px rgba(109,40,217,0.12)"
+                          }}
+                        >
+                          Preview
+                        </button>
+                      </div>
 
-                    {panel === "earn" && (
-                      <div style={{ padding:"12px 14px", borderRadius:12, border:"1px solid #E2E8F0", background:"#F8FAFC", marginBottom:10 }}>
-                        <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:10 }}>Earnings Breakdown</div>
-                        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
-                          <div>
-                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Required videos</div>
-                            <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>{tier.videos} per day</div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Per video</div>
-                            <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>KES {V_PRICE}</div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Bonus</div>
-                            <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>
-                              {tier.bonusType === "none" ? "No bonus" : `KES ${tier.bonusAmount}`}
+                      {panel === "earn" && (
+                        <div style={{ padding:"12px 14px", borderRadius:12, background:"rgba(248,250,252,0.92)", marginBottom:10, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.85), 0 8px 16px rgba(15,23,42,0.06)" }}>
+                          <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:10 }}>Earnings Breakdown</div>
+                          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }}>
+                            <div>
+                              <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Required videos</div>
+                              <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>{tier.videos} per day</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Per video</div>
+                              <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>{perVideoLabel}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Bonus</div>
+                              <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>{bonusLabel}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Daily total</div>
+                              <div style={{ fontSize:13, fontWeight:900, color:"#0F172A" }}>{dailyLabel}</div>
                             </div>
                           </div>
-                          <div>
-                            <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Daily total</div>
-                            <div style={{ fontSize:13, fontWeight:900, color:"#0F172A" }}>KES {daily.toLocaleString()}</div>
-                          </div>
                         </div>
-                      </div>
-                    )}
-                    {depErrorMsg && (
-                      <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
-                        {depErrorMsg}
-                      </div>
-                    )}
-                    {!showDepositCta && (
-                      <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
-                        Tier already selected. Use Wallet checkout to deposit anytime.
-                      </div>
-                    )}
-                  </>
-                )}
+                      )}
+                      {depErrorMsg && (
+                        <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", padding:"8px 10px", borderRadius:8, boxShadow:"0 6px 14px rgba(220,38,38,0.12)" }}>
+                          {depErrorMsg}
+                        </div>
+                      )}
+                      {!showDepositCta && (
+                        <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
+                          Tier already selected. Use Wallet checkout to deposit anytime.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
                 <img
                   className="ep-tier-mobile-image ep-tier-mobile-image-select"
@@ -1620,7 +1863,7 @@ function TierSelect({ go, authUser, profileRow, onSelectTier, onPreviewToVideos 
                   alt=""
                   referrerPolicy="no-referrer"
                   onError={(e) => setFallbackSrc(e, tierArt)}
-                  style={{ display:"block", position:"absolute", right:0, top:0, width:"44%", height:"100%", objectFit:"cover", objectPosition:"right center", opacity:0.96, zIndex:1, filter:"saturate(1.03) contrast(1.04) drop-shadow(0 14px 24px rgba(15,23,42,0.24))" }}
+                  style={{ display:"block", position:"absolute", right:"-4px", bottom:"-8px", top:"auto", transform:"none", width:"44%", height:"auto", maxHeight:"90%", objectFit:"contain", objectPosition:"right bottom", opacity:1, zIndex:3, filter:"saturate(1.03) contrast(1.04) drop-shadow(0 16px 24px rgba(15,23,42,0.24))" }}
                 />
               </div>
             );
@@ -1639,14 +1882,14 @@ function Field({ label, type = "text", ph, val, set, ic }) {
   const [focus, setFocus] = useState(false);
   return (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 6, letterSpacing: "0.02em" }}>{label}</label>
+      <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#475569", marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</label>
       <div style={{ position: "relative" }}>
-        <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: focus ? "#111" : "#C8C8C8", transition: "color .15s", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: focus ? "#0F172A" : "#94A3B8", transition: "color .15s", pointerEvents: "none" }}>
           <I n={ic} s={14} c="currentColor" />
         </div>
         <input type={type} placeholder={ph} value={val} onChange={e => set(e.target.value)}
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-          style={{ width: "100%", padding: "11px 14px 11px 38px", background: "#FAFAFA", border: `1.5px solid ${focus ? "#111" : "#EBEBEB"}`, borderRadius: 9, fontSize: 14, color: "#111", outline: "none", fontFamily: "Geist,sans-serif", transition: "border-color .15s", boxSizing: "border-box" }} />
+          style={{ width: "100%", padding: "13px 14px 13px 38px", background: "#F8FAFC", border: `1.5px solid ${focus ? "#0F172A" : "#D5DFEA"}`, borderRadius: 11, fontSize: 15, color: "#111", outline: "none", fontFamily: "Geist,sans-serif", transition: "border-color .15s, box-shadow .15s", boxSizing: "border-box", boxShadow: focus ? "0 0 0 3px rgba(59,130,246,0.12)" : "none" }} />
       </div>
     </div>
   );
@@ -1697,14 +1940,14 @@ const ACCOUNT_GOAL_VIDEO = cdnUrl("/account-goal.mp4");
 const HOME_HERO_BG_IMAGE = import.meta.env.VITE_HOME_HERO_BG_IMAGE || cdnUrl("/hero-space-money.png");
 const HOME_HERO_BOT_IMAGE = import.meta.env.VITE_HOME_HERO_BOT_IMAGE || cdnUrl("/hero-casino-bot.png");
 const proxyImageUrl = (rawUrl) => `https://proxy.duckduckgo.com/iu/?u=${encodeURIComponent(rawUrl)}&f=1`;
-const imageSource = (rawUrl) => ({ primary: proxyImageUrl(rawUrl), fallback: rawUrl });
-const LANDING_STICKER_TOP_IMAGE = imageSource("https://i.postimg.cc/jjzn0XRJ/BG2_removebg_preview.png");
+const imageSource = (rawUrl) => ({ primary: rawUrl, fallback: proxyImageUrl(rawUrl) });
+const LANDING_STICKER_TOP_IMAGE = imageSource("https://i.postimg.cc/vBhjCY5X/BG12-removebg-preview.png");
 const LANDING_STICKER_BOTTOM_IMAGE = imageSource("https://i.postimg.cc/1RNtLBB0/BG6_removebg_preview.png");
 const LANDING_STICKER_TIER_IMAGE = imageSource("https://i.postimg.cc/7hXLPsRL/BG5_removebg_preview.png");
 const DASH_BOT_GUIDE_IMAGE = imageSource("https://i.postimg.cc/RFKkTW1c/BG8_removebg_preview.png");
 const HOME_BALANCE_SIDE_IMAGE = imageSource("https://i.postimg.cc/fyLdGYVG/BG1_removebg_preview.png");
 const REFERRAL_WORK_BOT_IMAGE = imageSource("https://i.postimg.cc/jSrH5wm8/BG2_removebg_preview.png");
-const WALLET_EARNINGS_BOT_IMAGE = imageSource("https://i.postimg.cc/Vk0b4wT6/BG3_removebg_preview.png");
+const WALLET_EARNINGS_BOT_IMAGE = imageSource("https://i.postimg.cc/vBhjCY5X/BG12-removebg-preview.png");
 const WALLET_DEPOSIT_BOT_IMAGE = imageSource("https://i.postimg.cc/rFPrSsf7/BG4_removebg_preview_(2).png");
 const setFallbackSrc = (e, srcObj) => {
   const fallback = srcObj?.fallback || "";
@@ -1768,7 +2011,7 @@ function LiveMathBackground({ tone = "light", symbols = LIVE_SYMBOLS, opacity = 
   );
     }
 
-function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, externalTab, onTabChange }) {
+function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, externalTab, onTabChange, displayCurrency, onChangeDisplayCurrency }) {
   const [open, setOpen] = useState(true);
   const normalizeClientTab = useCallback((tabId) => {
     const tab = String(tabId || "").toLowerCase();
@@ -1803,7 +2046,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
   const [isTiny, setIsTiny] = useState(window.innerWidth < 380);
   const [overviewMediaReady, setOverviewMediaReady] = useState(() => window.innerWidth >= 769);
-  const [recentOpen, setRecentOpen] = useState(false);
   const [stripHidden, setStripHidden] = useState(false);
   const [stripToggleHidden, setStripToggleHidden] = useState(false);
   const lastScrollRef = useRef(0);
@@ -1811,6 +2053,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const tierSelected = profileRow?.tier_selected === true;
   const [hasTierDeposit, setHasTierDeposit] = useState(null);
   const [depositCheckBusy, setDepositCheckBusy] = useState(false);
+  const [firstDepositAmount, setFirstDepositAmount] = useState(null);
+  const [progressLockBusy, setProgressLockBusy] = useState(false);
+  const progressLockTriggeredRef = useRef(false);
   const [profile, setProfile] = useState({
     id: null,
     name: "Alex Johnson",
@@ -1835,10 +2080,14 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
+  const [settingsUpgradeBusy, setSettingsUpgradeBusy] = useState(false);
+  const [settingsUpgradeDone, setSettingsUpgradeDone] = useState(false);
+  const [settingsUpgradeError, setSettingsUpgradeError] = useState("");
   const avatarUrlRef = useRef(null);
   const [clientTx, setClientTx] = useState([]);
   const [clientRefs, setClientRefs] = useState([]);
   const [clientRefTable, setClientRefTable] = useState([]);
+  const [dashboardOverview, setDashboardOverview] = useState(null);
   useEffect(() => {
     try { localStorage.setItem("ep:dash-notifs", JSON.stringify(notifs)); } catch (e) {}
   }, [notifs]);
@@ -1883,20 +2132,52 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const depositTimerPct = Math.max(0, Math.min(100, Math.round((depositCountdown / DEPOSIT_AUTO_OPEN_SECS) * 100)));
 
   useEffect(() => {
-    if (!supabase || !authId || USE_LOCAL_WALLET) { setHasTierDeposit(null); return; }
+    if (!supabase || !authId || USE_LOCAL_WALLET) {
+      setHasTierDeposit(null);
+      setFirstDepositAmount(null);
+      setDashboardOverview(null);
+      return;
+    }
+    const activeTierId = Number(t?.id || 1);
     let ignore = false;
     (async () => {
       setDepositCheckBusy(true);
-      const { data, error } = await supabase
-        .from("deposits")
-        .select("deposit_id")
-        .eq("user_id", authId)
-        .eq("status", "success")
-        .limit(1);
-      if (!ignore) {
-        setHasTierDeposit(!error && Array.isArray(data) && data.length > 0);
+      const overview = await fetchDashboardOverviewRow(activeTierId);
+      if (ignore) return;
+
+      if (overview) {
+        setDashboardOverview(overview);
+        setHasTierDeposit(overview.tier_has_success_deposit === true);
+        const firstAmount = Number(overview.first_success_deposit_amount);
+        setFirstDepositAmount(Number.isFinite(firstAmount) && firstAmount > 0 ? firstAmount : null);
         setDepositCheckBusy(false);
+        return;
       }
+
+      setDashboardOverview(null);
+      const [{ data: depData, error: depError }, { data: firstData, error: firstError }] = await Promise.all([
+        supabase
+          .from("deposits")
+          .select("deposit_id")
+          .eq("user_id", authId)
+          .eq("status", "success")
+          .eq("tier_at_deposit", activeTierId)
+          .limit(1),
+        supabase
+          .from("deposits")
+          .select("amount")
+          .eq("user_id", authId)
+          .eq("status", "success")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+      ]);
+
+      if (ignore) return;
+      setHasTierDeposit(!depError && Array.isArray(depData) && depData.length > 0);
+      const amount = Number(firstData?.amount);
+      setFirstDepositAmount(!firstError && Number.isFinite(amount) && amount > 0 ? amount : null);
+      setDepositCheckBusy(false);
     })();
     return () => { ignore = true; };
   }, [authId, t?.id, USE_LOCAL_WALLET]);
@@ -1923,6 +2204,12 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
     setTab("withdraw");
     setDepositFocus(true);
   }, [depositRequired, depositCountdown]);
+  useEffect(() => {
+    if (!depositRequired) return;
+    if (tab !== "videos") return;
+    setDepositFocus(true);
+    setTab("withdraw");
+  }, [depositRequired, tab]);
   const earn = Number.isFinite(serverBalance) ? serverBalance : (baseEarn + earnBonus);
   const goal = getTierDailyTotal(t) * 7;
   const pct = Math.round((earn / goal) * 100);
@@ -1943,6 +2230,94 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const refCode = normalizeRefCode(profile.refCode) || makeRefCode(profile.email || profile.id || joinLabel);
   const nextTier = TIERS[t.id];
   const canUpgrade = !!nextTier;
+  const settingsNeedsUnlock = hasTierDeposit === false;
+  const currentTierDeposit = Number(t?.deposit) || 0;
+  const nextTierDeposit = Number(nextTier?.deposit) || 0;
+  const settingsUpgradeAmount = settingsNeedsUnlock
+    ? currentTierDeposit
+    : (nextTier ? Math.max(nextTierDeposit - currentTierDeposit, 0) : 0);
+  const settingsTargetTierId = settingsNeedsUnlock ? t.id : (nextTier?.id || t.id);
+  const settingsCanUpgradePay = settingsUpgradeAmount > 0;
+  const overviewProgressTarget = Number(dashboardOverview?.progress_target_amount);
+  const overviewProgressEarned = Number(dashboardOverview?.progress_earned_amount);
+  const overviewProgressPct = Number(dashboardOverview?.progress_percent);
+  const progressBaseDeposit = Number.isFinite(Number(firstDepositAmount)) && Number(firstDepositAmount) > 0
+    ? Number(firstDepositAmount)
+    : (Number(t?.deposit) || 0);
+  const progressTarget =
+    Number.isFinite(overviewProgressTarget) && overviewProgressTarget > 0
+      ? overviewProgressTarget
+      : (progressBaseDeposit > 0 ? progressBaseDeposit * 3 : 0);
+  const progressTxTotals = useMemo(() => {
+    const rows = Array.isArray(clientTx) ? clientTx : [];
+    return rows.reduce((acc, tx) => {
+      const amount = Number(tx?.amt);
+      if (!Number.isFinite(amount) || amount <= 0) return acc;
+      const icon = String(tx?.ic || "").toLowerCase();
+      const text = `${String(tx?.text || "")} ${String(tx?.sub || "")}`.toLowerCase();
+      const isReferral = icon === "gift" || text.includes("referral");
+      const isEarning = icon === "play" || icon === "activity" || text.includes("video") || text.includes("bonus") || text.includes("earn");
+      if (isReferral) {
+        acc.referral += amount;
+        return acc;
+      }
+      if (isEarning) acc.earnings += amount;
+      return acc;
+    }, { earnings: 0, referral: 0 });
+  }, [clientTx]);
+  const progressReferralTableTotal = useMemo(() => {
+    const rows = Array.isArray(clientRefs) ? clientRefs : [];
+    return rows.reduce((sum, r) => {
+      const status = String(r?.status || "").toLowerCase();
+      if (status && status !== "active") return sum;
+      const bonus = Number(r?.bonus ?? r?.ref_bonus ?? r?.bonus_amount ?? r?.commission_amount ?? 0);
+      return Number.isFinite(bonus) && bonus > 0 ? sum + bonus : sum;
+    }, 0);
+  }, [clientRefs]);
+  const progressReferralTotal = progressTxTotals.referral > 0 ? progressTxTotals.referral : progressReferralTableTotal;
+  const progressEarnedTotal =
+    Number.isFinite(overviewProgressEarned) && overviewProgressEarned >= 0
+      ? overviewProgressEarned
+      : Math.max(0, progressTxTotals.earnings + progressReferralTotal);
+  const progressPctRaw =
+    Number.isFinite(overviewProgressPct) && overviewProgressPct >= 0
+      ? overviewProgressPct
+      : (progressTarget > 0 ? (progressEarnedTotal / progressTarget) * 100 : 0);
+  const progressPct = Math.max(0, Math.min(100, Math.round(progressPctRaw)));
+  const progressFill = progressPct <= 60 ? "#22C55E" : progressPct <= 85 ? "#EAB308" : "#F97316";
+  const progressTrack = "#DCE4EE";
+  useEffect(() => {
+    if (!supabase || !authId || progressLockBusy) return;
+    if (progressTarget <= 0 || progressEarnedTotal < progressTarget) {
+      progressLockTriggeredRef.current = false;
+      return;
+    }
+    if (progressLockTriggeredRef.current) return;
+    const currentStatus = String(profileRow?.status || "Active").toLowerCase();
+    if (currentStatus !== "active") return;
+    let cancelled = false;
+    (async () => {
+      progressLockTriggeredRef.current = true;
+      setProgressLockBusy(true);
+      try {
+        await supabase
+          .from("users")
+          .update({ status: "suspended" })
+          .eq("user_id", authId);
+        if (cancelled) return;
+        try {
+          window.alert("Progress reached 300%. Account has been locked.");
+        } catch (e) {}
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {}
+      } finally {
+        if (!cancelled) setProgressLockBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authId, profileRow?.status, progressEarnedTotal, progressTarget, progressLockBusy]);
+  const activeDisplayCurrency = normalizeDisplayCurrency(displayCurrency || getActiveDisplayCurrency());
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
   const canWithdraw = ["Tuesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
   const SIDEBAR_W = isMobile ? (isTiny ? 220 : 260) : 260;
@@ -2290,21 +2665,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const activityFeed = Array.isArray(clientTx) && clientTx.length ? clientTx : undefined;
   const referralFeed = Array.isArray(clientRefs) && clientRefs.length ? clientRefs : undefined;
 
-  const recentTx = [
-    {d:"Mar 7", a:1200, s:"Paid",    type:"out"},
-    {d:"Mar 5", a:3400, s:"Paid",    type:"out"},
-    {d:"Mar 1", a:800,  s:"Paid",    type:"out"},
-    {d:"Feb 28",a:2100, s:"Pending", type:"out"},
-  ];
-
   const closeSidebar = () => { if (isMobile) setOpen(false); };
   const setProfileField = (key, value) => setDraftProfile(p => ({ ...p, [key]: value }));
-  const draftBalanceRaw = draftProfile.balance;
-  const draftBalanceVal = draftBalanceRaw === null || draftBalanceRaw === "" || typeof draftBalanceRaw === "undefined" ? null : Number(draftBalanceRaw);
-  const draftBalance = Number.isFinite(draftBalanceVal) ? draftBalanceVal : null;
-  const profileBalanceVal = profile.balance === null || typeof profile.balance === "undefined" ? null : Number(profile.balance);
-  const profileBalance = Number.isFinite(profileBalanceVal) ? profileBalanceVal : null;
-  const profileDirty = ["name","email","phone","avatar"].some(k => (draftProfile[k] || "") !== (profile[k] || "")) || draftBalance !== profileBalance;
+  const profileDirty = ["name","email","phone","avatar"].some(k => (draftProfile[k] || "") !== (profile[k] || ""));
 
   const handleAvatarFile = (file) => {
     if (!file) return;
@@ -2327,7 +2690,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
       email: (draftProfile.email || "").trim() || profile.email,
       phone: (draftProfile.phone || "").trim() || profile.phone,
       avatar: (draftProfile.avatar || "").trim(),
-      balance: Number.isFinite(draftBalance) ? draftBalance : profile.balance,
       joinNumber: joinNumberClean,
     };
     setProfile(prev => ({
@@ -2337,7 +2699,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
       email: cleaned.email,
       phone: cleaned.phone,
       avatar: cleaned.avatar,
-      balance: Number.isFinite(cleaned.balance) ? cleaned.balance : prev.balance,
       joinNumber: Number.isFinite(Number(cleaned.joinNumber)) ? cleaned.joinNumber : prev.joinNumber,
     }));
     if (supabase) {
@@ -2347,7 +2708,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
         email: cleaned.email,
         phone: cleaned.phone,
         avatar_url: cleaned.avatar || null,
-        balance: Number.isFinite(cleaned.balance) ? cleaned.balance : null,
         join_number: Number.isFinite(Number(cleaned.joinNumber)) ? cleaned.joinNumber : null,
         updated_at: new Date().toISOString(),
       };
@@ -2363,6 +2723,90 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
       setProfileMsg("Profile updated.");
     }
     setProfileSaving(false);
+  };
+  const startSettingsUpgradeCheckout = async () => {
+    setSettingsUpgradeError("");
+    setSettingsUpgradeDone(false);
+    if (settingsUpgradeBusy) return;
+    if (!settingsCanUpgradePay) {
+      setSettingsUpgradeError(nextTier ? "No payment required right now." : "You are already at the top tier.");
+      return;
+    }
+    if (!authUser?.id) {
+      setSettingsUpgradeError("Please sign in to continue.");
+      return;
+    }
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      setSettingsUpgradeError("Payment service is not configured. Please contact support.");
+      return;
+    }
+    const email = authUser?.email || profileRow?.email || draftProfile.email || "";
+    if (!email) {
+      setSettingsUpgradeError("Email is required for checkout.");
+      return;
+    }
+    setSettingsUpgradeBusy(true);
+    try {
+      const token = await getAccessToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const requestBody = {
+        amount: settingsUpgradeAmount,
+        user_id: authUser.id,
+        email,
+        tier: settingsTargetTierId,
+        upgrade_from_tier: t.id,
+        method: "M-Pesa",
+        payment_mode: "live",
+        phone: profileRow?.phone || draftProfile.phone || "",
+        name: profileRow?.name || draftProfile.name || authUser?.user_metadata?.full_name || ""
+      };
+      const res = await fetch(`${apiBase}/api/v1/deposit/create`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const rawMsg = data?.error || data?.message || data?.detail || "Failed to start checkout.";
+        setSettingsUpgradeError(formatDepositError(rawMsg));
+        return;
+      }
+      const url = data?.authorization_url || data?.redirect_url || data?.auth_url || data?.url;
+      if (data?.manual) {
+        setSettingsUpgradeDone(true);
+        setTimeout(() => setSettingsUpgradeDone(false), 2500);
+        addClientTx?.({
+          ic:"wallet",
+          text:"Deposit requested",
+          sub:`KES ${settingsUpgradeAmount.toLocaleString()} pending manual confirmation`,
+          time:"Just now",
+          c:"#0066FF",
+          amt:settingsUpgradeAmount
+        });
+        return;
+      }
+      if (!url) {
+        setSettingsUpgradeError("Payment gateway did not return a checkout URL.");
+        return;
+      }
+      setSettingsUpgradeDone(true);
+      setTimeout(() => setSettingsUpgradeDone(false), 2500);
+      addClientTx?.({
+        ic:"wallet",
+        text:"Deposit initiated",
+        sub:`KES ${settingsUpgradeAmount.toLocaleString()} via M-Pesa`,
+        time:"Just now",
+        c:"#0066FF",
+        amt:settingsUpgradeAmount
+      });
+      window.location.href = url;
+    } catch (e) {
+      setSettingsUpgradeError("Network error. Please try again.");
+    } finally {
+      setSettingsUpgradeBusy(false);
+    }
   };
 
   return (
@@ -2439,7 +2883,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
             </button>
           )}
 
-          {open && (
+          {open && isMobile && (
             <div style={{ margin:"10px 0 0" }}>
               <button onClick={()=>setQuickOpen(o=>!o)}
                 style={{ width:"100%", padding:"9px 12px", borderRadius:9, border:"1px solid #E8E8E8", background:"#FAFAFA", fontSize:12, fontWeight:800, color:"#555", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, fontFamily:"Geist,sans-serif" }}>
@@ -2458,55 +2902,42 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               )}
             </div>
           )}
-        </nav>
 
-        {/* "" Bottom: recent tx (desktop only) "" */}
-        {open && !isMobile && (
-          <div style={{ borderTop:"1px solid #F0F0F0", flexShrink:0 }}>
-            <button onClick={()=>setRecentOpen(o=>!o)}
-              style={{
-                width:"100%",
-                display:"flex",
-                alignItems:"center",
-                justifyContent:"space-between",
-                padding:"10px 14px",
-                background:"#fff",
-                border:"none",
-                cursor:"pointer",
-                fontSize:10,
-                fontWeight:900,
-                letterSpacing:"0.12em",
-                color:"#111"
-              }}>
-              RECENT TRANSACTIONS
-              <div style={{ transform: recentOpen ? "rotate(90deg)" : "rotate(-90deg)", transition:"transform .18s ease" }}>
-                <I n="chevR" s={12} c="#111"/>
-              </div>
-            </button>
-            <div style={{ maxHeight: recentOpen ? 200 : 0, overflow:"hidden", transition:"max-height .25s ease" }}>
-              <div style={{ padding:"6px 16px 10px" }}>
-                {recentTx.slice(0,2).map((w,i) => (
-                  <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <div style={{ width:18, height:18, borderRadius:5, background: w.s==="Paid"?"#F0FDF4":"#FFFBEB", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        <I n={w.s==="Paid"?"check":"calendar"} s={9} c={w.s==="Paid"?"#22C55E":"#D97706"}/>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:10, fontWeight:700, color:"#666" }}>KES {w.a.toLocaleString()}</div>
-                        <div style={{ fontSize:9, color:"#D1D5DB" }}>{w.d}</div>
-                      </div>
-                    </div>
-                    <span style={{ fontSize:8, fontWeight:800, padding:"2px 6px", borderRadius:50, background:w.s==="Paid"?"#F0FDF4":"#FFFBEB", color:w.s==="Paid"?"#22C55E":"#D97706" }}>{w.s}</span>
+          {open && !isMobile && (
+            <div style={{ marginTop:12, padding:"11px 10px", border:"1px solid #E5E7EB", borderRadius:12, background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)", display:"flex", flexDirection:"column", gap:8 }}>
+              <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.11em", color:"#94A3B8" }}>WORKSPACE</div>
+              <div style={{ display:"grid", gap:6 }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, padding:"7px 8px", borderRadius:8, border:"1px solid #E5E7EB", background:"#fff" }}>
+                  <span style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.06em" }}>TODAY</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:"#111", whiteSpace:"nowrap" }}>{today}</span>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, padding:"7px 8px", borderRadius:8, border:`1px solid ${canWithdraw ? "#A7F3D0" : "#FECACA"}`, background:canWithdraw ? "#ECFDF5" : "#FEF2F2" }}>
+                  <span style={{ fontSize:10, fontWeight:800, color:canWithdraw ? "#166534" : "#991B1B", letterSpacing:"0.06em" }}>PAYOUT</span>
+                  <span style={{ fontSize:11, fontWeight:800, color:canWithdraw ? "#059669" : "#DC2626", whiteSpace:"nowrap" }}>
+                    {canWithdraw ? "Open" : "Queued"}
+                  </span>
+                </div>
+                <div style={{ padding:"8px 9px", borderRadius:8, border:`1px solid ${t.mid}`, background:t.lgt }}>
+                  <div style={{ fontSize:9, color:t.acc, opacity:0.75, fontWeight:800, letterSpacing:"0.08em" }}>EARNINGS</div>
+                  <div style={{ marginTop:3, fontSize:14, fontWeight:900, color:t.acc, letterSpacing:"-0.03em" }}>
+                    {formatMoney(earn, {
+                      currency: activeDisplayCurrency,
+                      minFractionDigits: activeDisplayCurrency === DISPLAY_CURRENCIES.USD ? 2 : 0,
+                      maxFractionDigits: activeDisplayCurrency === DISPLAY_CURRENCIES.USD ? 2 : 0
+                    })}
                   </div>
-                ))}
-                <div style={{ marginTop:6, fontSize:9, color:"#D1D5DB", fontWeight:700 }}>View all in Transactions</div>
+                </div>
               </div>
-              <div style={{ padding:"6px 16px 14px", display:"flex", justifyContent:"space-between" }}>
-                {["About","Contact","Help"].map(l => <span key={l} style={{ fontSize:11, color:"#CCC", cursor:"pointer" }}>{l}</span>)}
+              <div style={{ marginTop:2, display:"flex", justifyContent:"center" }}>
+                <CurrencyPill
+                  currency={activeDisplayCurrency}
+                  onChange={(next) => { if (onChangeDisplayCurrency) onChangeDisplayCurrency(normalizeDisplayCurrency(next)); }}
+                  compact
+                />
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </nav>
 
         {/* Logout button (bottom) */}
         {open && (
@@ -2549,18 +2980,18 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
 
         {/* "" TOP BAR "" */}
         <header className="ep-dash-topbar" style={{
-          minHeight: isMobile ? 64 : 62,
-          height: isMobile ? "auto" : 62,
-          background:"#fff",
-          borderBottom:"1px solid #E8E8E8",
+          minHeight: isMobile ? 64 : 72,
+          height: isMobile ? "auto" : 72,
+          background: isMobile ? "#fff" : "linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",
+          borderBottom: isMobile ? "1px solid #E8E8E8" : "1px solid rgba(226,232,240,0.95)",
           display:"flex",
           alignItems:"center",
-          padding: isMobile ? "10px 14px" : "0 20px",
+          position:"relative",
+          padding: isMobile ? "10px 14px" : "10px 18px",
           gap: isMobile ? 8 : 12,
           flexShrink:0,
-          boxShadow:"0 1px 4px rgba(0,0,0,0.04)",
-          flexWrap: isMobile ? "wrap" : "nowrap",
-          rowGap: isMobile ? 8 : 0
+          boxShadow: isMobile ? "0 1px 4px rgba(0,0,0,0.04)" : "0 8px 16px rgba(15,23,42,0.05)",
+          flexWrap:"nowrap"
         }}>
 
           {/* Toggle / Upgrade */}
@@ -2572,73 +3003,66 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               <I n="menu" s={16} c="#555"/>
             </button>
           )}
-          {isMobile && (
-            <button
-              onClick={() => { if (canUpgrade) goDeposit(true); }}
-              disabled={!canUpgrade}
-              title={nextTier ? `Upgrade to ${nextTier.name}` : "Max tier"}
-              className="ep-upgrade-btn"
-              style={{
-                padding:"7px 12px",
-                borderRadius:12,
-                cursor: canUpgrade ? "pointer" : "not-allowed",
-                display:"flex",
-                alignItems:"center",
-                gap:6,
-                transition:"all .15s",
-                flexShrink:0,
-                ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled)
-              }}>
-              <span className="ep-upgrade-arrow" style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <I n="trendUp" s={14} c={canUpgrade ? "#111" : "#6B7280"}/>
+          <button
+            onClick={() => { if (canUpgrade) goDeposit(true); }}
+            disabled={!canUpgrade}
+            title={nextTier ? `Upgrade to ${nextTier.name}` : "Max tier"}
+            className="ep-upgrade-btn"
+            style={{
+              padding: isMobile ? "7px 12px" : "8px 12px",
+              borderRadius:12,
+              cursor: canUpgrade ? "pointer" : "not-allowed",
+              display:"flex",
+              alignItems:"center",
+              gap:6,
+              transition:"all .15s",
+              flexShrink:0,
+              zIndex:1,
+              ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled)
+            }}>
+            <span className="ep-upgrade-arrow" style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <I n="trendUp" s={14} c={canUpgrade ? "#111" : "#6B7280"}/>
+            </span>
+            <span style={{ fontSize:11, fontWeight:900, color: canUpgrade ? "#111" : "#6B7280", letterSpacing:"0.02em" }}>
+              {nextTier ? "Upgrade" : "Max Tier"}
+            </span>
+          </button>
+
+          {/* Page heading */}
+          {!isMobile && (
+            <div style={{ display:"flex", flexDirection:"column", gap:2, minWidth:0, marginLeft:2 }}>
+              <span style={{ fontSize:16, fontWeight:900, color:"#0F172A", letterSpacing:"-0.03em", lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {navItems.find(n=>n.id===tab)?.label || "Overview"}
               </span>
-              <span style={{ fontSize:11, fontWeight:900, color: canUpgrade ? "#111" : "#6B7280", letterSpacing:"0.02em" }}>
-                {nextTier ? "Upgrade" : "Max Tier"}
+              <span style={{ fontSize:10, fontWeight:700, color:"#64748B", letterSpacing:"0.08em", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {t.name.toUpperCase()} TIER DASHBOARD
               </span>
-            </button>
+            </div>
           )}
 
-          {/* Page breadcrumb */}
-          {!isMobile && (
-            <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden" }}>
-              <span style={{ fontSize:13, color:"#BBB", fontWeight:500, whiteSpace:"nowrap" }}>Dashboard</span>
-              <I n="chevR" s={12} c="#DDD"/>
-              <span style={{ fontSize:13, fontWeight:800, color:"#111", whiteSpace:"nowrap", letterSpacing:"-0.02em" }}>{navItems.find(n=>n.id===tab)?.label || "Overview"}</span>
+          {isMobile && (
+            <div
+              className="ep-dash-currency-slot"
+              style={{
+                position:"relative",
+                left:"auto",
+                top:"auto",
+                transform:"none",
+                zIndex:3,
+                pointerEvents:"auto",
+                marginLeft:isTiny ? 8 : 10,
+                flexShrink:0
+              }}
+            >
+              <CurrencyPill
+                currency={activeDisplayCurrency}
+                onChange={(next) => { if (onChangeDisplayCurrency) onChangeDisplayCurrency(normalizeDisplayCurrency(next)); }}
+                compact={isMobile}
+              />
             </div>
           )}
 
           <div style={{ flex:1, minWidth:0 }}/>
-
-          {!isMobile && (
-            <>
-              {/* Date */}
-              <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#FAFAFA", border:"1px solid #111", borderRadius:9, flexShrink:0 }}>
-                <I n="calendar" s={13} c="#BBB"/>
-                <span style={{ fontSize:12, color:"#888", fontWeight:500, whiteSpace:"nowrap" }}>{today}</span>
-              </div>
-
-              {/* Withdrawal day indicator */}
-              <div className="ep-topbar-date" style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background: canWithdraw?"#ECFDF5":"#FFF5F5", border:`1px solid ${canWithdraw?"#A7F3D0":"#FCA5A5"}`, borderRadius:9, flexShrink:0 }}>
-                <div style={{ width:6, height:6, borderRadius:"50%", background: canWithdraw?"#059669":"#EF4444", animation:"pulse 2s infinite" }}/>
-                <span style={{ fontSize:11, fontWeight:800, color: canWithdraw?"#059669":"#EF4444", whiteSpace:"nowrap" }}>
-                  {canWithdraw ? "Payouts Processing" : "Payouts Queued"}
-                </span>
-              </div>
-
-              <div className="ep-topbar-date" style={{ width:1, height:24, background:"#E8E8E8", flexShrink:0 }}/>
-
-              {/* Earnings chip */}
-              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background:t.lgt, border:`1.5px solid ${t.mid}`, borderRadius:10, flexShrink:0 }}>
-                <div>
-                  <div style={{ fontSize:14, fontWeight:900, color:t.acc, letterSpacing:"-0.03em", lineHeight:1.1 }}>KES {earn.toLocaleString()}</div>
-                  <div style={{ fontSize:9, color:t.acc, opacity:0.65, fontWeight:700 }}>{pct}% TO GOAL</div>
-                </div>
-                <Donut pct={pct} acc={t.acc} size={34} thickness={4}/>
-              </div>
-
-              <div style={{ width:1, height:24, background:"#E8E8E8", flexShrink:0 }}/>
-            </>
-          )}
 
           {/* Notifications */}
           <div style={{ position:"relative" }}>
@@ -2674,10 +3098,39 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
 
           {/* Profile */}
           <div style={{ position:"relative" }}>
-            <div onClick={()=>{setProfileOpen(o=>!o); setNotifOpen(false);}} className="ep-dash-profile-trigger" style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 10px 4px 4px", border:"1.5px solid #E8E8E8", borderRadius:50, background:"#FAFAFA" }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:t.acc, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+            <div
+              onClick={()=>{setProfileOpen(o=>!o); setNotifOpen(false);}}
+              className="ep-dash-profile-trigger"
+              style={{
+                display:"flex",
+                alignItems:"center",
+                gap:8,
+                cursor:"pointer",
+                padding:isMobile ? "3px 8px 3px 3px" : "4px 10px 4px 4px",
+                border:"1.5px solid #E8E8E8",
+                borderRadius:50,
+                background:"#FAFAFA",
+                minHeight:36,
+                flexShrink:0
+              }}
+            >
+              <div
+                style={{
+                  width:isMobile ? 30 : 28,
+                  height:isMobile ? 30 : 28,
+                  minWidth:isMobile ? 30 : 28,
+                  minHeight:isMobile ? 30 : 28,
+                  borderRadius:"50%",
+                  background:t.acc,
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  overflow:"hidden",
+                  flexShrink:0
+                }}
+              >
                 {profile.avatar ? (
-                  <img src={profile.avatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                  <img src={profile.avatar} alt={profileName} style={{ display:"block", width:"100%", height:"100%", objectFit:"cover" }} />
                 ) : (
                   <span style={{ fontSize:11, fontWeight:900, color:"#fff" }}>{profileInitials}</span>
                 )}
@@ -2749,25 +3202,28 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
           transition:"transform .2s ease, opacity .2s ease, max-height .2s ease, padding .2s ease"
         }}>
           {!isMobile && (
-            <>
-              <div>
-                <h2 style={{ fontSize:20, fontWeight:900, letterSpacing:"-0.04em", color:"#111", lineHeight:1.1, fontFamily: headingFont }}>
-                  {navItems.find(n=>n.id===tab)?.label || "Overview"}
-                </h2>
-                <p style={{ fontSize:12, color:"#AAA", marginTop:4, fontWeight:500 }}>
-                  {today}  -  <span style={{ color:t.acc, fontWeight:700 }}>{t.name} Tier</span>  -  KES {earn.toLocaleString()} earned
+            <div style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+              <div style={{ minWidth:0 }}>
+                <p style={{ fontSize:12, color:"#64748B", fontWeight:700, letterSpacing:"0.03em" }}>
+                  {today}  -  <span style={{ color:t.acc, fontWeight:800 }}>{t.name} Tier</span>  -  KES {earn.toLocaleString()} earned
                 </p>
+                <div style={{ marginTop:6, width:"min(420px, 60vw)" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
+                    <span style={{ fontSize:10, fontWeight:900, color:"#334155", letterSpacing:"0.08em", textTransform:"uppercase" }}>Progress</span>
+                    <span style={{ fontSize:10, fontWeight:800, color:"#475569" }}>{progressPct}%</span>
+                  </div>
+                  <div style={{ height:7, borderRadius:999, background:progressTrack, border:"1px solid rgba(15,23,42,0.08)", overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${progressPct}%`, borderRadius:999, background:progressFill, transition:"width .3s ease" }} />
+                  </div>
+                </div>
               </div>
-              {/* Quick action buttons */}
-              <div className="ep-dash-strip-actions" style={{ display:"flex", gap:8 }}>
-                <button onClick={()=>setTab("videos")} style={{ padding:"8px 16px", background:"#111", color:"#fff", border:"none", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
-                  <I n="play" s={12} c="#fff"/> Watch Now
-                </button>
-                <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 16px", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif", display:"flex", alignItems:"center", gap:6 }}>
-                  <I n="wallet" s={12} c="#111"/> Withdraw
-                </button>
+              <div style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"6px 10px", borderRadius:999, background:"#fff", border:"1px solid #E2E8F0" }}>
+                <span style={{ width:6, height:6, borderRadius:"50%", background:t.acc }} />
+                <span style={{ fontSize:11, fontWeight:900, color:"#0F172A", letterSpacing:"0.05em" }}>
+                  {navItems.find(n=>n.id===tab)?.label || "Overview"}
+                </span>
               </div>
-            </>
+            </div>
           )}
 
           {isMobile && (
@@ -2779,6 +3235,15 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                 <span style={{ fontSize:isTiny?9:10, fontWeight:800, color:t.acc, background:t.lgt, border:`1px solid ${t.mid}`, borderRadius:99, padding:"4px 10px", whiteSpace:"nowrap", flexShrink:0 }}>
                   {t.name} Tier
                 </span>
+              </div>
+              <div style={{ width:"100%" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
+                  <span style={{ fontSize:10, fontWeight:900, color:"#334155", letterSpacing:"0.08em", textTransform:"uppercase" }}>Progress</span>
+                  <span style={{ fontSize:10, fontWeight:800, color:"#475569" }}>{progressPct}%</span>
+                </div>
+                <div style={{ height:7, borderRadius:999, background:progressTrack, border:"1px solid rgba(15,23,42,0.08)", overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${progressPct}%`, borderRadius:999, background:progressFill, transition:"width .3s ease" }} />
+                </div>
               </div>
               <div className="ep-dash-strip-mobile-meta" style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#555", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>{today}</span>
@@ -2882,14 +3347,22 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               </div>
             </div>
           )}
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady}/>}
-          {tab==="videos"    && <VideosContent    t={t} onEarning={handleEarning} authUser={authUser} />}
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady} dashboardSummary={dashboardOverview}/>}
+          {tab==="videos"    && (
+            <VideosContent
+              t={t}
+              onEarning={handleEarning}
+              authUser={authUser}
+              depositRequired={depositRequired}
+              onRequireDeposit={() => goDeposit(true)}
+            />
+          )}
           {tab==="analytics" && <AnalyticsContent t={t} earn={earn} isMobile={isMobile} refCode={refCode} />}
           {tab==="referrals" && <ReferralsContent t={t} earn={earn} refData={supabase ? clientRefTable : undefined} refCode={refCode} isMobile={isMobile} authUserId={authId} />}
-          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx} onBalanceUpdate={applyBalance} hasDeposit={hasTierDeposit}/>}
+          {tab==="withdraw"  && <WithdrawContent  t={t} earn={earn} balance={balance} authUser={authUser} profileRow={profileRow} focusDeposit={depositFocus} onFocusDone={()=>setDepositFocus(false)} onNewTx={addClientTx} onBalanceUpdate={applyBalance} hasDeposit={hasTierDeposit} historyData={activityFeed} referralHistory={clientRefTable}/>}
           {tab==="settings"  && (
-            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:16 }}>
-              <div className="ep-card" style={{ borderRadius:14, padding:"20px 22px" }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap:18, alignItems:"start" }}>
+              <div className="ep-card" style={{ borderRadius:16, padding:"20px 22px", background:"linear-gradient(160deg,#FFFFFF 0%, #F8FAFC 52%, #F4F8FF 100%)", border:"1px solid #E6ECF5", boxShadow:"0 10px 24px rgba(15,23,42,0.08)" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, gap:12, flexWrap:"wrap" }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:900, color:"#111" }}>Profile Settings</div>
@@ -2969,60 +3442,127 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                 </div>
               </div>
 
-              <div className="ep-card" style={{ borderRadius:14, padding:"20px 22px", display:"flex", flexDirection:"column", gap:16 }}>
-                <div>
-                  <div style={{ fontSize:14, fontWeight:900, color:"#111" }}>Account & Tier</div>
-                  <div style={{ fontSize:11, color:"#888", marginTop:2 }}>Manage balance and upgrade status.</div>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                  <div style={{ background:"#F8FAFC", border:"1px solid #E5E7EB", borderRadius:12, padding:"12px" }}>
-                    <div style={{ fontSize:10, fontWeight:800, color:"#94A3B8", letterSpacing:"0.08em" }}>CURRENT TIER</div>
-                    <div style={{ fontSize:14, fontWeight:900, color:"#111", marginTop:6 }}>{t.name}</div>
-                    <div style={{ fontSize:11, color:"#94A3B8", marginTop:4 }}>Self deposit KES {t.deposit.toLocaleString()}</div>
+              <div className="ep-card" style={{ borderRadius:16, padding:"20px 22px", display:"flex", flexDirection:"column", gap:14, background:"linear-gradient(160deg,#FFFFFF 0%, #F8FAFC 54%, #EEF4FF 100%)", border:"1px solid #DEE7F5", boxShadow:"0 12px 24px rgba(15,23,42,0.09)" }}>
+                <div style={{ padding:"12px 14px", borderRadius:14, background:"linear-gradient(135deg,#0B1220 0%, #111827 52%, #1E3A8A 100%)", boxShadow:"0 14px 26px rgba(15,23,42,0.24)" }}>
+                  <div style={{ fontSize:10, fontWeight:800, color:"rgba(191,219,254,0.92)", letterSpacing:"0.12em" }}>UPGRADE CENTER</div>
+                  <div style={{ fontSize:18, fontWeight:900, color:"#fff", letterSpacing:"-0.03em", marginTop:4 }}>
+                    {nextTier ? `Apply For ${nextTier.name}` : "Top Tier Active"}
                   </div>
-                  <div style={{ background:"#FFF7ED", border:"1px solid #F3E2C7", borderRadius:12, padding:"12px" }}>
-                    <div style={{ fontSize:10, fontWeight:800, color:"#92400E", letterSpacing:"0.08em" }}>NEXT TIER</div>
-                    <div style={{ fontSize:14, fontWeight:900, color:"#111", marginTop:6 }}>{nextTier ? nextTier.name : "Max Tier"}</div>
-                    <div style={{ fontSize:11, color:"#92400E", marginTop:4 }}>
-                      {nextTier ? "Upgrade anytime" : "You're at the top"}
+                  <div style={{ fontSize:11, color:"rgba(226,232,240,0.92)", marginTop:6, lineHeight:1.5 }}>
+                    {settingsNeedsUnlock
+                      ? "Complete your first tier deposit to unlock earnings, withdrawals, and all wallet actions."
+                      : (nextTier
+                        ? `Move from ${t.name} to ${nextTier.name} by paying only the difference.`
+                        : "Your account is already on the highest tier.")}
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:8, marginTop:10 }}>
+                    <div style={{ borderRadius:9, padding:"7px 8px", background:"rgba(255,255,255,0.08)", border:"1px solid rgba(148,163,184,0.28)" }}>
+                      <div style={{ fontSize:9, fontWeight:800, color:"rgba(191,219,254,0.85)", letterSpacing:"0.08em" }}>CURRENT</div>
+                      <div style={{ fontSize:11, fontWeight:900, color:"#fff", marginTop:4 }}>{t.name}</div>
+                    </div>
+                    <div style={{ borderRadius:9, padding:"7px 8px", background:"rgba(255,255,255,0.08)", border:"1px solid rgba(148,163,184,0.28)" }}>
+                      <div style={{ fontSize:9, fontWeight:800, color:"rgba(191,219,254,0.85)", letterSpacing:"0.08em" }}>TARGET</div>
+                      <div style={{ fontSize:11, fontWeight:900, color:"#fff", marginTop:4 }}>{settingsNeedsUnlock ? t.name : (nextTier ? nextTier.name : "Top Tier")}</div>
+                    </div>
+                    <div style={{ borderRadius:9, padding:"7px 8px", background:"rgba(255,255,255,0.08)", border:"1px solid rgba(148,163,184,0.28)" }}>
+                      <div style={{ fontSize:9, fontWeight:800, color:"rgba(191,219,254,0.85)", letterSpacing:"0.08em" }}>TO PAY</div>
+                      <div style={{ fontSize:11, fontWeight:900, color:"#fff", marginTop:4 }}>KES {Math.max(settingsUpgradeAmount, 0).toLocaleString()}</div>
                     </div>
                   </div>
                 </div>
-                <div style={{
-                  position:"relative",
-                  padding:"12px 14px",
-                  borderRadius:12,
-                  background:"linear-gradient(135deg,#FFFFFF 0%, #F8FAFF 50%, #EEF2FF 100%)",
-                  border:"1px solid rgba(15,23,42,0.08)",
-                  boxShadow:"0 8px 18px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.9), 0 0 0 1px rgba(15,23,42,0.06)",
-                  display:"flex",
-                  flexDirection:"column",
-                  gap:8,
-                  overflow:"hidden"
-                }}>
-                  <div style={{ position:"absolute", top:-26, right:-24, width:120, height:120, background:"radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), rgba(255,255,255,0))", opacity:0.75, pointerEvents:"none" }}/>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", position:"relative" }}>
-                    <span style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.18em" }}>ACCOUNT NO.</span>
-                    <div style={{ width:34, height:22, borderRadius:6, background:"linear-gradient(135deg,#FDE68A 0%, #F59E0B 100%)", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(245,158,11,0.35)", border:"1px solid rgba(245,158,11,0.35)" }}/>
+
+                <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:10 }}>
+                  <div style={{ background:"#F8FAFC", border:"1px solid #E2E8F0", borderRadius:12, padding:"11px 12px" }}>
+                    <div style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.08em" }}>DEPOSIT STATUS</div>
+                    <div style={{ fontSize:13, fontWeight:900, color:"#0F172A", marginTop:6 }}>
+                      {settingsNeedsUnlock ? "Pending Unlock" : "Unlocked"}
+                    </div>
                   </div>
-                  <span style={{ fontSize:15, fontWeight:800, color:"#0F172A", letterSpacing:"0.18em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace", textShadow:"0 1px 0 rgba(255,255,255,0.7)", whiteSpace:"nowrap" }}>
-                    {joinCardLabel}
-                  </span>
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Wallet Balance (KES)</label>
-                  <input type="number" value={draftProfile.balance ?? ""} onChange={e=>setProfileField("balance", e.target.value === "" ? null : e.target.value)} placeholder={balance.toString()}
-                    style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
-                  <div style={{ fontSize:10, color:"#9CA3AF" }}>Used to calculate upgrade eligibility.</div>
-                </div>
-                <div style={{ padding:"10px 12px", borderRadius:10, background: nextTier ? "#ECFDF5" : "#F8FAFC", border:`1px solid ${nextTier ? "#A7F3D0" : "#E2E8F0"}`, display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:26, height:26, borderRadius:8, background: nextTier ? "#059669" : "#111", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <I n={nextTier ? "check" : "star"} s={12} c="#fff"/>
-                  </div>
-                  <div style={{ fontSize:11, fontWeight:700, color: nextTier ? "#065F46" : "#475569" }}>
-                    {nextTier ? "Upgrade available - move to the next tier anytime." : "You're at the top tier."}
+                  <div style={{ background:"#FFFFFF", border:"1px solid #E2E8F0", borderRadius:12, padding:"11px 12px" }}>
+                    <div style={{ fontSize:10, fontWeight:800, color:"#64748B", letterSpacing:"0.08em" }}>APPLY STATUS</div>
+                    <div style={{ fontSize:13, fontWeight:900, color:"#0F172A", marginTop:6 }}>
+                      {nextTier ? "Ready to apply" : "Top tier reached"}
+                    </div>
                   </div>
                 </div>
+
+                <div style={{ padding:"11px 12px", borderRadius:12, background:"#F8FAFC", border:"1px solid #E2E8F0" }}>
+                  <div style={{ fontSize:10, fontWeight:900, color:"#334155", letterSpacing:"0.12em", marginBottom:8 }}>HOW UPGRADE WORKS</div>
+                  <div style={{ display:"grid", gap:6 }}>
+                    {[
+                      settingsNeedsUnlock
+                        ? `1. Unlock ${t.name} by paying KES ${currentTierDeposit.toLocaleString()}.`
+                        : `1. Apply to move from ${t.name} to ${nextTier ? nextTier.name : "Top Tier"}.`,
+                      settingsNeedsUnlock
+                        ? "2. Once unlocked, earnings and withdrawals activate immediately."
+                        : `2. Pay only the top-up difference: KES ${Math.max(settingsUpgradeAmount, 0).toLocaleString()}.`,
+                      "3. Complete checkout and your tier access updates after confirmation."
+                    ].map((line, idx) => (
+                      <div key={idx} style={{ fontSize:11, color:"#475569", fontWeight:700, lineHeight:1.45 }}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ position:"relative", borderRadius:13, background:"#000", border:"1px solid #171717", overflow:"hidden", display:"grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) 132px", minHeight:isMobile ? 202 : 184 }}>
+                  <div style={{ padding:"13px 14px", display:"flex", flexDirection:"column", gap:8, justifyContent:"center", position:"relative", zIndex:2 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ width:28, height:28, borderRadius:9, background:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        <I n="wallet" s={12} c="#111"/>
+                      </div>
+                      <div style={{ fontSize:12, fontWeight:900, color:"#fff" }}>Secure Tier Checkout</div>
+                    </div>
+                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.78)", lineHeight:1.5 }}>
+                      {settingsNeedsUnlock
+                        ? "This payment unlocks your active tier so you can start earnings and withdrawals."
+                        : (nextTier
+                          ? "Use this apply action to pay the difference and move to the next tier."
+                          : "No extra payment required. You already have full tier access.")}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={startSettingsUpgradeCheckout}
+                      disabled={!settingsCanUpgradePay || settingsUpgradeBusy || depositCheckBusy}
+                      style={{
+                        marginTop:3,
+                        padding:"10px 12px",
+                        borderRadius:9,
+                        border:"1px solid rgba(187,247,208,0.72)",
+                        background: (!settingsCanUpgradePay || depositCheckBusy)
+                          ? "linear-gradient(135deg,#6B7280 0%, #4B5563 100%)"
+                          : "linear-gradient(135deg,#22c55e 0%, #16a34a 55%, #15803d 100%)",
+                        color:"#ECFDF5",
+                        fontSize:12,
+                        fontWeight:900,
+                        cursor: (!settingsCanUpgradePay || settingsUpgradeBusy || depositCheckBusy) ? "not-allowed" : "pointer",
+                        fontFamily:"Geist,sans-serif",
+                        boxShadow: (!settingsCanUpgradePay || depositCheckBusy) ? "none" : "0 8px 18px rgba(22,163,74,0.26)"
+                      }}>
+                      {settingsUpgradeBusy
+                        ? "Opening Checkout..."
+                        : (!settingsCanUpgradePay
+                          ? (nextTier ? "No Payment Needed" : "Top Tier Reached")
+                          : (settingsNeedsUnlock
+                            ? `Apply & Unlock - KES ${settingsUpgradeAmount.toLocaleString()}`
+                            : `Apply For ${nextTier?.name || "Upgrade"} - KES ${settingsUpgradeAmount.toLocaleString()}`))}
+                    </button>
+                    {settingsUpgradeDone && (
+                      <div style={{ fontSize:10, fontWeight:800, color:"#BBF7D0" }}>Application sent. Complete checkout to confirm your tier update.</div>
+                    )}
+                    {settingsUpgradeError && (
+                      <div style={{ fontSize:10, fontWeight:800, color:"#FECACA" }}>{settingsUpgradeError}</div>
+                    )}
+                  </div>
+                  <div style={{ background:"#000", overflow:"hidden", minHeight:isMobile ? 112 : "100%" }}>
+                    <img
+                      src={LANDING_STICKER_BOTTOM_IMAGE.primary}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      onError={(e) => setFallbackSrc(e, LANDING_STICKER_BOTTOM_IMAGE)}
+                      style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center right", pointerEvents:"none", userSelect:"none" }}
+                    />
+                  </div>
+                </div>
+
                 <button
                   onClick={() => (onSignOut ? onSignOut() : go("landing"))}
                   style={{
@@ -3160,7 +3700,7 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
   const showTracking = !compact;
 
   return (
-    <div className={frame ? "ep-frame-dark" : undefined} style={{ background:"#fff", borderRadius:16, border:"1px solid #111", boxShadow:`0 10px 24px rgba(0,0,0,0.08)`, overflow:"hidden" }}>
+    <div className={`${frame ? "ep-frame-dark " : ""}ep-referral-mini`} style={{ background:"#fff", borderRadius:16, border:"1px solid #111", boxShadow:`0 10px 24px rgba(0,0,0,0.08)`, overflow:"hidden" }}>
       {/* Header stripe */}
       <div style={{ background:`linear-gradient(135deg, #0D1B36 0%, ${t.acc}DD 100%)`, padding:"18px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -3172,7 +3712,7 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
             <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", marginTop:2 }}>Earn 10% of every deposit your friends make</div>
           </div>
         </div>
-        <div style={{ display:"flex", gap:20 }}>
+        <div className="ep-referral-mini-header-stats" style={{ display:"flex", gap:20 }}>
           {[[`${refList.length}`,"Referrals"],[`KES ${earned.toLocaleString()}`,"Total Earned"],["10%","Your Bonus"]].map(([v,l],i) => (
             <div key={i} style={{ textAlign:"right" }}>
               <div style={{ fontSize:16, fontWeight:900, color:"#fff", letterSpacing:"-0.03em" }}>{v}</div>
@@ -3193,7 +3733,7 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
           <a href={link} style={{ fontSize:12, fontWeight:800, color:"#111", textDecoration:"none", border:"1px solid #E2E8F0", borderRadius:10, padding:"8px 10px", background:"#F8FAFC", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {link}
           </a>
-          <div style={{ display:"flex", gap:8 }}>
+          <div className="ep-referral-mini-actions" style={{ display:"flex", gap:8 }}>
             <button onClick={copy} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", background: copied?"#ECFDF5":"#111", color: copied?"#059669":"#fff", border:"none", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", transition:"all .2s", whiteSpace:"nowrap" }}>
               <I n={copied?"check":"copy"} s={12} c={copied?"#059669":"#fff"}/> {copied?"Copied!":"Copy"}
             </button>
@@ -3245,10 +3785,82 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
     }
 
 /* "" OVERVIEW "" */
-function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden, mediaEager }) {
+function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden, mediaEager, dashboardSummary }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const todayIdx = (new Date().getDay() + 6) % 7;
   const dailyEarn = useMemo(() => getTierDailyTotal(t), [t]);
+  const activeDisplayCurrency = normalizeDisplayCurrency(getActiveDisplayCurrency());
+  const formatOverviewMoney = useCallback((amountKes) => {
+    const useUsd = activeDisplayCurrency === DISPLAY_CURRENCIES.USD;
+    const formatted = formatMoney(amountKes, {
+      currency: activeDisplayCurrency,
+      minFractionDigits: useUsd ? 2 : 0,
+      maxFractionDigits: useUsd ? 2 : 0
+    });
+    return useUsd ? formatted : formatted.replace(/^KES\s+/i, "KSH ");
+  }, [activeDisplayCurrency]);
+  const summary = dashboardSummary && typeof dashboardSummary === "object" ? dashboardSummary : {};
+  const summaryDepositsCount = Number(summary.total_deposits_count);
+  const summaryWithdrawalsCount = Number(summary.total_withdrawals_count);
+  const summaryPendingWithdrawalsCount = Number(summary.pending_withdrawals_count);
+  const summaryTransactionsCount = Number(summary.total_transactions_count);
+  const summaryVideoEarnings = Number(summary.video_earnings_total);
+  const summaryReferralEarnings = Number(summary.referral_earnings_total);
+  const summaryReferralCount = Number(summary.referral_count);
+  const summaryActiveReferralCount = Number(summary.active_referral_count);
+  const summaryTierUpgradeCount = Number(summary.tier_upgrade_count);
+  const summaryProgressPct = Number(summary.progress_percent);
+
+  const depositsLabel = Number.isFinite(summaryDepositsCount) ? `${summaryDepositsCount} total` : "-";
+  const withdrawalsLabel = Number.isFinite(summaryWithdrawalsCount)
+    ? `${summaryWithdrawalsCount} total${Number.isFinite(summaryPendingWithdrawalsCount) && summaryPendingWithdrawalsCount > 0 ? ` (${summaryPendingWithdrawalsCount} pending)` : ""}`
+    : "-";
+  const transactionsLabel = Number.isFinite(summaryTransactionsCount)
+    ? `${summaryTransactionsCount} records`
+    : (Array.isArray(activityData) ? `${activityData.length} records` : "-");
+  const videoEarningsLabel = `KES ${Math.max(0, Number.isFinite(summaryVideoEarnings) ? summaryVideoEarnings : 0).toLocaleString()}`;
+  const referralEarningsLabel = `KES ${Math.max(0, Number.isFinite(summaryReferralEarnings) ? summaryReferralEarnings : 0).toLocaleString()}`;
+  const referralsLabel = Number.isFinite(summaryReferralCount)
+    ? `${summaryReferralCount} total${Number.isFinite(summaryActiveReferralCount) ? ` (${summaryActiveReferralCount} active)` : ""}`
+    : `${Array.isArray(referralData) ? referralData.length : 0} total`;
+  const upgradesLabel = Number.isFinite(summaryTierUpgradeCount) ? `${summaryTierUpgradeCount}` : "0";
+  const progressSummaryLabel = `${Number.isFinite(summaryProgressPct) ? Math.max(0, Math.round(summaryProgressPct)) : Math.max(0, Math.round(pct))}%`;
+
+  const parseKesAmountFromText = useCallback((...parts) => {
+    const text = parts
+      .map((p) => String(p || ""))
+      .join(" ")
+      .trim();
+    if (!text) return NaN;
+    const match = text.match(/([+-]?)\s*(?:KES|KSH)\s*([0-9][0-9,]*(?:\.[0-9]+)?)/i);
+    if (!match) return NaN;
+    const raw = Number(String(match[2]).replace(/,/g, ""));
+    if (!Number.isFinite(raw)) return NaN;
+    return match[1] === "-" ? -raw : raw;
+  }, []);
+
+  const resolveTxDirection = useCallback((tx) => {
+    const raw = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value);
+    if (Number.isFinite(raw) && raw < 0) return -1;
+    const type = String(tx?.type || tx?.category || tx?.kind || "").toLowerCase();
+    const text = `${String(tx?.text || tx?.title || "")} ${String(tx?.sub || "")}`.toLowerCase();
+    const icon = String(tx?.ic || "").toLowerCase();
+    if (type.includes("withdraw") || text.includes("withdraw") || text.includes("payout") || icon === "up") return -1;
+    if (type.includes("deposit") || text.includes("deposit") || icon === "wallet") return 1;
+    if (type.includes("earn") || type.includes("referral") || type.includes("ref_bonus") || type.includes("bonus") || text.includes("earn") || text.includes("referral") || text.includes("bonus") || icon === "play" || icon === "activity" || icon === "gift" || icon === "users") return 1;
+    return Number.isFinite(raw) && raw > 0 ? 1 : 0;
+  }, []);
+
+  const readTxAmountKes = useCallback((tx, opts = {}) => {
+    const { absolute = false } = opts || {};
+    const raw = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value ?? tx?.bonus ?? tx?.bonus_amount ?? tx?.earnings);
+    let amount = Number.isFinite(raw) ? raw : parseKesAmountFromText(tx?.sub, tx?.text, tx?.title, tx?.note);
+    if (!Number.isFinite(amount)) return NaN;
+    const direction = resolveTxDirection(tx);
+    if (direction < 0) amount = -Math.abs(amount);
+    else if (direction > 0) amount = Math.abs(amount);
+    return absolute ? Math.abs(amount) : amount;
+  }, [parseKesAmountFromText, resolveTxDirection]);
 
   const isEarningTx = useCallback((tx) => {
     const type = String(tx?.type || tx?.category || tx?.kind || "").toLowerCase();
@@ -3271,6 +3883,85 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     return type.includes("referral") || type.includes("ref_bonus") || type.includes("ref bonus") || text.includes("referral") || text.includes("signup") || text.includes("bonus") || ic === "gift" || ic === "users";
   }, []);
 
+  const txColorFor = useCallback((tx) => {
+    const provided = String(tx?.c || tx?.color || "").trim();
+    if (provided) return provided;
+    const type = String(tx?.type || tx?.category || tx?.kind || "").toLowerCase();
+    const text = `${String(tx?.text || tx?.title || "")} ${String(tx?.sub || "")}`.toLowerCase();
+    if (type.includes("withdraw") || text.includes("withdraw")) return "#E8820C";
+    if (type.includes("referral") || text.includes("referral")) return "#0066FF";
+    if (type.includes("video") || type.includes("bonus") || text.includes("video") || text.includes("bonus")) return "#059669";
+    return t.acc;
+  }, [t.acc]);
+
+  const txIconFor = useCallback((tx) => {
+    const provided = String(tx?.ic || "").trim();
+    if (provided) return provided;
+    const type = String(tx?.type || tx?.category || tx?.kind || "").toLowerCase();
+    const text = `${String(tx?.text || tx?.title || "")} ${String(tx?.sub || "")}`.toLowerCase();
+    if (type.includes("withdraw") || text.includes("withdraw")) return "up";
+    if (type.includes("referral") || text.includes("referral")) return "gift";
+    if (type.includes("video") || type.includes("bonus") || text.includes("video") || text.includes("bonus")) return "play";
+    return "wallet";
+  }, []);
+
+  const txTimeFor = useCallback((tx) => {
+    if (tx?.time) return String(tx.time);
+    const rawDate = tx?.created_at || tx?.date || tx?.timestamp;
+    if (!rawDate) return "-";
+    const dt = new Date(rawDate);
+    if (Number.isNaN(dt.getTime())) return String(rawDate);
+    return dt.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+  }, []);
+
+  const activity = useMemo(() => {
+    const baseRows = Array.isArray(activityData) ? [...activityData] : [];
+    const hasReferralTx = baseRows.some((tx) => isReferralTx(tx));
+    if (!hasReferralTx && Array.isArray(referralData) && referralData.length) {
+      referralData.forEach((r, i) => {
+        const bonusRaw = Number(r?.bonus ?? r?.ref_bonus ?? r?.bonus_amount ?? r?.amount ?? r?.earnings ?? 0);
+        if (!Number.isFinite(bonusRaw) || bonusRaw <= 0) return;
+        const status = String(r?.status || "").toLowerCase();
+        if (status && (status.includes("pending") || status.includes("failed") || status.includes("inactive"))) return;
+        const refName = String(r?.name || r?.full_name || r?.user || `Referral ${i + 1}`).trim();
+        const firstName = refName.split(" ").filter(Boolean)[0] || refName;
+        baseRows.push({
+          type: "referral_bonus",
+          ic: "gift",
+          text: `Referral bonus from ${firstName}`,
+          sub: `KES ${Math.round(bonusRaw).toLocaleString()} credited`,
+          amount: Math.round(bonusRaw),
+          created_at: r?.created_at || r?.date || null,
+          time: r?.date || ""
+        });
+      });
+    }
+    if (!baseRows.length) return [];
+    const rows = baseRows.map((tx, i) => {
+      const amount = readTxAmountKes(tx);
+      const rawDate = tx?.created_at || tx?.date || tx?.timestamp || "";
+      const dt = rawDate ? new Date(rawDate) : null;
+      const ts = dt && !Number.isNaN(dt.getTime()) ? dt.getTime() : null;
+      return {
+        ...tx,
+        key: String(tx?.id || tx?.transaction_id || tx?.tx_id || `${tx?.time || tx?.text || "tx"}_${i}`),
+        ic: txIconFor(tx),
+        c: txColorFor(tx),
+        text: tx?.text || tx?.title || (tx?.type ? `${tx.type} activity` : "Transaction"),
+        sub: tx?.sub || tx?.method || tx?.note || "Processed",
+        time: txTimeFor(tx),
+        amt: Number.isFinite(amount) ? amount : null,
+        _ts: ts
+      };
+    });
+    return rows.sort((a, b) => {
+      if (Number.isFinite(a._ts) && Number.isFinite(b._ts)) return b._ts - a._ts;
+      if (Number.isFinite(a._ts)) return -1;
+      if (Number.isFinite(b._ts)) return 1;
+      return 0;
+    });
+  }, [activityData, referralData, isReferralTx, readTxAmountKes, txColorFor, txIconFor, txTimeFor]);
+
   const referralBonusTotal = useMemo(() => {
     if (!Array.isArray(referralData)) return 0;
     return referralData.reduce((sum, r) => {
@@ -3283,29 +3974,35 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   }, [referralData]);
 
   const activityHasReferralAmount = useMemo(() => {
-    if (!Array.isArray(activityData)) return false;
-    return activityData.some((tx) => {
+    if (!Array.isArray(activity) || activity.length === 0) return false;
+    return activity.some((tx) => {
       if (!isReferralTx(tx)) return false;
-      const amt = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value ?? 0);
+      const amt = readTxAmountKes(tx, { absolute: true });
       return Number.isFinite(amt) && amt > 0;
     });
-  }, [activityData, isReferralTx]);
+  }, [activity, isReferralTx, readTxAmountKes]);
 
   const activityEarnTotal = useMemo(() => {
-    if (!Array.isArray(activityData)) return 0;
-    return activityData.reduce((sum, tx) => {
+    if (!Array.isArray(activity) || activity.length === 0) return 0;
+    return activity.reduce((sum, tx) => {
       if (!isEarningTx(tx)) return sum;
-      const amt = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value ?? 0);
+      const amt = readTxAmountKes(tx, { absolute: true });
       return Number.isFinite(amt) && amt > 0 ? sum + amt : sum;
     }, 0);
-  }, [activityData, isEarningTx]);
+  }, [activity, isEarningTx, readTxAmountKes]);
 
   const actualEarnTotal = useMemo(() => {
     const refAdd = activityHasReferralAmount ? 0 : referralBonusTotal;
     return activityEarnTotal + refAdd;
   }, [activityEarnTotal, referralBonusTotal, activityHasReferralAmount]);
 
-  const remainingEarn = useMemo(() => Math.max(goal - actualEarnTotal, 0), [goal, actualEarnTotal]);
+  const incomeTotal = useMemo(() => {
+    if (actualEarnTotal > 0) return actualEarnTotal;
+    const liveEarn = Number(earn);
+    return Number.isFinite(liveEarn) && liveEarn > 0 ? liveEarn : 0;
+  }, [actualEarnTotal, earn]);
+
+  const remainingEarn = useMemo(() => Math.max(goal - incomeTotal, 0), [goal, incomeTotal]);
 
   const weekData = useMemo(() => {
     const start = new Date();
@@ -3317,11 +4014,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     end.setDate(start.getDate() + 7);
 
     const buckets = days.map(d => ({ d, v: 0 }));
-    if (!Array.isArray(activityData)) return buckets;
+    if (!Array.isArray(activity) || activity.length === 0) return buckets;
 
-    activityData.forEach((tx) => {
+    activity.forEach((tx) => {
       if (!isEarningTx(tx)) return;
-      const amt = Number(tx?.amt ?? tx?.amount ?? tx?.amount_kes ?? tx?.value ?? 0);
+      const amt = readTxAmountKes(tx, { absolute: true });
       if (!Number.isFinite(amt) || amt <= 0) return;
       const rawDate = tx?.created_at || tx?.date || tx?.timestamp;
       if (!rawDate) return;
@@ -3333,13 +4030,13 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     });
 
     return buckets;
-  }, [activityData, isEarningTx]);
+  }, [activity, isEarningTx, readTxAmountKes]);
 
   const maxV = useMemo(() => Math.max(...weekData.map(x=>x.v), 0), [weekData]);
   const daysLeft = useMemo(() => {
     if (dailyEarn <= 0) return 0;
-    return Math.max(0, Math.ceil((goal - actualEarnTotal) / dailyEarn));
-  }, [goal, actualEarnTotal, dailyEarn]);
+    return Math.max(0, Math.ceil((goal - incomeTotal) / dailyEarn));
+  }, [goal, incomeTotal, dailyEarn]);
   const canW = ["Tuesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const curMonth = new Date().getMonth();
@@ -3353,28 +4050,28 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     [isMobile]
   );
 
-  const defaultActivity = useMemo(() => ([
-    { ic:"play",  text:"Watched 2 videos", sub:"KES 100 credited", time:"2h ago",  c:"#059669" },
-    { ic:"gift",  text:"Referral joined",  sub:"John M. signed up  +KES 500", time:"5h ago",  c:t.acc },
-    { ic:"up",    text:"Withdrawal sent",  sub:"KES 1,200 to M-Pesa", time:"1d ago",  c:"#E8820C" },
-    { ic:"activity", text:"Bonus credited", sub:"14 videos  KES 280 earned", time:"1d ago",  c:"#7C3AED" },
-    { ic:"users", text:"New referral",     sub:"Amina K. deposited", time:"3d ago",  c:"#0066FF" },
-  ]), [t.acc]);
-
   const defaultReferrals = useMemo(() => ([
     { name:"John M.", init:"JM", status:"Active" },
     { name:"Amina K.", init:"AK", status:"Active" },
     { name:"Peter O.", init:"PO", status:"Pending" },
     { name:"Grace W.", init:"GW", status:"Active" },
   ]), []);
-  const activity = useMemo(
-    () => (Array.isArray(activityData) ? activityData : defaultActivity),
-    [activityData, defaultActivity]
-  );
   const referrals = useMemo(
     () => (Array.isArray(referralData) ? referralData : defaultReferrals),
     [referralData, defaultReferrals]
   );
+  const txAmountLabel = useCallback((tx) => {
+    const amt = Number(tx?.amt);
+    if (!Number.isFinite(amt) || amt === 0) return "KES 0";
+    return `${amt < 0 ? "-" : "+"}KES ${Math.abs(amt).toLocaleString()}`;
+  }, []);
+  const txAmountColor = useCallback((tx) => {
+    const amt = Number(tx?.amt);
+    if (!Number.isFinite(amt) || amt === 0) return tx?.c || "#334155";
+    if (amt < 0) return "#DC2626";
+    if (isReferralTx(tx)) return "#0066FF";
+    return "#059669";
+  }, [isReferralTx]);
 
   const [openSections, setOpenSections] = useState({
     income: true,
@@ -3407,8 +4104,8 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const [actionsOpen, setActionsOpen] = useState(false);
   const nextTier = TIERS[t.id]; // next in list (t.id is 1-based)
   const canUpgrade = !!nextTier;
-  const hasTierGlare = t.name === "Regular" || t.name === "Standard" || t.name === "Deluxe";
-  const tierGlareTone = t.name === "Deluxe" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
+  const hasTierGlare = t.name === "Regular" || t.name === "Standard" || t.name === "Executive";
+  const tierGlareTone = t.name === "Executive" ? "rgba(255,228,140,0.85)" : "rgba(255,255,255,0.85)";
   const upgradeBtnActive = {
     background:"linear-gradient(180deg,#FDE047 0%, #F59E0B 45%, #F97316 100%)",
     border:"2px solid #111",
@@ -3465,8 +4162,8 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </span>
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>Weekly Target<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {goal.toLocaleString()}</span></div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>{formatOverviewMoney(t.deposit)}</span></div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>Weekly Target<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>{formatOverviewMoney(goal)}</span></div>
           </div>
         </div>
       </div>
@@ -3588,7 +4285,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               <div>
                 <div style={{ fontSize:11, color:"#AAA", fontWeight:700, letterSpacing:"0.06em", marginBottom:4 }}>INCOME</div>
                 <div style={{ fontSize:22, fontWeight:900, color:"#111", letterSpacing:"-0.04em", lineHeight:1 }}>
-                  <AnimNum target={actualEarnTotal} prefix="KES "/>
+                  <AnimNum target={incomeTotal} prefix="KES "/>
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:6 }}>
                   <div style={{ width:18, height:18, borderRadius:5, background:`${t.acc}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -3641,7 +4338,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
                     <div style={{ fontSize:10, color:"#AAA", marginTop:2 }}>{a.sub}</div>
                   </div>
                   <div style={{ textAlign:"right", flexShrink:0 }}>
-                    <div style={{ fontSize:12, fontWeight:800, color:a.c }}>+KES {(Number.isFinite(a.amt) ? a.amt : Math.round(dailyEarn * (0.15 + i * 0.08))).toLocaleString()}</div>
+                    <div style={{ fontSize:12, fontWeight:800, color:txAmountColor(a) }}>{txAmountLabel(a)}</div>
                     <div style={{ fontSize:9, color:"#CCC", marginTop:2 }}>{a.time}</div>
                   </div>
                 </div>
@@ -3699,9 +4396,14 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             <div className="ep-grid-2" style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
               {[
                 ["Tier", `${t.name} (#${t.id}/5)`, t.acc],
-                ["Required Videos", `${t.videos}/day`, "#111"],
-                ["Bonus Rewards", `${t.bonus}/day`, "#111"],
-                ["Daily Earnings", `KES ${dailyEarn.toLocaleString()}`, t.acc],
+                ["Progress", progressSummaryLabel, "#111"],
+                ["Deposits", depositsLabel, "#111"],
+                ["Withdrawals", withdrawalsLabel, "#111"],
+                ["Transactions", transactionsLabel, "#111"],
+                ["Video Earnings", videoEarningsLabel, t.acc],
+                ["Referral Earnings", referralEarningsLabel, "#0066FF"],
+                ["Referrals", referralsLabel, "#059669"],
+                ["Tier Upgrades", upgradesLabel, "#E8820C"],
               ].map(([l,v,c],i)=>(
                 <div key={i} style={{ padding:"12px 12px", background:"#FAFAFA", borderRadius:12, border:"1px solid #F0F0F0" }}>
                   <div style={{ fontSize:9, color:"#BBB", fontWeight:700, letterSpacing:"0.06em", marginBottom:6 }}>{l.toUpperCase()}</div>
@@ -3889,7 +4591,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               <div>
                 <div style={{ fontSize:11, color:"#AAA", fontWeight:700, letterSpacing:"0.06em", marginBottom:4 }}>INCOME</div>
                 <div style={{ fontSize:26, fontWeight:900, color:"#111", letterSpacing:"-0.04em", lineHeight:1 }}>
-                  <AnimNum target={actualEarnTotal} prefix="KES "/>
+                  <AnimNum target={incomeTotal} prefix="KES "/>
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:6 }}>
                   <div style={{ width:18, height:18, borderRadius:5, background:`${t.acc}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -3924,7 +4626,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </div>
 
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, paddingTop:14, borderTop:"1px solid #F5F5F5", marginTop:4 }}>
-              {[[`KES ${actualEarnTotal.toLocaleString()}`, "Total earned", t.acc],[`KES ${remainingEarn.toLocaleString()}`, "Remaining", "#888"],[`${daysLeft} days`, "To weekly target", "#111"]].map(([v,l,c],i)=>( 
+              {[[`KES ${incomeTotal.toLocaleString()}`, "Total earned", t.acc],[`KES ${remainingEarn.toLocaleString()}`, "Remaining", "#888"],[`${daysLeft} days`, "To weekly target", "#111"]].map(([v,l,c],i)=>( 
                 <div key={i}>
                   <div style={{ fontSize:14, fontWeight:900, color:c, letterSpacing:"-0.03em" }}>{v}</div>
                   <div style={{ fontSize:11, color:"#BBB", marginTop:2 }}>{l}</div>
@@ -3963,7 +4665,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
                       <div style={{ fontSize:11, color:"#AAA", marginTop:2 }}>{a.sub}</div>
                     </div>
                     <div style={{ textAlign:"right", flexShrink:0 }}>
-                      <div style={{ fontSize:13, fontWeight:800, color:a.c }}>+KES {(Number.isFinite(a.amt) ? a.amt : Math.round(dailyEarn * (0.15 + i * 0.08))).toLocaleString()}</div>
+                      <div style={{ fontSize:13, fontWeight:800, color:txAmountColor(a) }}>{txAmountLabel(a)}</div>
                       <div style={{ fontSize:10, color:"#CCC", marginTop:2 }}>{a.time}</div>
                     </div>
                   </div>
@@ -3994,8 +4696,8 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6, position:"relative", zIndex:1 }}>KES {earn.toLocaleString()}</div>
               <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", letterSpacing:"0.08em", marginBottom:14, position:"relative", zIndex:1 }}>**** **** {t.deposit.toString().slice(0,3)} {t.id.toString().padStart(4,"0")}</div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", position:"relative", zIndex:1 }}>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit locked<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {t.deposit.toLocaleString()}</span></div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>Weekly Target<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>KES {goal.toLocaleString()}</span></div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>{formatOverviewMoney(t.deposit)}</span></div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", textAlign:"right" }}>Weekly Target<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>{formatOverviewMoney(goal)}</span></div>
               </div>
             </div>
 
@@ -4094,13 +4796,14 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           <div className="ep-grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
             {[
               ["Tier", `${t.name} (#${t.id}/5)`, t.acc],
-              ["Required Videos", `${t.videos}/day`, "#111"],
-              ["Bonus Rewards", `${t.bonus}/day`, "#111"],
-              ["Referrals", "3 active", "#059669"],
-              ["Daily Earnings", `KES ${dailyEarn.toLocaleString()}`, t.acc],
-              ["Weekly Target", `KES ${goal.toLocaleString()}`, "#111"],
-              ["Days to Target", `~${daysLeft} days`, "#E8820C"],
-              ["Withdraw Days", "Tue - Fri", "#059669"],
+              ["Progress", progressSummaryLabel, "#111"],
+              ["Deposits", depositsLabel, "#111"],
+              ["Withdrawals", withdrawalsLabel, "#111"],
+              ["Transactions", transactionsLabel, "#111"],
+              ["Video Earnings", videoEarningsLabel, t.acc],
+              ["Referral Earnings", referralEarningsLabel, "#0066FF"],
+              ["Referrals", referralsLabel, "#059669"],
+              ["Tier Upgrades", upgradesLabel, "#E8820C"],
             ].map(([l,v,c],i)=>(
               <div key={i} style={{ padding:"14px 16px", background:"#FAFAFA", borderRadius:12, border:"1px solid #F0F0F0" }}>
                 <div style={{ fontSize:10, color:"#BBB", fontWeight:700, letterSpacing:"0.06em", marginBottom:6 }}>{l.toUpperCase()}</div>
@@ -4130,16 +4833,23 @@ const YT_VIDEOS = [
   { id:"a01QQZyl-_I", title:"Withdraw Smart: When & How to Cash Out", channel:"Cash Flow Kenya", views:"318K", dur:"6:44", thumb:"https://img.youtube.com/vi/a01QQZyl-_I/mqdefault.jpg" },
   { id:"pRpeEdMmmQ0", title:"5 Mistakes New Earners Make Online", channel:"Digital Hustle", views:"995K", dur:"10:02", thumb:"https://img.youtube.com/vi/pRpeEdMmmQ0/mqdefault.jpg" },
   { id:"Zi_XLOBDo_Y", title:"Airtel Money vs M-Pesa for Payouts", channel:"Mobile Finance", views:"567K", dur:"8:18", thumb:"https://img.youtube.com/vi/Zi_XLOBDo_Y/mqdefault.jpg" },
-  { id:"09R8_2nJtjg", title:"Executive Pro Tier: Is It Worth It?", channel:"EdisonPay Official", views:"184K", dur:"9:05", thumb:"https://img.youtube.com/vi/09R8_2nJtjg/mqdefault.jpg" },
+  { id:"09R8_2nJtjg", title:"Diamond Tier: Is It Worth It?", channel:"EdisonPay Official", views:"184K", dur:"9:05", thumb:"https://img.youtube.com/vi/09R8_2nJtjg/mqdefault.jpg" },
   { id:"y6120QOlsfU", title:"Maximize Your Daily Video Earnings Strategy", channel:"Earn Daily Africa", views:"452K", dur:"7:33", thumb:"https://img.youtube.com/vi/y6120QOlsfU/mqdefault.jpg" },
 ];
 
 /* "" VIDEOS CONTENT "" */
-function VideosContent({ t, onEarning, authUser }) {
+function VideosContent({ t, onEarning, authUser, depositRequired = false, onRequireDeposit }) {
   const MANUAL_COUNT = Math.max(1, Number(t?.videos) || 0);
   const MANUAL_SECONDS = 45;
   const BONUS_COUNT = Math.max(0, Number(t?.bonus) || 0);
   const bonusUnit = getTierBonusUnit(t);
+  const bonusModeLabel = BONUS_COUNT === 0 ? "No bonus tier" : (t?.bonusType === "auto" ? "Auto Bonus" : "Claim Bonus");
+  const bonusPotentialAmount = BONUS_COUNT * bonusUnit;
+  const bonusPotentialLabel = formatMoney(bonusPotentialAmount);
+  const videoDepositNeeded = Number(t?.deposit) || 0;
+  const videoDepositLockMsg = `Deposit KES ${videoDepositNeeded.toLocaleString()} first to unlock videos.`;
+  const depositBonusAmount = Math.round((Number(t?.deposit) || 0) * 0.1);
+  const depositBonusLabel = formatMoney(depositBonusAmount);
   const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0,10));
   const initialActivatedOn = (() => {
     try { return localStorage?.getItem("ep-bonus-activated-on") || ""; } catch (e) { return ""; }
@@ -4174,6 +4884,7 @@ function VideosContent({ t, onEarning, authUser }) {
   const isStandardOrAbove = Number(t?.id || 0) >= 2;
 
   const recordView = async (videoId, isRequired) => {
+    if (depositRequired) return;
     if (!supabase || !authUser?.id) return;
     try {
       await supabase.from("video_views").insert({
@@ -4293,6 +5004,11 @@ function VideosContent({ t, onEarning, authUser }) {
 
   const startWatch = (idx) => {
     setErrMsg("");
+    if (depositRequired) {
+      setErrMsg(videoDepositLockMsg);
+      onRequireDeposit?.();
+      return;
+    }
     // Video 0 always available. Video 1 only available after video 0 watched.
     if (idx === 1 && watched < 1) {
       setErrMsg("Watch Video 1 first to unlock Video 2.");
@@ -4408,7 +5124,7 @@ function VideosContent({ t, onEarning, authUser }) {
 
       {/* "" Tab switcher "" */}
       <div className="ep-videos-tab-switch" style={{ display:simpleVideosUI?"none":"flex",gap:2,background:"rgba(15,23,42,0.7)",borderRadius:10,padding:3,width:"100%",justifyContent:"center",flexWrap:"wrap",border:"1px solid rgba(132,204,22,0.25)" }}>
-        {[["manual",`Required (${MANUAL_COUNT})`],["bonus",`Bonus Reward (${BONUS_COUNT})`]].map(([id,lbl])=>(
+        {[["manual",`Required (${MANUAL_COUNT})`],["bonus","Bonus"]].map(([id,lbl])=>(
           <button key={id} onClick={()=>setActiveTab(id)}
             style={{ padding:"8px 18px",borderRadius:8,border:"none",background:activeTab===id?"linear-gradient(135deg,#bef264 0%, #84cc16 55%, #16a34a 100%)":"transparent",color:activeTab===id?"#052e16":"rgba(226,232,240,0.7)",fontWeight:activeTab===id?800:600,fontSize:13,cursor:"pointer",fontFamily:"Sora, Geist, sans-serif",boxShadow:activeTab===id?"0 6px 14px rgba(132,204,22,0.35)":"none",transition:"all .15s" }}>
             {lbl}
@@ -4593,63 +5309,104 @@ function VideosContent({ t, onEarning, authUser }) {
       )}
 
       {simpleVideosUI && (
-        <div className="ep-casino-pop ep-videos-panel" style={{ ...casinoPanel, borderRadius:14, padding:"18px 18px" }}>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10 }}>
-            <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em",color:"#f8fafc" }}>
-              Bonus Rewards ({BONUS_COUNT})
-            </h3>
-            <div style={{ fontSize:12,fontWeight:800,color:"#4ade80" }}>
-              KES {(bonusDone*bonusUnit).toLocaleString()} earned
-            </div>
-          </div>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 12px",background:watched>=MANUAL_COUNT?"rgba(16,185,129,0.2)":"rgba(249,115,22,0.18)",border:`1px solid ${watched>=MANUAL_COUNT?"rgba(74,222,128,0.45)":"rgba(251,146,60,0.5)"}`,borderRadius:10,marginBottom:12,flexWrap:"wrap" }}>
-            <div style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>
-              <I n={watched>=MANUAL_COUNT?"check":"lock"} s={13} c={watched>=MANUAL_COUNT?"#86efac":"#fdba74"} />
-              {watched>=MANUAL_COUNT ? "Bonus unlocked - required videos complete" : "Complete required videos to unlock bonus"}
-            </div>
-            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-              <div style={{ fontSize:11,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>{watched}/{MANUAL_COUNT}</div>
-              <div style={{ width:84,height:6,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
-                <div style={{ height:"100%",width:`${manualUnlockPct}%`,background:watched>=MANUAL_COUNT?"#22c55e":"#f59e0b",borderRadius:99,transition:"width .3s ease" }} />
+        <div className="ep-casino-pop ep-videos-panel ep-bonus-loop-border" style={{ ...casinoPanel, borderRadius:14, padding:0, background:"transparent", border:"none", boxShadow:"0 18px 30px rgba(2,6,23,0.5)" }}>
+          <div className="ep-bonus-loop-inner" style={{ padding:"18px 18px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10 }}>
+              <div>
+                <h3 style={{ fontWeight:900,fontSize:16,letterSpacing:"-0.03em",color:"#f8fafc" }}>
+                  Bonus
+                </h3>
+                <div style={{ marginTop:3, fontSize:11, fontWeight:800, color:"#93c5fd", letterSpacing:"0.07em" }}>
+                  {bonusModeLabel.toUpperCase()} - {BONUS_COUNT} {BONUS_COUNT === 1 ? "SESSION" : "SESSIONS"}
+                </div>
+              </div>
+              <div style={{ fontSize:12,fontWeight:900,color:"#4ade80" }}>
+                {formatMoney(bonusDone * bonusUnit)} earned
               </div>
             </div>
-          </div>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:10,flexWrap:"wrap" }}>
-            <div style={{ fontSize:12, color:"rgba(226,232,240,0.82)" }}>
-              {BONUS_COUNT === 0
-                ? "No bonus rewards on this tier."
-                : bonusActive
-                  ? "Bonus activated for today."
-                  : "Activate once daily after required videos."}
+
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:8,marginBottom:12 }}>
+              <div className="ep-bonus-ad-chip">
+                <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.09em", color:"#93c5fd" }}>BONUS SESSION</div>
+                <div style={{ marginTop:4, fontSize:14, fontWeight:900, color:"#f8fafc" }}>
+                  {bonusPotentialLabel}
+                </div>
+              </div>
+              <div className="ep-bonus-ad-chip">
+                <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.09em", color:"#93c5fd" }}>DEPOSIT BONUS (10%)</div>
+                <div style={{ marginTop:4, fontSize:14, fontWeight:900, color:"#f8fafc" }}>
+                  {depositBonusLabel}
+                </div>
+              </div>
             </div>
-            <button
-              onClick={activateBot}
-              disabled={!canActivateBot || BONUS_COUNT === 0}
-              style={{ padding:"8px 14px",background:canActivateBot && BONUS_COUNT>0?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)",color:canActivateBot && BONUS_COUNT>0?"#052e16":"#94a3b8",border:canActivateBot && BONUS_COUNT>0?"none":"1px solid rgba(148,163,184,0.35)",borderRadius:9,fontSize:12,fontWeight:800,cursor:canActivateBot && BONUS_COUNT>0?"pointer":"not-allowed",fontFamily:"Sora, Geist, sans-serif" }}
-            >
-              {bonusActive ? "Activated Today" : "Claim Bonus"}
-            </button>
-          </div>
-          <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-            <div style={{ flex:1,height:7,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
-              <div style={{ height:"100%",width:`${bonusPct}%`,background:"linear-gradient(90deg,#facc15 0%, #22c55e 100%)",borderRadius:99,transition:"width .2s ease" }} />
+
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 12px",background:watched>=MANUAL_COUNT?"rgba(16,185,129,0.2)":"rgba(249,115,22,0.18)",border:`1px solid ${watched>=MANUAL_COUNT?"rgba(74,222,128,0.45)":"rgba(251,146,60,0.5)"}`,borderRadius:10,marginBottom:12,flexWrap:"wrap" }}>
+              <div style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>
+                <I n={watched>=MANUAL_COUNT?"check":"lock"} s={13} c={watched>=MANUAL_COUNT?"#86efac":"#fdba74"} />
+                {watched>=MANUAL_COUNT ? "Bonus unlocked - required videos complete" : "Complete required videos to unlock bonus"}
+              </div>
+              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                <div style={{ fontSize:11,fontWeight:800,color:watched>=MANUAL_COUNT?"#86efac":"#fdba74" }}>{watched}/{MANUAL_COUNT}</div>
+                <div style={{ width:84,height:6,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
+                  <div style={{ height:"100%",width:`${manualUnlockPct}%`,background:watched>=MANUAL_COUNT?"#22c55e":"#f59e0b",borderRadius:99,transition:"width .3s ease" }} />
+                </div>
+              </div>
             </div>
-            <div style={{ minWidth:40,textAlign:"right",fontSize:12,fontWeight:900,color:"#86efac" }}>{Math.round(bonusPct)}%</div>
+
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:10,flexWrap:"wrap" }}>
+              <div style={{ fontSize:12, color:"rgba(226,232,240,0.92)", fontWeight:700 }}>
+                {BONUS_COUNT === 0
+                  ? "No bonus rewards on this tier."
+                  : bonusActive
+                    ? "Bonus activated for today."
+                    : `Claim to run ${bonusModeLabel.toLowerCase()} and target ${bonusPotentialLabel}.`}
+              </div>
+              <button
+                onClick={activateBot}
+                disabled={!canActivateBot || BONUS_COUNT === 0}
+                className={canActivateBot && BONUS_COUNT > 0 ? "ep-bonus-claim-btn" : ""}
+                style={{ padding:"8px 14px",background:canActivateBot && BONUS_COUNT>0?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)",color:canActivateBot && BONUS_COUNT>0?"#052e16":"#94a3b8",border:canActivateBot && BONUS_COUNT>0?"none":"1px solid rgba(148,163,184,0.35)",borderRadius:9,fontSize:12,fontWeight:900,cursor:canActivateBot && BONUS_COUNT>0?"pointer":"not-allowed",fontFamily:"Sora, Geist, sans-serif" }}
+              >
+                {bonusActive ? "Activated Today" : (canActivateBot && BONUS_COUNT > 0 ? `Claim Bonus ${bonusPotentialLabel}` : "Claim Bonus")}
+              </button>
+            </div>
+
+            <div style={{ marginBottom:10, fontSize:11, color:"#cbd5e1", fontWeight:700 }}>
+              Deposit bonus preview: <span style={{ color:"#4ade80", fontWeight:900 }}>{depositBonusLabel}</span>
+            </div>
+
+            <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+              <div style={{ flex:1,height:7,background:"rgba(148,163,184,0.35)",borderRadius:99,overflow:"hidden" }}>
+                <div style={{ height:"100%",width:`${bonusPct}%`,background:"linear-gradient(90deg,#facc15 0%, #22c55e 100%)",borderRadius:99,transition:"width .2s ease" }} />
+              </div>
+              <div style={{ minWidth:40,textAlign:"right",fontSize:12,fontWeight:900,color:"#86efac" }}>{Math.round(bonusPct)}%</div>
+            </div>
           </div>
         </div>
       )}
 
       {/*  BONUS TAB  */}
       {!simpleVideosUI && activeTab === "bonus" && (
-        <div className="ep-casino-pop ep-videos-panel" style={{ ...casinoPanel, borderRadius:14,padding:"22px 24px" }}>
+        <div className="ep-casino-pop ep-videos-panel ep-bonus-loop-border" style={{ ...casinoPanel, borderRadius:14, padding:0, background:"transparent", border:"none", boxShadow:"0 18px 30px rgba(2,6,23,0.5)" }}>
+          <div className="ep-bonus-loop-inner" style={{ padding:"22px 24px" }}>
           <div className="ep-videos-bonus-head" style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
             <div>
-              <h3 style={{ fontWeight:800,fontSize:16,letterSpacing:"-0.03em", color:"#f8fafc" }}>Bonus Reward - {BONUS_COUNT} {BONUS_COUNT === 1 ? "reward" : "rewards"}</h3>
-              <p style={{ fontSize:13,color:"rgba(203,213,225,0.82)",marginTop:4 }}>Running silently  -  30 sec each  -  KES {bonusUnit} per bonus reward</p>
+              <h3 style={{ fontWeight:900,fontSize:16,letterSpacing:"-0.03em", color:"#f8fafc" }}>Bonus</h3>
+              <p style={{ fontSize:13,color:"rgba(203,213,225,0.82)",marginTop:4 }}>{BONUS_COUNT} session{BONUS_COUNT === 1 ? "" : "s"} - {bonusModeLabel} - {formatMoney(bonusUnit)} per reward</p>
             </div>
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:14,fontWeight:900,color:"#4ade80" }}>KES {(bonusDone*bonusUnit).toLocaleString()} earned</div>
+              <div style={{ fontSize:14,fontWeight:900,color:"#4ade80" }}>{formatMoney(bonusDone*bonusUnit)} earned</div>
               <div style={{ fontSize:11,color:"rgba(186,230,253,0.75)",marginTop:2 }}>{bonusDone}/{BONUS_COUNT} complete  -  {Math.round(bonusPct)}%</div>
+            </div>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:9,marginBottom:14 }}>
+            <div className="ep-bonus-ad-chip">
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.09em", color:"#93c5fd" }}>BONUS SESSION</div>
+              <div style={{ marginTop:4, fontSize:14, fontWeight:900, color:"#f8fafc" }}>{bonusPotentialLabel}</div>
+            </div>
+            <div className="ep-bonus-ad-chip">
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.09em", color:"#93c5fd" }}>DEPOSIT BONUS (10%)</div>
+              <div style={{ marginTop:4, fontSize:14, fontWeight:900, color:"#f8fafc" }}>{depositBonusLabel}</div>
             </div>
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 12px",background:watched>=MANUAL_COUNT?"rgba(16,185,129,0.2)":"rgba(249,115,22,0.18)",border:`1px solid ${watched>=MANUAL_COUNT?"rgba(74,222,128,0.45)":"rgba(251,146,60,0.5)"}`,borderRadius:12,marginBottom:14,flexWrap:"wrap" }}>
@@ -4669,8 +5426,9 @@ function VideosContent({ t, onEarning, authUser }) {
               {bonusActive ? "Bonus claimed today" : watched>=MANUAL_COUNT ? "Ready to activate once today." : `Finish ${MANUAL_COUNT - watched} required video${MANUAL_COUNT - watched === 1 ? "" : "s"} to enable.`}
             </div>
             <button onClick={activateBot} disabled={!canActivateBot}
+              className={canActivateBot ? "ep-bonus-claim-btn" : ""}
               style={{ padding:"8px 14px", background:canActivateBot?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)", color:canActivateBot?"#052e16":"#94a3b8", border:canActivateBot?"none":"1px solid rgba(148,163,184,0.35)", borderRadius:9, fontSize:12, fontWeight:800, cursor:canActivateBot?"pointer":"not-allowed", fontFamily:"Sora, Geist, sans-serif" }}>
-              {bonusActive ? "Activated Today" : canActivateBot ? "Claim Bonus" : "Complete Required Videos"}
+              {bonusActive ? "Activated Today" : canActivateBot ? `Claim Bonus ${bonusPotentialLabel}` : "Complete Required Videos"}
             </button>
           </div>
           <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:24 }}>
@@ -4726,6 +5484,7 @@ function VideosContent({ t, onEarning, authUser }) {
             <I n="shield" s={14} c="#86efac"/>
             Activate once per day to run the bonus. Earnings credit as each video completes.
           </div>
+          </div>
         </div>
       )}
 
@@ -4751,6 +5510,9 @@ function VideosContent({ t, onEarning, authUser }) {
               <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.1em", color:"#bef264" }}>BONUS CLAIMED</div>
               <div style={{ marginTop:4, fontSize:13, lineHeight:1.35, fontWeight:800, color:"#f8fafc" }}>
                 Reward bot is now running your bonus session.
+                <div style={{ marginTop:6, fontSize:11, color:"#86efac", fontWeight:900 }}>
+                  Session target: {bonusPotentialLabel} | Deposit bonus: {depositBonusLabel}
+                </div>
               </div>
               <button
                 type="button"
@@ -4961,12 +5723,12 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile, authUserId }) {
   const fallbackRefs = [
     { name:"John Mwangi",    email:"j.mwangi@gmail.com",  tier:"Standard",     date:"Mar 8, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 3.2) },
     { name:"Amina Kariuki",  email:"amina.k@yahoo.com",   tier:"Regular",      date:"Mar 5, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 1.8) },
-    { name:"Peter Otieno",   email:"p.otieno@gmail.com",  tier:"Deluxe",       date:"Mar 1, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 5.1) },
+    { name:"Peter Otieno",   email:"p.otieno@gmail.com",  tier:"Executive",       date:"Mar 1, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 5.1) },
     { name:"Grace Wanjiku",  email:"grace.w@hotmail.com", tier:"Standard",     date:"Feb 22, 2025", bonus:t.deposit*.1,  status:"Pending", earnings: 0 },
-    { name:"Samuel Njoroge", email:"sam.n@gmail.com",     tier:"Executive",    date:"Feb 18, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 2.4) },
+    { name:"Samuel Njoroge", email:"sam.n@gmail.com",     tier:"Executive Pro",    date:"Feb 18, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 2.4) },
     { name:"Faith Achieng",  email:"faith.a@gmail.com",   tier:"Regular",      date:"Feb 10, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 0.9) },
     { name:"Kevin Odhiambo", email:"kevin.o@gmail.com",   tier:"Standard",     date:"Jan 30, 2025", bonus:t.deposit*.1,  status:"Inactive",earnings: 0 },
-    { name:"Beatrice Njoki",  email:"b.njoki@yahoo.com",  tier:"Deluxe",       date:"Jan 25, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 4.7) },
+    { name:"Beatrice Njoki",  email:"b.njoki@yahoo.com",  tier:"Executive",       date:"Jan 25, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 4.7) },
   ];
   const normalizeRefRow = (r, i) => {
     const name = r.name || r.full_name || r.user || `User ${i+1}`;
@@ -5072,38 +5834,42 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile, authUserId }) {
         </div>
 
         {!isMobile && (
-          <div style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"8px 12px",marginBottom:4 }}>
-            {["PERSON","LEVEL","TIER","JOINED","YOUR BONUS","THEIR EARNINGS","STATUS"].map(h => (
-              <span key={h} style={{ fontSize:9,color:"#BBB",fontWeight:800,letterSpacing:"0.1em" }}>{h}</span>
-            ))}
+          <div className="ep-referrals-table-scroll">
+            <div className="ep-referrals-table-inner">
+              <div style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"8px 12px",marginBottom:4 }}>
+                {["PERSON","LEVEL","TIER","JOINED","YOUR BONUS","THEIR EARNINGS","STATUS"].map(h => (
+                  <span key={h} style={{ fontSize:9,color:"#BBB",fontWeight:800,letterSpacing:"0.1em" }}>{h}</span>
+                ))}
+              </div>
+
+              {filtered.map((r, i) => {
+                const sc = statusColor(r.status);
+                const tc = tierColor(r.tier);
+                return (
+                  <div key={i} style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"12px",borderRadius:10,background:i%2===0?"#FAFAFA":"#fff",alignItems:"center",marginBottom:2,transition:"background .15s" }}
+                    onMouseEnter={e=>e.currentTarget.style.background="#F0F4FF"} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#FAFAFA":"#fff"}>
+                    <div style={{ display:"flex",alignItems:"center",gap:10, minWidth:0 }}>
+                      <div style={{ width:34,height:34,borderRadius:"50%",background:t.lgt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:t.acc,flexShrink:0 }}>{r.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:13,fontWeight:700,color:"#111", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.name}</div>
+                        <div style={{ fontSize:10,color:"#BBB", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.email}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize:11,fontWeight:800,color:"#111" }}>L{r.level || 1}</span>
+                    <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                      <div style={{ width:7,height:7,borderRadius:2,background:tc }}/>
+                      <span style={{ fontSize:12,fontWeight:600,color:"#555" }}>{r.tier}</span>
+                    </div>
+                    <span style={{ fontSize:11,color:"#888" }}>{shortDate(r.date)}</span>
+                    <span style={{ fontSize:13,fontWeight:800,color:"#059669" }}>+KES {r.bonus.toLocaleString()}</span>
+                    <span style={{ fontSize:12,fontWeight:700,color: r.earnings > 0 ? "#111" : "#CCC" }}>{r.earnings > 0 ? `KES ${r.earnings.toLocaleString()}` : "-"}</span>
+                    <span style={{ fontSize:10,fontWeight:800,padding:"3px 9px",borderRadius:50,background:sc.bg,color:sc.col,display:"inline-block",width:"fit-content" }}>{r.status}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
-
-        {!isMobile && filtered.map((r, i) => {
-          const sc = statusColor(r.status);
-          const tc = tierColor(r.tier);
-          return (
-            <div key={i} style={{ display:"grid",gridTemplateColumns:"2fr 0.7fr 1.1fr 1fr 1fr 1fr 1fr",gap:8,padding:"12px",borderRadius:10,background:i%2===0?"#FAFAFA":"#fff",alignItems:"center",marginBottom:2,transition:"background .15s" }}
-              onMouseEnter={e=>e.currentTarget.style.background="#F0F4FF"} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#FAFAFA":"#fff"}>
-              <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                <div style={{ width:34,height:34,borderRadius:"50%",background:t.lgt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:t.acc,flexShrink:0 }}>{r.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
-                <div>
-                  <div style={{ fontSize:13,fontWeight:700,color:"#111" }}>{r.name}</div>
-                  <div style={{ fontSize:10,color:"#BBB" }}>{r.email}</div>
-                </div>
-              </div>
-              <span style={{ fontSize:11,fontWeight:800,color:"#111" }}>L{r.level || 1}</span>
-              <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                <div style={{ width:7,height:7,borderRadius:2,background:tc }}/>
-                <span style={{ fontSize:12,fontWeight:600,color:"#555" }}>{r.tier}</span>
-              </div>
-              <span style={{ fontSize:11,color:"#888" }}>{shortDate(r.date)}</span>
-              <span style={{ fontSize:13,fontWeight:800,color:"#059669" }}>+KES {r.bonus.toLocaleString()}</span>
-              <span style={{ fontSize:12,fontWeight:700,color: r.earnings > 0 ? "#111" : "#CCC" }}>{r.earnings > 0 ? `KES ${r.earnings.toLocaleString()}` : "-"}</span>
-              <span style={{ fontSize:10,fontWeight:800,padding:"3px 9px",borderRadius:50,background:sc.bg,color:sc.col,display:"inline-block",width:"fit-content" }}>{r.status}</span>
-            </div>
-          );
-        })}
 
         {isMobile && (
           <div style={{ display:"grid", gap:10 }}>
@@ -5152,7 +5918,8 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile, authUserId }) {
     }
 
 /* "" WITHDRAW "" */
-function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx, onBalanceUpdate, hasDeposit }) {
+function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit, onFocusDone, onNewTx, onBalanceUpdate, hasDeposit, historyData, referralHistory }) {
+  const MIN_WITHDRAWAL_KES = 1000;
   const [wdAmt,setWdAmt]=useState(""), [method,setMethod]=useState("M-Pesa"), [done,setDone]=useState(false);
   const [wdError, setWdError] = useState("");
   const [showWithdrawStatusBanner, setShowWithdrawStatusBanner] = useState(true);
@@ -5167,8 +5934,10 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
   const can=["Tuesday","Friday"].includes(today);
   const canWithdrawNow = can && hasDeposit !== false;
+  const currency = getActiveDisplayCurrency();
   const wdAmtNum = Number(wdAmt);
-  const hasValidWdAmt = Number.isFinite(wdAmtNum) && wdAmtNum > 0;
+  const wdAmtKes = toKesAmount(wdAmtNum, currency);
+  const hasValidWdAmt = Number.isFinite(wdAmtKes) && wdAmtKes >= MIN_WITHDRAWAL_KES;
   const canSubmitWithdrawal = canWithdrawNow && hasValidWdAmt;
   const nextTier = TIERS[t.id];
   const currentTierDeposit = Number(t?.deposit) || 0;
@@ -5279,7 +6048,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   };
   const requestWithdrawal = async (amount, methodLabel, payoutRef) => {
     const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return false;
+    if (!Number.isFinite(amt) || amt < MIN_WITHDRAWAL_KES) return false;
     
     if (Number.isFinite(balance) && amt > balance) return false;
     if (supabase && authUser?.id) {
@@ -5341,14 +6110,14 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       return;
     }
     if (!hasValidWdAmt) {
-      setWdError("Enter a valid withdrawal amount.");
+      setWdError(`Minimum withdrawal is KES ${MIN_WITHDRAWAL_KES.toLocaleString()}.`);
       return;
     }
-    if (Number.isFinite(balance) && wdAmtNum > balance) {
+    if (Number.isFinite(balance) && wdAmtKes > balance) {
       setWdError("Withdrawal amount cannot exceed available balance.");
       return;
     }
-    const ok = await requestWithdrawal(wdAmt, method, profileRow?.phone || "");
+    const ok = await requestWithdrawal(wdAmtKes, method, profileRow?.phone || "");
     if (!ok) {
       setWdError("Unable to submit withdrawal right now. Please try again.");
       return;
@@ -5356,6 +6125,78 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
     setDone(true);
     setTimeout(()=>setDone(false), 3000);
   };
+
+  const parseKesAmount = (rawText = "") => {
+    const text = String(rawText || "");
+    const m = text.match(/(?:KES|KSH)\s*([0-9,]+(?:\.[0-9]+)?)/i);
+    if (!m) return null;
+    const n = Number(String(m[1]).replace(/,/g, ""));
+    return Number.isFinite(n) ? n : null;
+  };
+  const resolveTxType = (tx) => {
+    const text = String(tx?.text || tx?.sub || "").toLowerCase();
+    const icon = String(tx?.ic || "").toLowerCase();
+    if (text.includes("withdraw") || icon === "up") return "Withdrawal";
+    if (text.includes("referral") || icon === "gift") return "Referral";
+    if (text.includes("deposit")) return "Deposit";
+    if (text.includes("bonus") || text.includes("video") || text.includes("earning") || icon === "play" || icon === "activity") return "Earning";
+    return "Transaction";
+  };
+  const resolveTxStatus = (tx) => {
+    const full = `${String(tx?.text || "")} ${String(tx?.sub || "")}`.toLowerCase();
+    if (full.includes("failed") || full.includes("rejected")) return "Failed";
+    if (full.includes("pending") || full.includes("requested")) return "Pending";
+    return "Completed";
+  };
+  const fallbackHistoryRows = [
+    { date:"Mar 7", type:"Withdrawal", amount:1200, status:"Completed" },
+    { date:"Feb 28", type:"Withdrawal", amount:3400, status:"Completed" },
+    { date:"Feb 21", type:"Withdrawal", amount:800, status:"Completed" },
+    { date:"Feb 14", type:"Withdrawal", amount:2100, status:"Pending" },
+    { date:"Feb 7", type:"Withdrawal", amount:950, status:"Completed" },
+  ];
+  const mergedHistoryRows = (() => {
+    const txRows = Array.isArray(historyData)
+      ? historyData.map((tx, i) => {
+        const amtRaw = Number(tx?.amt);
+        const amt = Number.isFinite(amtRaw) ? Math.abs(amtRaw) : parseKesAmount(tx?.sub || tx?.text || "");
+        return {
+          key: `${tx?.time || "t"}_${tx?.text || "tx"}_${i}`,
+          date: String(tx?.time || "-"),
+          type: resolveTxType(tx),
+          amount: Number.isFinite(amt) ? amt : 0,
+          status: resolveTxStatus(tx)
+        };
+      })
+      : [];
+    const referralRows = Array.isArray(referralHistory)
+      ? referralHistory.map((r, i) => {
+          const bonusRaw = Number(r?.bonus);
+          const bonus = Number.isFinite(bonusRaw) ? Math.abs(bonusRaw) : 0;
+          const statusRaw = String(r?.status || "").toLowerCase();
+          const status = statusRaw.includes("pending")
+            ? "Pending"
+            : statusRaw.includes("inactive") || statusRaw.includes("failed")
+              ? "Failed"
+              : "Completed";
+          return {
+            key: `ref_${r?.name || "user"}_${r?.date || "d"}_${i}`,
+            date: String(r?.date || "-"),
+            type: "Referral",
+            amount: bonus,
+            status
+          };
+        })
+      : [];
+    const merged = [...txRows, ...referralRows];
+    return merged.length ? merged : fallbackHistoryRows.map((row, i) => ({ ...row, key:`fallback_${i}` }));
+  })();
+  const historyRows = mergedHistoryRows;
+  const historyStatusStyle = (status) => status === "Completed"
+    ? { bg:"#ECFDF5", col:"#059669" }
+    : status === "Pending"
+      ? { bg:"#FEF3C7", col:"#D97706" }
+      : { bg:"#FEF2F2", col:"#DC2626" };
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
@@ -5367,6 +6208,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontWeight:800,fontSize:14,color:can?"#065F46":"#991B1B" }}>{can?"Withdrawals processing today":"Withdrawals queued today"}</div>
             <div style={{ fontSize:12,color:"#888",marginTop:2 }}>Processing: Tue & Fri - 08:30 - 17:30</div>
+            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>Minimum withdrawal: KES {MIN_WITHDRAWAL_KES.toLocaleString()}.</div>
             {MANUAL_WITHDRAWALS && (
               <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>All withdrawals are manually approved by admin.</div>
             )}
@@ -5416,36 +6258,32 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>Choose a verified payment icon and tap to pay instantly.</div>
           </div>
           <div style={{ padding:"6px 10px",background:"#ECFDF5",border:"1px solid #A7F3D0",borderRadius:999,fontSize:11,color:"#047857",fontWeight:800,display:"flex",alignItems:"center",gap:6 }}>
-            <I n="check" s={11} c="#059669" /> Verified channels
+            <I n="lock" s={11} c="#047857" /> Trusted Secure Checkout
           </div>
         </div>
 
-        <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px 14px 12px",background:"#FFFFFF" }}>
-          <div style={{ padding:"12px 12px",borderRadius:12,background:"linear-gradient(135deg,#0F172A 0%, #1F2937 55%, #111827 100%)",color:"#fff",position:"relative",overflow:"hidden" }}>
-            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
-              <div>
-                <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Secure Payment Gateway</div>
-                <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Secure checkout, instant wallet credit.</div>
-              </div>
-              <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",fontSize:10,fontWeight:800,letterSpacing:"0.08em" }}>
-                VERIFIED
-              </div>
+        <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px",background:"#FFFFFF",display:"flex",flexDirection:"column",gap:10 }}>
+          <div style={{ borderRadius:12,background:"#0F172A",color:"#fff",padding:"12px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
+            <div>
+              <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Secure Payment Gateway</div>
+              <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Secure checkout, instant wallet credit.</div>
             </div>
-            <div style={{ position:"absolute",right:-30,top:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,0.08)" }}/>
-            <div style={{ position:"absolute",right:30,bottom:-40,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.06)" }}/>
+            <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.14)",border:"1px solid rgba(255,255,255,0.24)",fontSize:10,fontWeight:800,letterSpacing:"0.08em",whiteSpace:"nowrap" }}>
+              VERIFIED
+            </div>
           </div>
-          <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:12 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8 }}>
             {[
               { label:"SSL Secured", icon:"lock" },
               { label:"Instant Confirmation", icon:"bolt" },
               { label:"Buyer Protection", icon:"shield" }
             ].map((b) => (
-              <div key={b.label} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:999,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:10,fontWeight:700,color:"#0F172A" }}>
+              <div key={b.label} style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 10px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:11,fontWeight:700,color:"#0F172A" }}>
                 <I n={b.icon} s={12} c="#0F172A" /> {b.label}
               </div>
             ))}
           </div>
-          <div style={{ marginTop:10,padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
+          <div style={{ padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
             <div>
               <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
               <div style={{ fontSize:15,fontWeight:900,color:"#0F172A" }}>
@@ -5547,9 +6385,21 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             </div>
           </div>
           <div style={{ marginBottom:14,borderRadius:12,background:"#000",border:"1px solid #171717",color:"#fff",display:"grid",gridTemplateColumns:"minmax(0,1fr) clamp(96px,20vw,150px)",alignItems:"stretch",overflow:"hidden",minHeight:96 }}>
-            <div style={{ padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0 }}>
-              <div style={{ fontSize:10,opacity:0.6,letterSpacing:"0.18em",textTransform:"uppercase",fontWeight:700 }}>Available Earnings</div>
-              <div style={{ fontSize:28,fontWeight:900,letterSpacing:"-0.03em",marginTop:4 }}>KES {earn.toLocaleString()}</div>
+            <div style={{ padding:"12px 14px",display:"flex",alignItems:"center",gap:10,minWidth:0 }}>
+              <div style={{ width:44,height:44,borderRadius:10,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.26)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.12)" }}>
+                <img
+                  src={PAYMENT_ICON_SOURCES["M-Pesa"] || PAYMENT_ICON_SOURCES["Google Pay"]}
+                  alt="M-Pesa"
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  style={{ width:30, height:18, objectFit:"contain" }}
+                />
+              </div>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:10,opacity:0.6,letterSpacing:"0.18em",textTransform:"uppercase",fontWeight:700 }}>Available Earnings</div>
+                <div style={{ fontSize:28,fontWeight:900,letterSpacing:"-0.03em",marginTop:4 }}>KES {earn.toLocaleString()}</div>
+              </div>
             </div>
             <div style={{ background:"#000",overflow:"hidden" }}>
               <img
@@ -5561,8 +6411,24 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
               />
             </div>
           </div>
-          <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6,letterSpacing:"0.08em" }}>Amount</label>
-          <input type="number" value={wdAmt} onChange={e=>setWdAmt(e.target.value)} placeholder="Enter amount..." style={{ width:"100%",padding:"11px 12px",background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:14,color:"#0F172A",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:12 }}/>
+          <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6,letterSpacing:"0.08em" }}>
+            Amount ({currency === DISPLAY_CURRENCIES.USD ? "USD" : "KSH"})
+          </label>
+          <input
+            type="number"
+            value={wdAmt}
+            onChange={e=>setWdAmt(e.target.value)}
+            placeholder={`Enter amount in ${currency === DISPLAY_CURRENCIES.USD ? "USD" : "KSH"}...`}
+            style={{ width:"100%",padding:"11px 12px",background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:14,color:"#0F172A",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:12 }}
+          />
+          {currency === DISPLAY_CURRENCIES.USD && (
+            <div data-currency-static="1" style={{ fontSize:10, color:"#64748B", marginTop:-6, marginBottom:8 }}>
+              {`Converted using 1 USD = ${FX_KES_PER_USD} KSH.`}
+            </div>
+          )}
+          <div style={{ fontSize:11, color:"#64748B", marginTop:-6, marginBottom:10 }}>
+            Minimum withdrawal amount is KES {MIN_WITHDRAWAL_KES.toLocaleString()}.
+          </div>
           <label style={{ display:"block",fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8,letterSpacing:"0.08em" }}>Method</label>
           <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(132px,1fr))",gap:8,marginBottom:16 }}>
             {DEPOSIT_METHODS.map((m) => {
@@ -5618,18 +6484,19 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         <div style={{ background:"#FFFFFF",borderRadius:16,padding:"20px 22px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.06)" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
             <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A" }}>History</div>
-            <div style={{ fontSize:11,color:"#94A3B8",fontWeight:700 }}>Last 5 payouts</div>
+            <div style={{ fontSize:11,color:"#94A3B8",fontWeight:700 }}>{historyRows.length} transactions</div>
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8 }}>
-            {["Date","Amount","Status"].map(h=>(
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1.1fr 1fr 1fr",gap:8,marginBottom:8 }}>
+            {["Date","Type","Amount","Status"].map(h=>(
               <span key={h} style={{ fontSize:9,color:"#94A3B8",fontWeight:800,letterSpacing:"0.14em" }}>{h.toUpperCase()}</span>
             ))}
           </div>
-          {[{d:"Mar 7",a:1200,s:"Paid"},{d:"Feb 28",a:3400,s:"Paid"},{d:"Feb 21",a:800,s:"Paid"},{d:"Feb 14",a:2100,s:"Pending"},{d:"Feb 7",a:950,s:"Paid"}].map((w,i)=>(
-            <div key={i} style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,padding:"10px 0",borderTop:"1px solid #F1F5F9",alignItems:"center" }}>
-              <span style={{ fontSize:12,color:"#64748B" }}>{w.d}</span>
-              <span style={{ fontSize:13,fontWeight:800,letterSpacing:"-0.02em",color:"#0F172A" }}>KES {w.a.toLocaleString()}</span>
-              <span style={{ fontSize:10,fontWeight:800,padding:"4px 10px",borderRadius:999,background:w.s==="Paid"?"#ECFDF5":"#FEF3C7",color:w.s==="Paid"?"#059669":"#D97706",display:"inline-block",width:"fit-content" }}>{w.s}</span>
+          {historyRows.map((w)=>(
+            <div key={w.key} style={{ display:"grid",gridTemplateColumns:"1fr 1.1fr 1fr 1fr",gap:8,padding:"10px 0",borderTop:"1px solid #F1F5F9",alignItems:"center" }}>
+              <span style={{ fontSize:12,color:"#64748B" }}>{w.date}</span>
+              <span style={{ fontSize:12,color:"#334155",fontWeight:700 }}>{w.type}</span>
+              <span style={{ fontSize:13,fontWeight:800,letterSpacing:"-0.02em",color:"#0F172A" }}>KES {Number(w.amount || 0).toLocaleString()}</span>
+              <span style={{ fontSize:10,fontWeight:800,padding:"4px 10px",borderRadius:999,background:historyStatusStyle(w.status).bg,color:historyStatusStyle(w.status).col,display:"inline-block",width:"fit-content" }}>{w.status}</span>
             </div>
           ))}
         </div>
@@ -5643,29 +6510,29 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
  */
 
 const ADMIN_USERS = [
-  { id:"U001", name:"Alice Mwangi",    email:"alice.m@gmail.com",    tier:"Deluxe",       deposit:20000,  status:"Active",   joined:"Mar 1, 2025",  earn:9400,   phone:"0712 345 678" },
+  { id:"U001", name:"Alice Mwangi",    email:"alice.m@gmail.com",    tier:"Executive",       deposit:20000,  status:"Active",   joined:"Mar 1, 2025",  earn:9400,   phone:"0712 345 678" },
   { id:"U002", name:"Brian Kamau",     email:"brian.k@gmail.com",    tier:"Standard",     deposit:10000,  status:"Active",   joined:"Feb 25, 2025", earn:3200,   phone:"0723 456 789" },
-  { id:"U003", name:"Carol Njoki",     email:"carol.n@yahoo.com",    tier:"Executive",    deposit:50000,  status:"Active",   joined:"Feb 18, 2025", earn:28000,  phone:"0734 567 890" },
+  { id:"U003", name:"Carol Njoki",     email:"carol.n@yahoo.com",    tier:"Executive Pro",    deposit:50000,  status:"Active",   joined:"Feb 18, 2025", earn:28000,  phone:"0734 567 890" },
   { id:"U004", name:"David Otieno",    email:"david.o@gmail.com",    tier:"Regular",      deposit:5000,   status:"Pending",  joined:"Mar 8, 2025",  earn:0,      phone:"0745 678 901" },
-  { id:"U005", name:"Emma Wanjiku",    email:"emma.w@hotmail.com",   tier:"Executive Pro",deposit:100000, status:"Active",   joined:"Jan 30, 2025", earn:71000,  phone:"0756 789 012" },
+  { id:"U005", name:"Emma Wanjiku",    email:"emma.w@hotmail.com",   tier:"Diamond",deposit:100000, status:"Active",   joined:"Jan 30, 2025", earn:71000,  phone:"0756 789 012" },
   { id:"U006", name:"Francis Odhiambo",email:"francis.o@gmail.com",  tier:"Standard",     deposit:10000,  status:"Active",   joined:"Feb 10, 2025", earn:5600,   phone:"0767 890 123" },
-  { id:"U007", name:"Grace Achieng",   email:"grace.a@gmail.com",    tier:"Deluxe",       deposit:20000,  status:"Suspended",joined:"Jan 15, 2025", earn:12000,  phone:"0778 901 234" },
+  { id:"U007", name:"Grace Achieng",   email:"grace.a@gmail.com",    tier:"Executive",       deposit:20000,  status:"Suspended",joined:"Jan 15, 2025", earn:12000,  phone:"0778 901 234" },
   { id:"U008", name:"Henry Muriuki",   email:"henry.m@gmail.com",    tier:"Regular",      deposit:5000,   status:"Active",   joined:"Mar 5, 2025",  earn:1200,   phone:"0789 012 345" },
-  { id:"U009", name:"Irene Chebet",    email:"irene.c@gmail.com",    tier:"Executive",    deposit:50000,  status:"Active",   joined:"Feb 1, 2025",  earn:34000,  phone:"0790 123 456" },
+  { id:"U009", name:"Irene Chebet",    email:"irene.c@gmail.com",    tier:"Executive Pro",    deposit:50000,  status:"Active",   joined:"Feb 1, 2025",  earn:34000,  phone:"0790 123 456" },
   { id:"U010", name:"James Kimani",    email:"james.k@yahoo.com",    tier:"Standard",     deposit:10000,  status:"Pending",  joined:"Mar 9, 2025",  earn:0,      phone:"0701 234 567" },
 ];
 
 const ADMIN_WITHDRAWALS = [
-  { id:"W001", user:"Alice Mwangi",   amount:2400,  method:"M-Pesa",      date:"Mar 8, 2025",  status:"Pending",  phone:"0712 345 678", tier:"Deluxe" },
+  { id:"W001", user:"Alice Mwangi",   amount:2400,  method:"M-Pesa",      date:"Mar 8, 2025",  status:"Pending",  phone:"0712 345 678", tier:"Executive" },
   { id:"W002", user:"Brian Kamau",    amount:1200,  method:"M-Pesa",      date:"Mar 7, 2025",  status:"Pending",  phone:"0723 456 789", tier:"Standard" },
-  { id:"W003", user:"Emma Wanjiku",   amount:8000,  method:"Visa",        date:"Mar 7, 2025",  status:"Approved", phone:"0756 789 012", tier:"Exec Pro" },
-  { id:"W004", user:"Carol Njoki",    amount:5500,  method:"M-Pesa",      date:"Mar 6, 2025",  status:"Approved", phone:"0734 567 890", tier:"Executive" },
+  { id:"W003", user:"Emma Wanjiku",   amount:8000,  method:"Visa",        date:"Mar 7, 2025",  status:"Approved", phone:"0756 789 012", tier:"Diamond" },
+  { id:"W004", user:"Carol Njoki",    amount:5500,  method:"M-Pesa",      date:"Mar 6, 2025",  status:"Approved", phone:"0734 567 890", tier:"Executive Pro" },
   { id:"W005", user:"Francis Odhiambo",amount:800, method:"Airtel Money", date:"Mar 5, 2025",  status:"Paid",     phone:"0767 890 123", tier:"Standard" },
-  { id:"W006", user:"Irene Chebet",   amount:4200,  method:"M-Pesa",      date:"Mar 4, 2025",  status:"Paid",     phone:"0790 123 456", tier:"Executive" },
+  { id:"W006", user:"Irene Chebet",   amount:4200,  method:"M-Pesa",      date:"Mar 4, 2025",  status:"Paid",     phone:"0790 123 456", tier:"Executive Pro" },
   { id:"W007", user:"Henry Muriuki",  amount:600,   method:"M-Pesa",      date:"Mar 3, 2025",  status:"Rejected", phone:"0789 012 345", tier:"Regular" },
-  { id:"W008", user:"Alice Mwangi",   amount:1800,  method:"M-Pesa",      date:"Mar 1, 2025",  status:"Paid",     phone:"0712 345 678", tier:"Deluxe" },
+  { id:"W008", user:"Alice Mwangi",   amount:1800,  method:"M-Pesa",      date:"Mar 1, 2025",  status:"Paid",     phone:"0712 345 678", tier:"Executive" },
   { id:"W009", user:"David Otieno",   amount:500,   method:"M-Pesa",      date:"Feb 28, 2025", status:"Rejected", phone:"0745 678 901", tier:"Regular" },
-  { id:"W010", user:"Emma Wanjiku",   amount:12000, method:"Crypto",      date:"Feb 25, 2025", status:"Paid",     phone:"0756 789 012", tier:"Exec Pro" },
+  { id:"W010", user:"Emma Wanjiku",   amount:12000, method:"Crypto",      date:"Feb 25, 2025", status:"Paid",     phone:"0756 789 012", tier:"Diamond" },
 ];
 
 const ADMIN_TXS = [
@@ -5687,7 +6554,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   const [sideOpen, setSideOpen] = useState(true);
   const normalizeAdminTab = useCallback((tabId) => {
     const tab = String(tabId || "").toLowerCase();
-    return ["overview","users","transactions","withdrawals","settings"].includes(tab) ? tab : "overview";
+    return ["overview","users","transactions","withdrawals","risk","settings"].includes(tab) ? tab : "overview";
   }, []);
   const [tabState, setTabState] = useState(() => normalizeAdminTab(externalTab || "overview"));
   const isAdminTabControlled = typeof externalTab === "string";
@@ -5709,6 +6576,18 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   const [withdrawals, setWithdrawals] = useState(ADMIN_WITHDRAWALS);
   const [txs, setTxs] = useState(ADMIN_TXS);
   const [txFilter, setTxFilter] = useState("all");
+  const [tierUpgradeEvents, setTierUpgradeEvents] = useState([]);
+  const [riskFlags, setRiskFlags] = useState([]);
+  const [riskFilter, setRiskFilter] = useState("open");
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [auditFilter, setAuditFilter] = useState("all");
+  const [deposits, setDeposits] = useState([]);
+  const [referrals, setReferrals] = useState([]);
+  const [tierDistributionRows, setTierDistributionRows] = useState([]);
+  const [adminSummary, setAdminSummary] = useState(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState("");
+  const [syncError, setSyncError] = useState("");
   const [wdDays, setWdDays] = useState({ tue:true, wed:false, fri:true });
   const [videoPrice, setVideoPrice] = useState(50);
   const [maintenance, setMaintenance] = useState(false);
@@ -5716,6 +6595,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   const [notifOpen, setNotifOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const adminHeadingFont = "Sora, Geist, sans-serif";
+  const ADMIN_LIST_LIMIT = 500;
   const ADMIN = {
     bg:"#F7F7F7",
     panel:"#FFFFFF",
@@ -5742,16 +6622,32 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
     const dt = new Date(d);
     return Number.isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
   };
+  const fmtDateTime = (d) => {
+    if (!d) return "-";
+    const dt = new Date(d);
+    return Number.isNaN(dt.getTime())
+      ? String(d)
+      : dt.toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+  };
   const num = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
   };
   const normalizeUser = (u, i) => {
+    const meta = (u?.profile_data && typeof u.profile_data === "object") ? u.profile_data : {};
     const wallet = Array.isArray(u.wallets) ? u.wallets[0] : u.wallets;
     const tierVal = u.tier ?? u.plan;
     const tierLabel = Number.isFinite(Number(tierVal)) ? (TIERS[Number(tierVal)-1]?.name || tierVal) : (tierVal || "Regular");
     const statusRaw = String(u.status || "active");
     const status = statusRaw.charAt(0).toUpperCase() + statusRaw.slice(1).toLowerCase();
+    const tierSelectedRaw = String(meta.tier_selected ?? "").toLowerCase();
+    const tierSelected = meta.tier_selected === true || ["1", "true", "yes", "on"].includes(tierSelectedRaw);
     const balance = num(wallet?.balance ?? u.balance);
     return {
       id: u.id || u.user_id || `U${String(i+1).padStart(3,"0")}`,
@@ -5763,6 +6659,10 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
       joined: fmtDate(u.joined || u.signup_at || u.created_at || u.date),
       earn: num(u.earn || u.earnings || u.total_earnings || balance),
       phone: u.phone || u.msisdn || "?",
+      category: meta.category || u.category || "Client",
+      referredBy: meta.referred_by || "",
+      referralCode: u.referral_code || meta.ref_code || "",
+      tierSelected,
     };
   };
   const normalizeWithdrawal = (w, i) => {
@@ -5785,12 +6685,55 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   };
   const normalizeTx = (t, i) => ({
     id: t.id || t.tx_id || `T${String(i+1).padStart(3,"0")}`,
+    userId: t.user_id || null,
     user: t.user || t.name || t.user_name || "Unknown",
     type: t.type || t.category || "Earning",
     amount: num(t.amount || t.amount_kes),
     method: t.method || t.channel || "-",
     date: fmtDate(t.date || t.created_at),
     status: t.status || "Paid",
+  });
+  const normalizeTierUpgradeEvent = (event, i) => {
+    const linkedUser = Array.isArray(event?.users) ? event.users[0] : event?.users;
+    const fromTierVal = Number(event?.from_tier);
+    const toTierVal = Number(event?.to_tier);
+    const fromTierLabel = Number.isFinite(fromTierVal) ? (TIERS[fromTierVal - 1]?.name || `Tier ${fromTierVal}`) : "-";
+    const toTierLabel = Number.isFinite(toTierVal) ? (TIERS[toTierVal - 1]?.name || `Tier ${toTierVal}`) : "-";
+    return {
+      id: event?.event_id || `TU${String(i + 1).padStart(3, "0")}`,
+      user: linkedUser?.full_name || linkedUser?.email || String(event?.user_id || "").slice(0, 8) || "Unknown",
+      fromTier: fromTierLabel,
+      toTier: toTierLabel,
+      source: String(event?.source || "system").replace(/_/g, " "),
+      providerRef: event?.provider_reference || "-",
+      when: fmtDateTime(event?.created_at)
+    };
+  };
+  const normalizeAuditEvent = (event, i) => ({
+    id: event?.event_id || `PA${String(i + 1).padStart(3, "0")}`,
+    source: String(event?.source || "unknown"),
+    decision: String(event?.decision || "unknown"),
+    reference: event?.merchant_reference || event?.tracking_id || "-",
+    expectedAmount: num(event?.expected_amount),
+    providerAmount: num(event?.provider_amount),
+    when: fmtDateTime(event?.created_at)
+  });
+  const normalizeDeposit = (d, i) => ({
+    id: d?.deposit_id || `D${String(i + 1).padStart(3, "0")}`,
+    userId: d?.user_id || null,
+    status: String(d?.status || "pending").toLowerCase(),
+    amount: num(d?.amount),
+    tier: Number(d?.tier_at_deposit) || null,
+    providerRef: d?.provider_reference || "-",
+    when: fmtDateTime(d?.created_at)
+  });
+  const normalizeReferral = (r, i) => ({
+    id: r?.ref_id || `R${String(i + 1).padStart(3, "0")}`,
+    referrerId: r?.referrer_id || null,
+    referredUserId: r?.referred_user_id || null,
+    depositId: r?.deposit_id || null,
+    commission: num(r?.commission_amount),
+    when: fmtDateTime(r?.created_at)
   });
 
   useEffect(() => {
@@ -5805,45 +6748,136 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
     return () => window.removeEventListener("resize", fn);
   }, []);
 
-  useEffect(() => {
+  const loadAdminData = useCallback(async () => {
     if (!supabase) return;
-    let ignore = false;
-    (async () => {
-      const [uRes, wRes, tRows] = await Promise.all([
+    setAdminLoading(true);
+    setSyncError("");
+    try {
+      const [uRes, wRes, tRows, flagRows, upgradesRes, auditRows, depRows, refRows, summaryRes, tierDistRes] = await Promise.all([
         supabase
           .from("users")
-          .select("user_id,full_name,email,phone,tier,status,signup_at,wallets(balance)")
-          .order("signup_at", { ascending: false }),
+          .select("user_id,full_name,email,phone,tier,status,signup_at,referral_code,profile_data,wallets(balance)")
+          .order("signup_at", { ascending: false })
+          .limit(ADMIN_LIST_LIMIT),
         supabase
           .from("payout_requests")
           .select("payout_id,user_id,requested_amount,status,scheduled_for,processed_at,users(full_name,email,phone,tier)")
-          .order("scheduled_for", { ascending: false }),
-        fetchTable("transactions", { orderBy: "created_at" }),
+          .order("scheduled_for", { ascending: false })
+          .limit(ADMIN_LIST_LIMIT),
+        fetchTable("transactions", { orderBy: "created_at", limit: ADMIN_LIST_LIMIT }),
+        fetchTable("payment_flags", { orderBy: "created_at", limit: ADMIN_LIST_LIMIT }),
+        supabase
+          .from("tier_upgrade_events")
+          .select("event_id,user_id,from_tier,to_tier,source,provider_reference,created_at,users(full_name,email)")
+          .order("created_at", { ascending: false })
+          .limit(120),
+        fetchTable("payment_audit_events", { orderBy: "created_at", limit: ADMIN_LIST_LIMIT }),
+        fetchTable("deposits", { orderBy: "created_at", limit: ADMIN_LIST_LIMIT }),
+        fetchTable("referrals", { orderBy: "created_at", limit: ADMIN_LIST_LIMIT }),
+        supabase.rpc("get_admin_system_overview"),
+        supabase.rpc("get_admin_tier_distribution"),
       ]);
+      const u = Array.isArray(uRes?.data) ? uRes.data : [];
+      const w = Array.isArray(wRes?.data) ? wRes.data : [];
+      const txRows = Array.isArray(tRows) ? tRows : [];
+      const flags = Array.isArray(flagRows) ? flagRows : [];
+      const upgrades = Array.isArray(upgradesRes?.data) ? upgradesRes.data : [];
+      const audits = Array.isArray(auditRows) ? auditRows : [];
+      const deps = Array.isArray(depRows) ? depRows : [];
+      const refs = Array.isArray(refRows) ? refRows : [];
+      setUsers(u.length ? u.map(normalizeUser) : []);
+      setWithdrawals(w.length ? w.map(normalizeWithdrawal) : []);
+      setTxs(txRows.length ? txRows.map(normalizeTx) : []);
+      setRiskFlags(flags);
+      setTierUpgradeEvents(upgrades.map(normalizeTierUpgradeEvent));
+      setAuditEvents(audits.map(normalizeAuditEvent));
+      setDeposits(deps.map(normalizeDeposit));
+      setReferrals(refs.map(normalizeReferral));
+      const summaryRow = Array.isArray(summaryRes?.data) ? summaryRes.data[0] : summaryRes?.data;
+      setAdminSummary(summaryRow && typeof summaryRow === "object" ? summaryRow : null);
+      const tierRows = Array.isArray(tierDistRes?.data) ? tierDistRes.data : [];
+      setTierDistributionRows(tierRows);
+      setLastSyncAt(new Date().toISOString());
+    } catch (e) {
+      setSyncError("Failed to refresh admin data.");
+    } finally {
+      setAdminLoading(false);
+    }
+  }, [supabase, ADMIN_LIST_LIMIT]);
+
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
       if (ignore) return;
-      const u = uRes?.data || [];
-      const w = wRes?.data || [];
-      if (Array.isArray(u) && u.length) setUsers(u.map(normalizeUser));
-      if (Array.isArray(w) && w.length) setWithdrawals(w.map(normalizeWithdrawal));
-      if (Array.isArray(tRows) && tRows.length) setTxs(tRows.map(normalizeTx));
+      await loadAdminData();
     })();
     return () => { ignore = true; };
-  }, []);
+  }, [loadAdminData]);
+
+  const summaryNum = useCallback((key, fallback = 0) => {
+    const n = Number(adminSummary?.[key]);
+    return Number.isFinite(n) ? n : fallback;
+  }, [adminSummary]);
+
+  const totalUsersCount = summaryNum("total_users", users.length);
+  const activeUsersCount = summaryNum("active_users", users.filter((u) => String(u?.status || "").toLowerCase() === "active").length);
+  const paidOutTotal = summaryNum(
+    "completed_withdrawals_amount",
+    withdrawals
+      .filter((w) => String(w?.status || "").toLowerCase() === "paid")
+      .reduce((sum, w) => sum + num(w?.amount), 0)
+  );
+  const pendingWithdrawalsCount = summaryNum(
+    "pending_withdrawals",
+    withdrawals.filter((w) => String(w?.status || "").toLowerCase() === "pending").length
+  );
+  const pendingDepositsCount = summaryNum(
+    "pending_deposits",
+    deposits.filter((d) => String(d?.status || "").toLowerCase() === "pending").length
+  );
+  const failedDepositsCount = summaryNum(
+    "failed_deposits",
+    deposits.filter((d) => String(d?.status || "").toLowerCase() === "failed").length
+  );
+  const pendingTierActivationCount = summaryNum(
+    "pending_tier_activation",
+    users.filter((u) => u.tierSelected !== true).length
+  );
+  const referralPayoutTotal = summaryNum(
+    "total_referral_commission",
+    referrals.reduce((sum, r) => sum + num(r?.commission), 0)
+  );
+  const openRiskCount = summaryNum(
+    "open_payment_flags",
+    riskFlags.filter((f) => String(f?.status || "").toLowerCase() === "open").length
+  );
+  const tierUpgradeCount = summaryNum("tier_upgrade_events_count", tierUpgradeEvents.length);
+
+  const tierDistribution = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(tierDistributionRows) ? tierDistributionRows : []).forEach((row) => {
+      const tierId = Number(row?.tier);
+      const count = Number(row?.user_count);
+      if (Number.isFinite(tierId) && Number.isFinite(count)) map.set(tierId, count);
+    });
+    const total = totalUsersCount > 0 ? totalUsersCount : users.length;
+    return TIERS.map((tierItem) => {
+      const tierId = Number(tierItem.id);
+      const countFromRpc = map.get(tierId);
+      const fallbackCount = users.filter((u) => String(u?.tier || "").toLowerCase() === String(tierItem.name || "").toLowerCase()).length;
+      const count = Number.isFinite(countFromRpc) ? countFromRpc : fallbackCount;
+      const pct = total > 0 ? Math.round((count / total) * 1000) / 10 : 0;
+      return { n: tierItem.name, c: tierItem.acc, count, pct };
+    });
+  }, [tierDistributionRows, totalUsersCount, users]);
 
   const adminNav = [
     {id:"overview",     label:"Overview",     ic:"grid",     badge:null},
-    {id:"users",        label:"Users",        ic:"users",    badge:"1,247"},
+    {id:"users",        label:"Users",        ic:"users",    badge:totalUsersCount || null},
     {id:"transactions", label:"Transactions", ic:"wallet",   badge:null},
-    {id:"withdrawals",  label:"Withdrawals",  ic:"up",       badge:withdrawals.filter(w=>w.status==="Pending").length},
+    {id:"withdrawals",  label:"Withdrawals",  ic:"up",       badge:pendingWithdrawalsCount || null},
+    {id:"risk",         label:"Fraud Flags",  ic:"shield",   badge:openRiskCount || null},
     {id:"settings",     label:"Settings",     ic:"settings", badge:null},
-  ];
-
-  const tiers = [
-    {n:"Regular",c:ADMIN.blue,count:423,pct:34},
-    {n:"Standard",c:ADMIN.blueAlt,count:287,pct:23},
-    {n:"Deluxe",c:ADMIN.green,count:312,pct:25},
-    {n:"Executive",c:ADMIN.red,count:156,pct:12.5},
-    {n:"Exec Pro",c:ADMIN.redAlt,count:69,pct:5.5}
   ];
 
   const updateWithdrawal = async (id, status) => {
@@ -5863,6 +6897,51 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   const approveWd = (id) => updateWithdrawal(id, "Approved");
   const rejectWd  = (id) => updateWithdrawal(id, "Rejected");
   const payWd     = (id) => updateWithdrawal(id, "Paid");
+  const updateRiskFlagStatus = async (flagId, nextStatus) => {
+    if (!flagId || !nextStatus) return;
+    const normalized = String(nextStatus).toLowerCase();
+    setRiskFlags((rows) =>
+      rows.map((r) =>
+        r?.flag_id === flagId
+          ? {
+              ...r,
+              status: normalized,
+              resolved_at: (normalized === "resolved" || normalized === "ignored")
+                ? new Date().toISOString()
+                : null
+            }
+          : r
+      )
+    );
+    if (!supabase) return;
+    try {
+      const patch = {
+        status: normalized,
+        resolved_at: (normalized === "resolved" || normalized === "ignored")
+          ? new Date().toISOString()
+          : null
+      };
+      await supabase
+        .from("payment_flags")
+        .update(patch)
+        .eq("flag_id", flagId);
+    } catch (e) {
+      /* no-op */
+    }
+  };
+  const updateUserStatus = async (userId, nextStatus) => {
+    if (!userId || !nextStatus) return;
+    const statusDb = String(nextStatus || "").toLowerCase();
+    const statusUi = statusDb.charAt(0).toUpperCase() + statusDb.slice(1);
+    setUsers((rows) => rows.map((u) => (u.id === userId ? { ...u, status: statusUi } : u)));
+    setSelectedUser((prev) => (prev && prev.id === userId ? { ...prev, status: statusUi } : prev));
+    if (!supabase) return;
+    try {
+      await supabase.from("users").update({ status: statusDb }).eq("user_id", userId);
+    } catch (e) {
+      /* no-op */
+    }
+  };
 
   const filteredUsers = users.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase());
@@ -5874,6 +6953,20 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
 
   const filteredWd = wdFilter==="all" ? withdrawals : withdrawals.filter(w=>w.status.toLowerCase()===wdFilter);
   const filteredTx = txFilter==="all" ? txs : txs.filter(t=>t.type.toLowerCase()===txFilter||t.status.toLowerCase()===txFilter);
+  const filteredRiskFlags = riskFilter === "all"
+    ? riskFlags
+    : riskFlags.filter((f) => String(f?.status || "").toLowerCase() === riskFilter);
+  const filteredAuditEvents = auditFilter === "all"
+    ? auditEvents
+    : auditEvents.filter((e) => String(e?.decision || "").toLowerCase() === auditFilter);
+  const selectedUserReferralCount = selectedUser
+    ? referrals.filter((r) => String(r?.referrerId || "") === String(selectedUser.id)).length
+    : 0;
+  const selectedUserReferralEarn = selectedUser
+    ? referrals
+        .filter((r) => String(r?.referrerId || "") === String(selectedUser.id))
+        .reduce((sum, r) => sum + num(r?.commission), 0)
+    : 0;
 
   const S = (label, txt) => ({ fontSize:11, color:ADMIN.muted, fontWeight:600, label, txt });
 
@@ -5884,6 +6977,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
       Approved:[ADMIN.green,"#ECFDF5"],
       Pending:[ADMIN.blue,"#EFF6FF"],
       Suspended:[ADMIN.red,"#FFF0F0"],
+      Banned:[ADMIN.redAlt,"#FFF0F0"],
       Rejected:[ADMIN.red,"#FFF0F0"],
       Earning:[ADMIN.blue,"#EFF6FF"],
       Deposit:[ADMIN.green,"#ECFDF5"],
@@ -6018,25 +7112,54 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
               <h2 style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.04em",color:"#111",fontFamily:adminHeadingFont }}>
                 {adminNav.find(n=>n.id===tab)?.label}
               </h2>
-              <p style={{ fontSize:12,color:ADMIN.muted,marginTop:3 }}>{new Date().toDateString()}  -  EdisonPay Admin</p>
+              <p style={{ fontSize:12,color:ADMIN.muted,marginTop:3 }}>
+                {new Date().toDateString()}  -  EdisonPay Admin
+                {lastSyncAt ? `  |  Synced: ${fmtDateTime(lastSyncAt)}` : ""}
+              </p>
+              {syncError && (
+                <div style={{ marginTop:6, fontSize:11, color:ADMIN.red, fontWeight:800 }}>
+                  {syncError}
+                </div>
+              )}
+              {!syncError && (
+                <div style={{ marginTop:6, fontSize:11, color:ADMIN.muted, fontWeight:700 }}>
+                  Lists show latest {ADMIN_LIST_LIMIT} records per module. Totals come from server-side summary queries.
+                </div>
+              )}
             </div>
-            {tab==="users"&&(
-              <button style={{ padding:"8px 18px",background:"#111",color:"#fff",border:"1.5px solid #111",boxShadow:"0 4px 0 #111",borderRadius:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:6 }}>
-                <I n="user" s={12} c="#fff"/> Add User
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <button
+                onClick={loadAdminData}
+                disabled={adminLoading}
+                style={{ padding:"8px 14px",background:adminLoading?"#374151":"#111",color:"#fff",border:"1.5px solid #111",boxShadow:"0 4px 0 #111",borderRadius:9,fontSize:12,fontWeight:800,cursor:adminLoading?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:6 }}
+              >
+                <I n="activity" s={12} c="#fff"/>
+                {adminLoading ? "Refreshing..." : "Refresh Data"}
               </button>
-            )}
+              {tab==="users"&&(
+                <button style={{ padding:"8px 18px",background:"#111",color:"#fff",border:"1.5px solid #111",boxShadow:"0 4px 0 #111",borderRadius:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:6 }}>
+                  <I n="user" s={12} c="#fff"/> Add User
+                </button>
+              )}
+            </div>
           </div>
 
           {/* "" OVERVIEW TAB "" */}
           {tab==="overview" && (
             <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
               {/* Stat cards */}
-              <div className="ep-admin-stats" style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
+              <div className="ep-admin-stats" style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12 }}>
                 {[
-                  [1247,"Total Users","users",ADMIN.blue,"+12% this month",true],
-                  [342,"Active Today","activity",ADMIN.green,"+24 today",true],
-                  ["KES 8.9M","Total Paid Out","wallet",ADMIN.blueAlt,"Since launch",true],
-                  [withdrawals.filter(w=>w.status==="Pending").length,"Pending Withdrawals","up",ADMIN.red,"Needs attention",false],
+                  [totalUsersCount,"Total Users","users",ADMIN.blue,"Live",true],
+                  [activeUsersCount,"Active Users","activity",ADMIN.green,"Live",true],
+                  [`KES ${paidOutTotal.toLocaleString()}`,"Total Paid Out","wallet",ADMIN.blueAlt,"Completed",true],
+                  [pendingWithdrawalsCount,"Pending Withdrawals","up",ADMIN.red,"Needs attention",false],
+                  [pendingDepositsCount,"Pending Deposits","wallet",ADMIN.blue,"Needs confirmation",false],
+                  [failedDepositsCount,"Failed Deposits","xmark",ADMIN.redAlt,"Review provider logs",false],
+                  [pendingTierActivationCount,"Pending Tier Activation","star",ADMIN.blueAlt,"Awaiting deposit",false],
+                  [`KES ${referralPayoutTotal.toLocaleString()}`,"Referral Payouts","gift",ADMIN.green,"First-deposit only",true],
+                  [openRiskCount,"Open Fraud Flags","shield",ADMIN.redAlt,"Triage needed",false],
+                  [tierUpgradeCount,"Tier Upgrades","star",ADMIN.green,"History tracked",true],
                 ].map(([v,l,ic,c,sub,_],i)=>(
                   <div key={i} className="ep-hover-lift" style={{ ...CARD }}>
                     <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
@@ -6077,9 +7200,9 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                 <div style={CARD}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18 }}>
                     <h3 style={{ fontSize:14,fontWeight:900,color:"#111" }}>Tier Distribution</h3>
-                    <span style={{ fontSize:13,fontWeight:900,color:"#111" }}>1,247 users</span>
+                    <span style={{ fontSize:13,fontWeight:900,color:"#111" }}>{totalUsersCount.toLocaleString()} users</span>
                   </div>
-                  {tiers.map((tr,i)=>(
+                  {tierDistribution.map((tr,i)=>(
                     <div key={i} style={{ marginBottom:12 }}>
                       <div style={{ display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5 }}>
                         <div style={{ display:"flex",alignItems:"center",gap:7 }}>
@@ -6092,7 +7215,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                         </div>
                       </div>
                       <div style={{ height:6,background:"#E5E7EB",borderRadius:99,overflow:"hidden",border:"1px solid #111" }}>
-                        <div style={{ height:"100%",width:`${tr.pct*2.5}%`,background:tr.c,borderRadius:99,transition:"width 1s ease" }}/>
+                        <div style={{ height:"100%",width:`${Math.max(0, Math.min(100, tr.pct))}%`,background:tr.c,borderRadius:99,transition:"width 1s ease" }}/>
                       </div>
                     </div>
                   ))}
@@ -6121,6 +7244,85 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                   </div>
                 ))}
               </div>
+
+              {/* Pending deposits preview */}
+              <div style={CARD}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
+                  <h3 style={{ fontSize:14,fontWeight:900,color:"#111" }}>Pending Deposits</h3>
+                  <span style={{ fontSize:11,color:ADMIN.muted,fontWeight:800 }}>
+                    {pendingDepositsCount} awaiting confirmation
+                  </span>
+                </div>
+                {deposits.filter((d) => d.status === "pending").length === 0 ? (
+                  <div style={{ padding:"20px",textAlign:"center",color:ADMIN.muted,fontSize:13 }}>No pending deposits.</div>
+                ) : (
+                  deposits
+                    .filter((d) => d.status === "pending")
+                    .slice(0, 5)
+                    .map((d, i) => (
+                      <div key={d.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:i>0?"1px solid #111":"none" }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:13,fontWeight:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>
+                            Ref: {d.providerRef}
+                          </div>
+                          <div style={{ fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>
+                            {d.when}  -  Tier {d.tier || "-"}
+                          </div>
+                        </div>
+                        <div style={{ fontSize:14,fontWeight:900,color:"#111",whiteSpace:"nowrap" }}>KES {d.amount.toLocaleString()}</div>
+                      </div>
+                    ))
+                )}
+              </div>
+
+              {/* Tier upgrade history preview */}
+              <div style={CARD}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
+                  <h3 style={{ fontSize:14,fontWeight:900,color:"#111" }}>Recent Tier Upgrades</h3>
+                  <span style={{ fontSize:11,color:ADMIN.muted,fontWeight:800 }}>
+                    {tierUpgradeCount} events
+                  </span>
+                </div>
+                {tierUpgradeEvents.length === 0 ? (
+                  <div style={{ padding:"18px",textAlign:"center",color:ADMIN.muted,fontSize:13 }}>
+                    No tier upgrades logged yet.
+                  </div>
+                ) : (
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom:"1px solid #111" }}>
+                          {["Time","User","From","To","Source","Reference"].map((h) => (
+                            <th
+                              key={h}
+                              style={{ padding:"10px 14px",fontSize:10,fontWeight:900,color:"#111",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}
+                            >
+                              {h.toUpperCase()}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tierUpgradeEvents.slice(0, 8).map((evt) => (
+                          <tr
+                            key={evt.id}
+                            style={{ borderBottom:"1px solid #111",transition:"background .1s" }}
+                            onMouseEnter={(e)=>e.currentTarget.style.background="#F3F4F6"}
+                            onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}
+                          >
+                            <td style={{ padding:"10px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>{evt.when}</td>
+                            <td style={{ padding:"10px 14px",fontSize:12,fontWeight:700,color:"#111",whiteSpace:"nowrap" }}>{evt.user}</td>
+                            <td style={{ padding:"10px 14px",whiteSpace:"nowrap" }}>{tierDot(evt.fromTier)}</td>
+                            <td style={{ padding:"10px 14px",whiteSpace:"nowrap" }}>{tierDot(evt.toTier)}</td>
+                            <td style={{ padding:"10px 14px",fontSize:11,color:ADMIN.muted,textTransform:"capitalize",whiteSpace:"nowrap" }}>{evt.source}</td>
+                            <td style={{ padding:"10px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>{evt.providerRef}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -6130,7 +7332,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
               {/* Filters */}
               <div style={{ display:"flex",gap:10,flexWrap:"wrap",alignItems:"center" }}>
                 <div style={{ display:"flex",gap:4,background:"#fff",border:"2px solid #111",borderRadius:9,padding:3 }}>
-                  {["all","active","pending","suspended"].map(f=>(
+                  {["all","active","pending","suspended","banned"].map(f=>(
                     <button key={f} onClick={()=>setUserFilter(f)} style={{ padding:"6px 14px",borderRadius:7,border:"1px solid #111",background:userFilter===f?"#111":"transparent",color:userFilter===f?"#fff":"#111",fontSize:12,fontWeight:userFilter===f?800:600,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
                   ))}
                 </div>
@@ -6206,7 +7408,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                       </button>
                     </div>
                     <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20 }}>
-                      {[["User ID",selectedUser.id],["Tier",selectedUser.tier],["Deposit",`KES ${selectedUser.deposit.toLocaleString()}`],["Earnings",`KES ${selectedUser.earn.toLocaleString()}`],["Status",selectedUser.status],["Joined",selectedUser.joined],["Phone",selectedUser.phone],["Referred By",selectedUser.referredBy || "-"],["Referrals","3 active"]].map(([l,v],i)=>(
+                      {[["User ID",selectedUser.id],["Tier",selectedUser.tier],["Deposit",`KES ${selectedUser.deposit.toLocaleString()}`],["Earnings",`KES ${selectedUser.earn.toLocaleString()}`],["Status",selectedUser.status],["Joined",selectedUser.joined],["Phone",selectedUser.phone],["Referral Code",selectedUser.referralCode || "-"],["Referred By",selectedUser.referredBy || "-"],["Referrals",`${selectedUserReferralCount} active`],["Referral Earnings",`KES ${selectedUserReferralEarn.toLocaleString()}`]].map(([l,v],i)=>(
                         <div key={i} style={{ padding:"12px 14px",background:"#fff",borderRadius:10,border:"1.5px solid #111",boxShadow:"0 3px 0 #111" }}>
                           <div style={{ fontSize:10,color:ADMIN.muted,fontWeight:800,letterSpacing:"0.08em",marginBottom:5 }}>{l.toUpperCase()}</div>
                           <div style={{ fontSize:13,fontWeight:700,color:"#111" }}>{v}</div>
@@ -6214,9 +7416,24 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                       ))}
                     </div>
                     <div style={{ display:"flex",gap:8 }}>
-                      <button style={{ flex:1,padding:"10px",background:"#111",color:"#fff",border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",boxShadow:"0 4px 0 #111" }}>Activate</button>
-                      <button style={{ flex:1,padding:"10px",background:"#EFF6FF",color:ADMIN.blue,border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Suspend</button>
-                      <button style={{ flex:1,padding:"10px",background:"#FFF0F0",color:ADMIN.red,border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif" }}>Delete</button>
+                      <button
+                        onClick={() => updateUserStatus(selectedUser.id, "active")}
+                        style={{ flex:1,padding:"10px",background:"#111",color:"#fff",border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif",boxShadow:"0 4px 0 #111" }}
+                      >
+                        Activate
+                      </button>
+                      <button
+                        onClick={() => updateUserStatus(selectedUser.id, "suspended")}
+                        style={{ flex:1,padding:"10px",background:"#EFF6FF",color:ADMIN.blue,border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif" }}
+                      >
+                        Suspend
+                      </button>
+                      <button
+                        onClick={() => updateUserStatus(selectedUser.id, "banned")}
+                        style={{ flex:1,padding:"10px",background:"#FFF0F0",color:ADMIN.red,border:"1.5px solid #111",borderRadius:10,fontSize:13,fontWeight:900,cursor:"pointer",fontFamily:"Geist,sans-serif" }}
+                      >
+                        Ban
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -6329,6 +7546,206 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* "" RISK TAB "" */}
+          {tab==="risk" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                {["all","open","reviewed","resolved","ignored"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setRiskFilter(f)}
+                    style={{
+                      padding:"6px 16px",
+                      borderRadius:50,
+                      border:"1.5px solid #111",
+                      background:riskFilter===f?"#111":"transparent",
+                      color:riskFilter===f?"#fff":"#111",
+                      fontSize:12,
+                      fontWeight:riskFilter===f?800:600,
+                      cursor:"pointer",
+                      fontFamily:"Geist,sans-serif",
+                      textTransform:"capitalize"
+                    }}
+                  >
+                    {f}
+                  </button>
+                ))}
+                <div style={{ marginLeft:"auto",fontSize:12,color:ADMIN.muted,display:"flex",alignItems:"center" }}>
+                  {filteredRiskFlags.length} flags
+                </div>
+              </div>
+
+              <div style={CARD}>
+                {filteredRiskFlags.length === 0 ? (
+                  <div style={{ padding:"20px", textAlign:"center", color:ADMIN.muted, fontSize:13 }}>
+                    No fraud flags found for this filter.
+                  </div>
+                ) : (
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom:"1px solid #111" }}>
+                          {["Time","Reason","Reference","Expected","Provider","Status","Actions"].map((h) => (
+                            <th
+                              key={h}
+                              style={{
+                                padding:"10px 14px",
+                                fontSize:10,
+                                fontWeight:900,
+                                color:"#111",
+                                letterSpacing:"0.1em",
+                                textAlign:"left",
+                                whiteSpace:"nowrap"
+                              }}
+                            >
+                              {h.toUpperCase()}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredRiskFlags.map((flag, i) => {
+                          const flagId = flag.flag_id || `F${String(i + 1).padStart(3, "0")}`;
+                          const expectedAmount = Number(flag.expected_amount);
+                          const providerAmount = Number(flag.provider_amount);
+                          const expectedText = Number.isFinite(expectedAmount) ? `KES ${expectedAmount.toLocaleString()}` : "-";
+                          const providerText = Number.isFinite(providerAmount) ? `KES ${providerAmount.toLocaleString()}` : "-";
+                          return (
+                            <tr
+                              key={flagId}
+                              style={{ borderBottom:"1px solid #111",transition:"background .1s" }}
+                              onMouseEnter={(e)=>e.currentTarget.style.background="#F3F4F6"}
+                              onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}
+                            >
+                              <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>
+                                {fmtDateTime(flag.created_at)}
+                              </td>
+                              <td style={{ padding:"11px 14px",fontSize:12,fontWeight:700,color:"#111" }}>
+                                {flag.reason || "Unknown"}
+                              </td>
+                              <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>
+                                {flag.merchant_reference || flag.tracking_id || "-"}
+                              </td>
+                              <td style={{ padding:"11px 14px",fontSize:12,color:"#111",whiteSpace:"nowrap" }}>
+                                {expectedText}
+                              </td>
+                              <td style={{ padding:"11px 14px",fontSize:12,color:"#111",whiteSpace:"nowrap" }}>
+                                {providerText}
+                              </td>
+                              <td style={{ padding:"11px 14px" }}>
+                                {statusBadge(String(flag.status || "open").replace(/^./, (c) => c.toUpperCase()))}
+                              </td>
+                              <td style={{ padding:"11px 14px" }}>
+                                <div style={{ display:"flex",gap:6 }}>
+                                  <button
+                                    onClick={() => updateRiskFlagStatus(flagId, "reviewed")}
+                                    style={{ padding:"4px 9px",background:"#EFF6FF",color:ADMIN.blue,border:"1px solid #111",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}
+                                  >
+                                    Review
+                                  </button>
+                                  <button
+                                    onClick={() => updateRiskFlagStatus(flagId, "resolved")}
+                                    style={{ padding:"4px 9px",background:"#ECFDF5",color:ADMIN.green,border:"1px solid #111",borderRadius:6,fontSize:10,fontWeight:800,cursor:"pointer",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}
+                                  >
+                                    Resolve
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                {["all","settled","rejected","invalid","error"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setAuditFilter(f)}
+                    style={{
+                      padding:"6px 16px",
+                      borderRadius:50,
+                      border:"1.5px solid #111",
+                      background:auditFilter===f?"#111":"transparent",
+                      color:auditFilter===f?"#fff":"#111",
+                      fontSize:12,
+                      fontWeight:auditFilter===f?800:600,
+                      cursor:"pointer",
+                      fontFamily:"Geist,sans-serif",
+                      textTransform:"capitalize"
+                    }}
+                  >
+                    {f}
+                  </button>
+                ))}
+                <div style={{ marginLeft:"auto",fontSize:12,color:ADMIN.muted,display:"flex",alignItems:"center" }}>
+                  {filteredAuditEvents.length} audit events
+                </div>
+              </div>
+
+              <div style={CARD}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+                  <h3 style={{ fontSize:14,fontWeight:900,color:"#111" }}>Payment Audit Trail</h3>
+                  <span style={{ fontSize:11,color:ADMIN.muted,fontWeight:800 }}>Verify/Webhook/Reconcile</span>
+                </div>
+                {filteredAuditEvents.length === 0 ? (
+                  <div style={{ padding:"20px", textAlign:"center", color:ADMIN.muted, fontSize:13 }}>
+                    No payment audit events for this filter.
+                  </div>
+                ) : (
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom:"1px solid #111" }}>
+                          {["Time","Source","Decision","Reference","Expected","Provider"].map((h) => (
+                            <th
+                              key={h}
+                              style={{
+                                padding:"10px 14px",
+                                fontSize:10,
+                                fontWeight:900,
+                                color:"#111",
+                                letterSpacing:"0.1em",
+                                textAlign:"left",
+                                whiteSpace:"nowrap"
+                              }}
+                            >
+                              {h.toUpperCase()}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAuditEvents.slice(0, 120).map((evt) => {
+                          const expectedText = Number.isFinite(evt.expectedAmount) && evt.expectedAmount > 0 ? `KES ${evt.expectedAmount.toLocaleString()}` : "-";
+                          const providerText = Number.isFinite(evt.providerAmount) && evt.providerAmount > 0 ? `KES ${evt.providerAmount.toLocaleString()}` : "-";
+                          return (
+                            <tr
+                              key={evt.id}
+                              style={{ borderBottom:"1px solid #111",transition:"background .1s" }}
+                              onMouseEnter={(e)=>e.currentTarget.style.background="#F3F4F6"}
+                              onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}
+                            >
+                              <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>{evt.when}</td>
+                              <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,textTransform:"capitalize",whiteSpace:"nowrap" }}>{evt.source}</td>
+                              <td style={{ padding:"11px 14px" }}>{statusBadge(String(evt.decision || "unknown").replace(/^./, (c) => c.toUpperCase()))}</td>
+                              <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,whiteSpace:"nowrap" }}>{evt.reference}</td>
+                              <td style={{ padding:"11px 14px",fontSize:12,color:"#111",whiteSpace:"nowrap" }}>{expectedText}</td>
+                              <td style={{ padding:"11px 14px",fontSize:12,color:"#111",whiteSpace:"nowrap" }}>{providerText}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -6452,26 +7869,94 @@ class ErrorBoundary extends React.Component {
   }
     }
 
+function CurrencyPill({ currency, onChange, compact = false }) {
+  const active = normalizeDisplayCurrency(currency);
+  const isKes = active === DISPLAY_CURRENCIES.KES;
+  const baseBtn = {
+    border: "none",
+    background: "transparent",
+    fontSize: compact ? 10 : 11,
+    fontWeight: 900,
+    letterSpacing: "0.08em",
+    borderRadius: 999,
+    padding: compact ? "5px 9px" : "6px 11px",
+    cursor: "pointer",
+    fontFamily: "IBM Plex Sans, Geist, sans-serif",
+    transition: "all .2s ease",
+    whiteSpace: "nowrap"
+  };
+  return (
+    <div data-currency-static="1" style={{ display: "grid", gap: 3, justifyItems: "center" }}>
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          padding: 3,
+          borderRadius: 999,
+          border: "1.5px solid rgba(255,255,255,0.55)",
+          background: "#0B0B0B",
+          boxShadow: "0 8px 16px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.16)"
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => onChange(DISPLAY_CURRENCIES.KES)}
+          style={{
+            ...baseBtn,
+            background: isKes ? "#FFFFFF" : "#111111",
+            color: isKes ? "#111111" : "#F1F5F9",
+            boxShadow: isKes ? "0 3px 8px rgba(0,0,0,0.26)" : "none"
+          }}
+        >
+          KSH
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(DISPLAY_CURRENCIES.USD)}
+          style={{
+            ...baseBtn,
+            background: !isKes ? "#FFFFFF" : "#111111",
+            color: !isKes ? "#111111" : "#F1F5F9",
+            boxShadow: !isKes ? "0 3px 8px rgba(0,0,0,0.26)" : "none"
+          }}
+        >
+          USD
+        </button>
+      </div>
+      {!compact && (
+        <div style={{ fontSize: compact ? 9 : 10, color: "#CBD5E1", fontWeight: 800, letterSpacing: "0.06em" }}>
+          {`1 USD = ${FX_KES_PER_USD} KSH`}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [page, setPage] = useState("landing");
   const [prevPage, setPrevPage] = useState("landing");
   const [dashboardTab, setDashboardTab] = useState("overview");
   const [adminTab, setAdminTab] = useState("overview");
+  const [displayCurrency, setDisplayCurrency] = useState(() => {
+    if (typeof window === "undefined") return DISPLAY_CURRENCIES.KES;
+    try {
+      return normalizeDisplayCurrency(localStorage.getItem(CURRENCY_STORAGE_KEY));
+    } catch (e) {
+      return DISPLAY_CURRENCIES.KES;
+    }
+  });
   const [tier, setTier] = useState(0);
   const t = TIERS[tier];
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(!SUPABASE_ENABLED);
   const [profileRow, setProfileRow] = useState(null);
   const [authMessage, setAuthMessage] = useState("");
-  const [installPrompt, setInstallPrompt] = useState(null);
-  const [showInstall, setShowInstall] = useState(false);
-  const [isMobileInstall, setIsMobileInstall] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
   const [installHint, setInstallHint] = useState("");
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideTyped, setGuideTyped] = useState("");
   const [guideSeen, setGuideSeen] = useState(false);
+  setActiveDisplayCurrency(displayCurrency);
   const dashboardGuideKey = guideSeenKeyForUser(DASH_GUIDE_SEEN_KEY, session?.user?.id);
   const referralGuideKey = guideSeenKeyForUser(REFERRAL_GUIDE_SEEN_KEY, session?.user?.id);
   const markGuideSeen = useCallback(() => {
@@ -6520,57 +8005,42 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 768px)");
-    const update = () => {
-      const ua = navigator.userAgent || "";
-      const mobileUA = /Android|iPhone|iPad|iPod/i.test(ua);
-      setIsMobileInstall(mq.matches || mobileUA);
-    };
-    update();
-    if (mq.addEventListener) mq.addEventListener("change", update);
-    else mq.addListener(update);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", update);
-      else mq.removeListener(update);
-    };
-  }, []);
-
-  useEffect(() => {
-    const checkStandalone = () => {
-      const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-      setIsStandalone(standalone);
-    };
-    checkStandalone();
-    const mq = window.matchMedia("(display-mode: standalone)");
-    if (mq.addEventListener) mq.addEventListener("change", checkStandalone);
-    else mq.addListener(checkStandalone);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", checkStandalone);
-      else mq.removeListener(checkStandalone);
-    };
-  }, []);
-
-  useEffect(() => {
-    const onBeforeInstall = (e) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-      setShowInstall(true);
-    };
-    const onInstalled = () => {
-      setInstallPrompt(null);
-      setShowInstall(false);
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, []);
-
-  useEffect(() => {
     try { localStorage.setItem("ep:tier", String(tier)); } catch (e) {}
   }, [tier]);
+  useEffect(() => {
+    const normalized = normalizeDisplayCurrency(displayCurrency);
+    setActiveDisplayCurrency(normalized);
+    try { localStorage.setItem(CURRENCY_STORAGE_KEY, normalized); } catch (e) {}
+  }, [displayCurrency]);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.getElementById("root");
+    if (!root) return;
+    let applying = false;
+    const currency = normalizeDisplayCurrency(displayCurrency);
+    const safeApply = (fn) => {
+      if (applying) return;
+      applying = true;
+      try { fn(); } finally { applying = false; }
+    };
+    safeApply(() => applyCurrencyToSubtree(root, currency));
+    const observer = new MutationObserver((mutations) => {
+      if (applying) return;
+      safeApply(() => {
+        mutations.forEach((m) => {
+          if (m.type === "characterData") {
+            applyCurrencyToTextNode(m.target, currency);
+            return;
+          }
+          if (m.type === "childList") {
+            m.addedNodes.forEach((node) => applyCurrencyToSubtree(node, currency));
+          }
+        });
+      });
+    });
+    observer.observe(root, { subtree: true, childList: true, characterData: true });
+    return () => observer.disconnect();
+  }, [displayCurrency]);
 
   const go = (p) => { setPrevPage(page); setPage(p); };
   const authUser = session?.user || null;
@@ -6594,7 +8064,9 @@ export default function App() {
           if (!trackingId) return false;
           const qs = new URLSearchParams({ tracking_id: trackingId });
           if (merchantReference) qs.set("merchant_reference", merchantReference);
-          const res = await fetch(`${apiBase}/api/v1/deposit/verify?${qs.toString()}`);
+          const token = await getAccessToken();
+          const headers = token ? { Authorization: `Bearer ${token}` } : {};
+          const res = await fetch(`${apiBase}/api/v1/deposit/verify?${qs.toString()}`, { headers });
           const data = await res.json().catch(() => ({}));
           return res.ok && data?.status === "success";
         } catch (e) {
@@ -6624,7 +8096,9 @@ export default function App() {
       }
       for (let i = 0; i < 10; i++) {
         try {
-          const res = await fetch(`${apiBase}/api/v1/deposit/status?reference=${encodeURIComponent(merchantReference)}`);
+          const token = await getAccessToken();
+          const headers = token ? { Authorization: `Bearer ${token}` } : {};
+          const res = await fetch(`${apiBase}/api/v1/deposit/status?reference=${encodeURIComponent(merchantReference)}`, { headers });
           const data = await res.json().catch(() => ({}));
           if (!cancelled && res.ok && data?.status === "success") {
             setAuthMessage("Payment confirmed. Welcome back.");
@@ -6650,11 +8124,11 @@ export default function App() {
     poll();
     return () => { cancelled = true; };
   }, [SUPABASE_ENABLED, authReady, authUser?.id]);
-  const role = profileRow?.role || "client";
-  const isAdmin = role === "admin";
-  // showDevNav is an explicit debug toggle (query/localStorage/env)
-  const profileReady = !SUPABASE_ENABLED || !authUser || profileRow !== null;
-  const tierSelected = profileRow?.tier_selected === true;
+  const role = String(profileRow?.role || "").trim().toLowerCase();
+  const categoryRole = String(profileRow?.category || "").trim().toLowerCase();
+  const hasProfileAdminRole = role === "admin" || categoryRole === "admin" || categoryRole === "administrator";
+  const isAdmin = hasProfileAdminRole;
+  const profileReady = !SUPABASE_ENABLED || !authUser || (profileRow !== null && profileRow?.id === authUser.id);
 
   useEffect(() => {
     if (!SUPABASE_ENABLED) return;
@@ -6707,6 +8181,7 @@ export default function App() {
   useEffect(() => {
     if (!SUPABASE_ENABLED) return;
     if (!authUser?.id) { setProfileRow(null); return; }
+    setProfileRow((prev) => (prev?.id === authUser.id ? prev : null));
     let ignore = false;
     (async () => {
       const existing = await loadProfileRow(authUser.id);
@@ -6769,30 +8244,16 @@ export default function App() {
     setAuthMessage("");
     setPage("landing");
   };
-
-  const devNavOverride = (() => {
-    if (typeof window === "undefined") return false;
-    try {
-      const url = new URL(window.location.href);
-      const qp = url.searchParams.get("devnav");
-      if (qp === "1") localStorage.setItem("ep:devnav", "1");
-      if (qp === "0") localStorage.removeItem("ep:devnav");
-      return localStorage.getItem("ep:devnav") === "1";
-    } catch (e) {
-      return false;
-    }
-  })();
-  const showDevNav = devNavOverride || String(import.meta.env.VITE_SHOW_DEV_NAV || "0") === "1";
   const mustSelectTier = !!authUser && !isAdmin && SUPABASE_ENABLED && profileRow?.tier_selected !== true;
 
   const route = !SUPABASE_ENABLED
     ? page
     : (() => {
-      if (!authUser) {
-        return (page === "landing" || page === "login" || page === "signup") ? page : "landing";
-      }
       if (isAdmin) {
         return (page === "landing" || page === "admin") ? page : "admin";
+      }
+      if (!authUser) {
+        return (page === "landing" || page === "login" || page === "signup") ? page : "landing";
       }
       if (mustSelectTier) {
         return (page === "landing" || page === "tier-select") ? page : "tier-select";
@@ -6826,131 +8287,8 @@ export default function App() {
       localStorage.removeItem(referralGuideKey);
     } catch (e) {}
   };
-  const globalNavItems = useMemo(() => {
-    const tierNavItems = TIERS.map((tierItem, tierIndex) => ({
-      id: `tier-${tierItem.id}`,
-      route: "dashboard",
-      tierId: tierItem.id,
-      tierIndex,
-      label: tierItem.name,
-      ic: "star"
-    }));
-    const clientDashboardItems = CLIENT_DASH_TAB_ITEMS.map(({ id, label, ic }) => ({
-      id: `dashboard-${id}`,
-      route: "dashboard",
-      dashboardTab: id,
-      label,
-      ic
-    }));
-    const adminDashboardItems = ADMIN_DASH_TAB_ITEMS.map(({ id, label, ic }) => ({
-      id: `admin-${id}`,
-      route: "admin",
-      adminTab: id,
-      label,
-      ic
-    }));
-    if (!SUPABASE_ENABLED) {
-      return [
-        { id: "landing", route: "landing", label: "Home", ic: "home" },
-        { id: "login", route: "login", label: "Sign In", ic: "lock" },
-        { id: "signup", route: "signup", label: "Sign Up", ic: "user" },
-        { id: "tier-select", route: "tier-select", label: "Tier Select", ic: "star" },
-        { id: "dashboard", route: "dashboard", label: "Dashboard", ic: "chart" },
-        ...tierNavItems,
-        ...clientDashboardItems,
-        ...(isAdmin ? [{ id: "admin", route: "admin", label: "Admin", ic: "settings" }, ...adminDashboardItems] : [])
-      ];
-    }
-    if (!authUser) {
-      return [
-        { id: "landing", route: "landing", label: "Home", ic: "home" },
-        { id: "login", route: "login", label: "Sign In", ic: "lock" },
-        { id: "signup", route: "signup", label: "Sign Up", ic: "user" }
-      ];
-    }
-    if (isAdmin) {
-      return [
-        { id: "landing", route: "landing", label: "Home", ic: "home" },
-        { id: "admin", route: "admin", label: "Admin", ic: "settings" },
-        ...adminDashboardItems
-      ];
-    }
-    if (mustSelectTier) {
-      return [
-        { id: "landing", route: "landing", label: "Home", ic: "home" },
-        { id: "tier-select", route: "tier-select", label: "Tier Select", ic: "star" }
-      ];
-    }
-    return [
-      { id: "landing", route: "landing", label: "Home", ic: "home" },
-      { id: "dashboard", route: "dashboard", label: "Dashboard", ic: "chart" },
-      ...tierNavItems,
-      ...clientDashboardItems,
-      { id: "tier-select", route: "tier-select", label: "Tier Select", ic: "star" }
-    ];
-  }, [SUPABASE_ENABLED, authUser, isAdmin, mustSelectTier]);
-  const globalNavHeight = 50;
-  const devNavHeight = showDevNav ? 44 : 0;
-  const appViewportHeight = `calc(100vh - ${globalNavHeight + devNavHeight}px)`;
-  const handleGlobalNavigate = async (navItem) => {
-    const item = typeof navItem === "string" ? { id: navItem, route: navItem } : (navItem || {});
-    const target = item.route || item.id;
-    const hasTierIndex = Number.isFinite(Number(item.tierIndex));
-    const hasTierId = Number.isFinite(Number(item.tierId));
-    let tierChosenNow = false;
-    if (hasTierIndex) {
-      setTier(Number(item.tierIndex));
-      if (item.dashboardTab) setDashboardTab(item.dashboardTab);
-      else setDashboardTab("overview");
-      if (SUPABASE_ENABLED && authUser && !isAdmin && hasTierId) {
-        const ok = await handleTierSelect(Number(item.tierId));
-        tierChosenNow = !!ok;
-      } else {
-        tierChosenNow = true;
-      }
-    } else if (item.dashboardTab) {
-      setDashboardTab(item.dashboardTab);
-    }
-    if (item.adminTab) setAdminTab(item.adminTab);
-    if (!SUPABASE_ENABLED) {
-      go(target);
-      return;
-    }
-    if (!authUser) {
-      if (target === "dashboard" || target === "tier-select" || target === "admin") {
-        go("login");
-        return;
-      }
-      go(target);
-      return;
-    }
-    if (target === "admin") {
-      go(isAdmin ? "admin" : "dashboard");
-      return;
-    }
-    if (mustSelectTier && target === "dashboard" && !tierChosenNow) {
-      go("tier-select");
-      return;
-    }
-    go(target);
-  };
+  const appViewportHeight = "100vh";
 
-  const handleTierSelect = async (tierId) => {
-    if (!supabase || !authUser?.id) return false;
-    const tierNum = Number(tierId);
-    if (!Number.isFinite(tierNum) || tierNum < 1 || tierNum > TIERS.length) return false;
-    const updated = await upsertProfileRow({
-      id: authUser.id,
-      tier: tierNum,
-      tier_selected: true,
-      tier_selected_at: new Date().toISOString()
-    });
-    if (updated) {
-      setProfileRow(updated);
-      return true;
-    }
-    return false;
-  };
   const openHelp = () => {
     try {
       const w = window.Tawk_API;
@@ -6959,102 +8297,47 @@ export default function App() {
     } catch (e) {}
   };
 
-  const handleInstall = async () => {
-    if (!installPrompt) {
-      const ua = navigator.userAgent || "";
-      const isIOS = /iPad|iPhone|iPod/i.test(ua);
-      const msg = isIOS
-        ? "On iPhone/iPad: tap Share, then 'Add to Home Screen'."
-        : "Install prompt is getting ready. Please try again in a moment.";
-      setInstallHint(msg);
-      setTimeout(() => setInstallHint(""), 3500);
+  const isIOSInstallClient = typeof navigator !== "undefined" && /iPad|iPhone|iPod/i.test(navigator.userAgent || "");
+  const installTargetUrl = isIOSInstallClient
+    ? IOS_APP_URL
+    : (ANDROID_APK_URL || IOS_APP_URL);
+  const installLabel = "APP";
+  const handleInstall = () => {
+    if (isIOSInstallClient && !IOS_APP_URL) {
+      setInstallHint("iOS install link is not published yet. Use Android APK for now.");
+      setTimeout(() => setInstallHint(""), 3200);
+      return;
+    }
+    if (!installTargetUrl) {
+      setInstallHint("APK download URL is not set yet. Please contact support.");
+      setTimeout(() => setInstallHint(""), 2800);
       return;
     }
     try {
-      installPrompt.prompt();
-      const choice = await installPrompt.userChoice;
-      if (choice?.outcome !== "accepted") {
-        setInstallHint("Install dismissed. You can try again anytime.");
-        setTimeout(() => setInstallHint(""), 2500);
+      const link = document.createElement("a");
+      link.href = installTargetUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      if (/\.apk(\?|#|$)/i.test(installTargetUrl)) {
+        link.download = "edisonpay.apk";
       }
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setInstallHint(/\.apk(\?|#|$)/i.test(installTargetUrl) ? "Downloading APK..." : "Opening app download...");
+      setTimeout(() => setInstallHint(""), 2200);
     } catch (e) {
-      setInstallHint("Install prompt failed. Please try again.");
-      setTimeout(() => setInstallHint(""), 2500);
-    } finally {
-      setInstallPrompt(null);
-      setShowInstall(false);
+      window.open(installTargetUrl, "_blank", "noopener,noreferrer");
     }
   };
 
-  const showInstallButton = isMobileInstall && !isStandalone && route === "landing";
-  const installReady = !!installPrompt && showInstall;
+  const showInstallButton = route === "landing";
+  const installReady = !!installTargetUrl;
 
   return (
     <ErrorBoundary>
       <GlobalStyles />
       <Fonts />
-
-      <div style={{ position:"sticky", top:0, zIndex:10000, background:"rgba(3,8,18,0.96)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(148,163,184,0.22)", height:globalNavHeight, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 10px", gap:10 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-          <div onClick={() => handleGlobalNavigate("landing")} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"6px 8px", borderRadius:10, flexShrink:0 }}>
-            <BrandMark size={24} />
-            <span style={{ fontSize:13, fontWeight:900, color:"#d9f99d", letterSpacing:"0.02em", whiteSpace:"nowrap" }}>EdisonPay</span>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:6, overflowX:"auto", minWidth:0, paddingBottom:2 }}>
-            {globalNavItems.map((item) => {
-              const { id, route: itemRoute, label, ic, dashboardTab: itemDashboardTab, adminTab: itemAdminTab, tierIndex: itemTierIndex } = item;
-              const targetRoute = itemRoute || id;
-              const active = itemDashboardTab
-                ? route === "dashboard" && dashboardTab === itemDashboardTab
-                : itemAdminTab
-                  ? route === "admin" && adminTab === itemAdminTab
-                  : Number.isFinite(Number(itemTierIndex))
-                    ? route === "dashboard" && tier === Number(itemTierIndex)
-                    : route === targetRoute || page === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => handleGlobalNavigate(item)}
-                  style={{ padding:"6px 11px", borderRadius:999, border:active ? "1px solid rgba(190,242,100,0.62)" : "1px solid rgba(71,85,105,0.55)", background:active ? "rgba(190,242,100,0.16)" : "rgba(15,23,42,0.48)", color:active ? "#ecfccb" : "#cbd5e1", fontSize:11, fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap", fontFamily:"Geist,sans-serif" }}
-                >
-                  <I n={ic} s={11} c="currentColor" />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        {authUser ? (
-          <button onClick={handleSignOut} style={{ padding:"6px 11px", borderRadius:999, border:"1px solid #FCA5A5", background:"#7F1D1D", color:"#FECACA", fontSize:11, fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", gap:6, flexShrink:0, fontFamily:"Geist,sans-serif" }}>
-            <I n="logout" s={11} c="#FECACA" />
-            Logout
-          </button>
-        ) : (
-          <div style={{ fontSize:11, color:"#94A3B8", fontWeight:700, whiteSpace:"nowrap", flexShrink:0 }}>Navigate anywhere</div>
-        )}
-      </div>
-
-      {/* "" PAGE SWITCHER - sticky top bar "" */}
-      {showDevNav && (
-        <div style={{ position:"sticky",top:globalNavHeight,zIndex:9999,background:"#0A0A0A",display:"flex",alignItems:"center",padding:"0 12px",height:44,gap:4,borderBottom:"1px solid #1A1A1A",flexShrink:0 }}>
-          <div style={{ display:"flex",alignItems:"center",gap:4,flex:1,flexWrap:"nowrap",overflowX:"auto" }}>
-            {[["landing","Home","home"],["login","Login","lock"],["signup","Sign Up","user"],["tier-select","Tier Select","star"],["dashboard","Dashboard","chart"],["admin","Admin","settings"]].map(([id,lbl,ic])=>(
-              <button key={id} onClick={()=>go(id)} style={{ padding:"5px 13px",borderRadius:50,border:"none",background:page===id?"#fff":"#1A1A1A",color:page===id?"#111":"#888",fontSize:11,fontWeight:page===id?800:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>
-                <I n={ic} s={11} c={page===id?"#111":"#888"}/>{lbl}
-              </button>
-            ))}
-            {page==="dashboard"&&(
-              <>
-                <div style={{ width:1,height:16,background:"#2A2A2A",margin:"0 4px",flexShrink:0 }}/>
-                <span style={{ fontSize:10,color:"#444",fontWeight:700,fontFamily:"Geist,sans-serif",flexShrink:0 }}>TIER:</span>
-                {TIERS.map((tr,i)=>(
-                  <button key={i} onClick={()=>setTier(i)} style={{ padding:"4px 10px",borderRadius:50,border:`1px solid ${tier===i?tr.acc:"#2A2A2A"}`,background:tier===i?tr.acc+"22":"transparent",color:tier===i?tr.acc:"#555",fontSize:10,fontWeight:tier===i?800:500,cursor:"pointer",fontFamily:"Geist,sans-serif",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0 }}>{tr.name}</button>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       <div style={{ height: appViewportHeight, overflow:"hidden" }}>
         {SUPABASE_ENABLED && (!authReady || !profileReady) && (
@@ -7076,8 +8359,22 @@ export default function App() {
             {route==="landing"   && <div style={{ height:"100%",overflowY:"auto" }}><Landing  go={go}/></div>}
             {route==="login"     && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="login"  go={go} from={prevPage==="landing"?"dashboard":prevPage} authMessage={authMessage}/></div>}
             {route==="signup"    && <div style={{ height:"100%",overflowY:"auto" }}><Auth type="signup" go={go} from={prevPage==="landing"?"dashboard":prevPage} authMessage={authMessage}/></div>}
-            {route==="tier-select" && <div style={{ height:"100%",overflowY:"auto" }}><TierSelect go={go} authUser={authUser} profileRow={profileRow} onSelectTier={handleTierSelect} onPreviewToVideos={() => { setDashboardTab("videos"); go("dashboard"); }} /></div>}
-            {route==="dashboard" && <ClientDash t={t} go={go} key={tier} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut} onReplayGuide={openGuideTour} externalTab={dashboardTab} onTabChange={setDashboardTab}/>}
+            {route==="tier-select" && <div style={{ height:"100%",overflowY:"auto" }}><TierSelect go={go} authUser={authUser} profileRow={profileRow} onPreviewToVideos={() => { setDashboardTab("videos"); go("dashboard"); }} /></div>}
+            {route==="dashboard" && (
+              <ClientDash
+                t={t}
+                go={go}
+                key={tier}
+                authUser={authUser}
+                profileRow={profileRow}
+                onSignOut={handleSignOut}
+                onReplayGuide={openGuideTour}
+                externalTab={dashboardTab}
+                onTabChange={setDashboardTab}
+                displayCurrency={displayCurrency}
+                onChangeDisplayCurrency={setDisplayCurrency}
+              />
+            )}
             {route==="admin"     && <AdminDash go={go} authUser={authUser} profileRow={profileRow} onSignOut={handleSignOut} externalTab={adminTab} onTabChange={setAdminTab}/>}
           </>
         )}
@@ -7117,23 +8414,12 @@ export default function App() {
           )}
           <button
             onClick={handleInstall}
+            className="ep-install-cta"
             style={{
-              padding:"10px 22px",
-              borderRadius:999,
-              border:"1.5px solid #000",
-              background: installReady ? "#000" : "#222",
-              color:"#fff",
-              fontWeight:900,
-              letterSpacing:"0.02em",
-              fontSize:12,
-              textTransform:"uppercase",
-              cursor:"pointer",
-              boxShadow:"0 8px 0 #000",
-              fontFamily:"IBM Plex Sans, Geist, sans-serif",
               opacity: installReady ? 1 : 0.85
             }}
           >
-            Download App
+            {installLabel}
           </button>
         </div>
       )}
@@ -7224,6 +8510,7 @@ export default function App() {
     </ErrorBoundary>
   );
     }
+
 
 
 

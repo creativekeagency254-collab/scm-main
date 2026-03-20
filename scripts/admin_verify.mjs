@@ -149,11 +149,14 @@ async function updatePayout(client, payoutId, status) {
   return data;
 }
 
-async function depositAndVerify(userId, email, amount, tier) {
+async function depositAndVerify(userId, email, amount, tier, accessToken) {
   if (!API_BASE) throw new Error("API_BASE not set");
   const res = await fetch(`${API_BASE}/api/v1/deposit/create`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`
+    },
     body: JSON.stringify({ amount, user_id: userId, email, tier, method: "PesaPal" })
   });
   const data = await res.json().catch(() => ({}));
@@ -173,12 +176,15 @@ async function depositAndVerify(userId, email, amount, tier) {
   return merchantRef;
 }
 
-async function depositInit(userId, email) {
+async function depositInit(userId, email, accessToken) {
   if (!API_BASE) throw new Error("API_BASE not set");
   const res = await fetch(`${API_BASE}/api/v1/deposit/create`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount: 1000, user_id: userId, email, tier: 1, method: "PesaPal" })
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ amount: 5000, user_id: userId, email, tier: 1, method: "PesaPal" })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.detail || data?.error || data?.message || res.status);
@@ -196,9 +202,9 @@ async function main() {
   await ensureUserRow(adminUser, "admin");
   await ensureUserRow(normalUser, "client");
 
-  await depositAndVerify(normalUser.id, userEmail, 1000, 1);
-  await creditBalance(normalUser.id, 200);
   const userSession = await signIn(userEmail, TEST_PASSWORD);
+  await depositAndVerify(normalUser.id, userEmail, 5000, 1, userSession.access_token);
+  await creditBalance(normalUser.id, 200);
   const userClient = authedClient(userSession.access_token);
   await requestWithdrawal(userClient, 50);
 
@@ -218,7 +224,7 @@ async function main() {
   await updatePayout(adminClient, payout.payout_id, "processing");
   await updatePayout(adminClient, payout.payout_id, "completed");
 
-  const authUrl = await depositInit(normalUser.id, userEmail);
+  const authUrl = await depositInit(normalUser.id, userEmail, userSession.access_token);
 
   console.log("ADMIN VERIFY OK");
   console.log(`Admin user: ${adminEmail}`);

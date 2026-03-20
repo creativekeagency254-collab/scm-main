@@ -24,35 +24,27 @@
         host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "0.0.0.0" || isPrivateIp;
       if (!isLocalhost && "serviceWorker" in navigator) {
         window.addEventListener("load", () => {
-          navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+          navigator.serviceWorker.register("/service-worker.js", { updateViaCache: "none" }).then((reg) => {
+            if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+            reg.addEventListener("updatefound", () => {
+              const worker = reg.installing;
+              if (!worker) return;
+              worker.addEventListener("statechange", () => {
+                if (worker.state === "installed" && navigator.serviceWorker.controller) {
+                  worker.postMessage({ type: "SKIP_WAITING" });
+                }
+              });
+            });
+            let refreshed = false;
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+              if (refreshed) return;
+              refreshed = true;
+              window.location.reload();
+            });
+          }).catch(() => {});
         });
       }
     </script>
-    <script type="module">
-      const chatFlagRaw = String(import.meta.env.VITE_ENABLE_TAWK_CHAT ?? "");
-      const chatFlag = chatFlagRaw.trim().toLowerCase();
-      const chatEnabled = chatFlag === "1" || chatFlag === "true";
-      let chatConsent = null;
-      try { chatConsent = localStorage.getItem("ep:chat-consent"); } catch (e) {}
-      const canLoadChat = chatEnabled && (chatConsent === "1" || chatConsent === "true");
-
-      if (canLoadChat) {
-        var Tawk_API = window.Tawk_API || {}, Tawk_LoadStart = new Date();
-        Tawk_API.onLoad = function() {
-          try { Tawk_API.hideWidget(); } catch (e) {}
-        };
-        Tawk_API.onChatMinimized = function() {
-          try { Tawk_API.hideWidget(); } catch (e) {}
-        };
-        (function() {
-          var s1 = document.createElement("script"), s0 = document.getElementsByTagName("script")[0];
-          s1.async = true;
-          s1.src = "https://embed.tawk.to/69b323009090b01c368b958f/1jjhs1fev";
-          s1.charset = "UTF-8";
-          s1.setAttribute("crossorigin", "*");
-          s0.parentNode.insertBefore(s1, s0);
-        })();
-      }
-    </script>
+    <script type="module" src="/src/tawk-chat-loader.js"></script>
   </body>
 </html>
