@@ -996,16 +996,16 @@ function Landing({ go }) {
             <div>
               <div style={{ fontSize:13, fontWeight:800, color:"#F5F5F5", marginBottom:10 }}>Contact</div>
               <div style={{ fontSize:13, color:"#BDBDBD", lineHeight:1.55 }}>
-                <div>Business Bay, Downtown Dubai</div>
-                <div>Dubai, United Arab Emirates</div>
-                <div style={{ marginTop:10 }}>support@eddisonpay.ae</div>
-                <div style={{ marginTop:10 }}>+971 4 555 0100</div>
+                <div>West Bay Tower, Doha, Qatar</div>
+                <div>Business Bay, Dubai, UAE</div>
+                <div style={{ marginTop:10 }}>support@eddisonpay.qa</div>
+                <div style={{ marginTop:10 }}>+974 4410 2200 / +971 4 555 0100</div>
               </div>
             </div>
           </div>
 
           <div style={{ marginTop:18, paddingTop:14, borderTop:"1px solid #1f1f1f", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-            <span style={{ fontSize:11, color:"#808080" }}>(c) 2025 EdisonPay Ltd. All rights reserved.</span>
+            <span style={{ fontSize:11, color:"#808080" }}>(c) 2026 EdisonPay Gulf. All rights reserved.</span>
             <div style={{ display:"flex", gap:12, fontSize:11, color:"#808080", flexWrap:"wrap" }}>
               {["Privacy","Terms","Cookies"].map((item) => <span key={item} style={{ cursor:"pointer" }}>{item}</span>)}
               <button
@@ -1412,7 +1412,7 @@ function Auth({ type, go, from, authMessage }) {
           </div>
         </div>
 
-        <div style={{ fontSize: 12, color: "rgba(148,163,184,0.7)", zIndex: 1 }}>(c) 2025 EdisonPay Ltd.</div>
+        <div style={{ fontSize: 12, color: "rgba(148,163,184,0.7)", zIndex: 1 }}>(c) 2026 EdisonPay Gulf.</div>
       </div>
 
       {/* RIGHT - form */}
@@ -8381,7 +8381,7 @@ export default function App() {
       return;
     }
     if (!installTargetUrl) {
-      setInstallHint("APK download URL is not set yet. Please contact support.");
+      setInstallHint("APK is not published yet. Please contact support@eddisonpay.qa.");
       setTimeout(() => setInstallHint(""), 2800);
       return;
     }
