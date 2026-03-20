@@ -1,6 +1,6 @@
 # Supabase Setup
 
-> Note: The source of truth is the SQL files in `supabase/migrations`. Apply every migration in order, including `20260319_fix_request_withdrawal_new_balance.sql`, `20260320_security_hardening.sql`, `20260320_payments_fraud_and_scale.sql`, `20260320_dashboard_overview_records.sql`, `20260320_loophole_and_malfunction_guards.sql`, `20260320_referral_first_deposit_guard.sql`, `20260320_payment_flags_admin_triage.sql`, `20260320_video_views_deposit_gate.sql`, `20260320_user_upgrade_security.sql`, `20260320_admin_1m_scale.sql`, and `20260320_webhook_security_hardening.sql`. The legacy SQL section below is archival reference only and is not the source of truth.
+> Note: The source of truth is the SQL files in `supabase/migrations`. Apply every migration in order, including `20260319_fix_request_withdrawal_new_balance.sql`, `20260320_security_hardening.sql`, `20260320_payments_fraud_and_scale.sql`, `20260320_dashboard_overview_records.sql`, `20260320_loophole_and_malfunction_guards.sql`, `20260320_referral_first_deposit_guard.sql`, `20260320_payment_flags_admin_triage.sql`, `20260320_video_views_deposit_gate.sql`, `20260320_user_upgrade_security.sql`, `20260320_admin_1m_scale.sql`, `20260320_webhook_security_hardening.sql`, and `20260320_admin_role_helpers.sql`. The legacy SQL section below is archival reference only and is not the source of truth.
 
 This project uses Supabase for auth and data when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
 
@@ -67,6 +67,7 @@ Run these in Supabase SQL editor, in order:
 14) `supabase/migrations/20260320_user_upgrade_security.sql`
 15) `supabase/migrations/20260320_admin_1m_scale.sql`
 16) `supabase/migrations/20260320_webhook_security_hardening.sql`
+17) `supabase/migrations/20260320_admin_role_helpers.sql`
 
 Important:
 - If you already applied `20260315_withdrawal_deposit_gate.sql`, still run `20260319_fix_request_withdrawal_new_balance.sql`.
@@ -81,6 +82,7 @@ Important:
 - Run `20260320_user_upgrade_security.sql` to block user-side tier/referral tampering and require confirmed deposits before tier activation.
 - Run `20260320_admin_1m_scale.sql` to add admin-scale RPCs (`get_admin_system_overview`, `get_admin_tier_distribution`) plus additional indexes for 1M+ user reporting.
 - Run `20260320_webhook_security_hardening.sql` to add durable webhook replay protection (`register_payment_webhook_receipt`) and admin visibility for webhook receipts.
+- Run `20260320_admin_role_helpers.sql` to add helper functions for assigning/revoking admin role labels in `users.profile_data`.
 
 Legacy schema (no longer used) is below:
 
@@ -305,6 +307,16 @@ After your first admin user signs up, run:
 update profiles
 set role = 'admin'
 where email = 'admin@example.com';
+```
+
+For the current `users` table and profile JSON model, use these helper functions (service-role only):
+
+```sql
+-- Mark one user as admin with role label "admins"
+select public.set_user_admin_role_by_email('admin@example.com', true, 'admins');
+
+-- Revoke admin access
+select public.set_user_admin_role_by_email('admin@example.com', false, 'client');
 ```
 
 ## 5. Google OAuth

@@ -1,4 +1,4 @@
-﻿-- 2026-03-14 claim_earning + required/optional video flag
+-- 2026-03-14 claim_earning + required/optional video flag
 
 ALTER TABLE IF EXISTS video_views
   ADD COLUMN IF NOT EXISTS is_required boolean NOT NULL DEFAULT true;
