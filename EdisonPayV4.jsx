@@ -45,6 +45,12 @@ const parseRoleList = (raw) => {
   return [];
 };
 const hasAdminRoleToken = (value) => ADMIN_ROLE_TOKENS.has(normalizeRoleToken(value));
+const parseBooleanFlag = (value) => {
+  if (value === true) return true;
+  if (value === false || value === null || value === undefined) return false;
+  const raw = String(value).trim().toLowerCase();
+  return ["1", "t", "true", "yes", "on", "y"].includes(raw);
+};
 
 const normalizeDisplayCurrency = (value) => {
   const raw = String(value || "").trim().toUpperCase();
@@ -291,12 +297,53 @@ async function loadProfileRow(userId) {
       .maybeSingle();
     if (error || !data) return null;
     const wallet = Array.isArray(data.wallets) ? data.wallets[0] : data.wallets;
-    const meta = data.profile_data || {};
+    const meta = (data.profile_data && typeof data.profile_data === "object")
+      ? { ...data.profile_data }
+      : {};
     const profileRoles = parseRoleList(meta.roles);
     const profileRole = normalizeRoleToken(meta.role || meta.user_role || "");
     const profileCategory = String(meta.category || meta.user_category || "").trim();
     const rawStatus = String(data.status || "active");
     const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+    const tierValueRaw = Number(data.tier);
+    const tierValue = Number.isFinite(tierValueRaw) && tierValueRaw > 0 ? tierValueRaw : 1;
+    let tierSelected = parseBooleanFlag(meta.tier_selected);
+
+    // Backfill legacy users: if deposit exists but tier_selected was never persisted, unlock account.
+    if (!tierSelected) {
+      let hasTierDeposit = false;
+      const overview = await fetchDashboardOverviewRow(tierValue);
+      if (overview) hasTierDeposit = overview.tier_has_success_deposit === true;
+      if (!hasTierDeposit) {
+        const { data: depData, error: depError } = await supabase
+          .from("deposits")
+          .select("deposit_id")
+          .eq("user_id", userId)
+          .eq("status", "success")
+          .eq("tier_at_deposit", tierValue)
+          .limit(1);
+        hasTierDeposit = !depError && Array.isArray(depData) && depData.length > 0;
+      }
+      if (hasTierDeposit) {
+        tierSelected = true;
+        const nextMeta = {
+          ...meta,
+          tier_selected: true,
+          tier_selected_at: meta.tier_selected_at || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        try {
+          await supabase
+            .from("users")
+            .update({ profile_data: nextMeta })
+            .eq("user_id", userId);
+          meta.tier_selected = true;
+          meta.tier_selected_at = nextMeta.tier_selected_at;
+          meta.updated_at = nextMeta.updated_at;
+        } catch (e) {}
+      }
+    }
+
     return {
       id: data.user_id,
       name: data.full_name || meta.name || "",
@@ -307,13 +354,13 @@ async function loadProfileRow(userId) {
       join_number: meta.join_number ?? null,
       ref_code: data.referral_code || meta.ref_code || "",
       referred_by: meta.referred_by || "",
-      tier_selected: meta.tier_selected === true,
+      tier_selected: tierSelected,
       tier_selected_at: meta.tier_selected_at || null,
       role: profileRole || "client",
       category: profileCategory || "Client",
       roles: profileRoles,
       status,
-      tier: data.tier ?? 1,
+      tier: tierValue,
       created_at: data.signup_at || null,
       updated_at: meta.updated_at || null
     };
@@ -1554,7 +1601,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
       setDepName(String(profileRow?.name || profileRow?.full_name));
     }
   }, [profileRow?.phone, profileRow?.name, profileRow?.full_name]);
-  const profileTierSelected = profileRow?.tier_selected === true;
+  const profileTierSelected = parseBooleanFlag(profileRow?.tier_selected);
   const currency = getActiveDisplayCurrency();
   const currencyFractionDigits = currency === DISPLAY_CURRENCIES.USD ? 2 : 0;
 
@@ -2048,7 +2095,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const [stripToggleHidden, setStripToggleHidden] = useState(false);
   const lastScrollRef = useRef(0);
   const authId = authUser?.id || null;
-  const tierSelected = profileRow?.tier_selected === true;
+  const tierSelected = parseBooleanFlag(profileRow?.tier_selected);
   const [hasTierDeposit, setHasTierDeposit] = useState(null);
   const [depositCheckBusy, setDepositCheckBusy] = useState(false);
   const [firstDepositAmount, setFirstDepositAmount] = useState(null);
@@ -8254,7 +8301,7 @@ export default function App() {
     setAuthMessage("");
     setPage("landing");
   };
-  const mustSelectTier = !!authUser && !isAdmin && SUPABASE_ENABLED && profileRow?.tier_selected !== true;
+  const mustSelectTier = !!authUser && !isAdmin && SUPABASE_ENABLED && !parseBooleanFlag(profileRow?.tier_selected);
 
   const route = !SUPABASE_ENABLED
     ? page
