@@ -58,6 +58,12 @@ const checkoutErrorMessage = (err) => {
 };
 
 const normalizeAmount = (value) => Number(Number(value || 0).toFixed(2));
+const appendQueryParam = (rawUrl, key, value) => {
+  const base = String(rawUrl || "").trim();
+  if (!base) return "";
+  const joiner = base.includes("?") ? "&" : "?";
+  return `${base}${joiner}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+};
 
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
@@ -114,13 +120,16 @@ export default async function handler(req, res) {
   }
 
   const paymentMode = String(req.body?.payment_mode || "").toLowerCase();
-  const useKora = paymentMode !== "manual";
+  const isSimulated = ["test", "sandbox", "mock", "simulated"].includes(paymentMode);
+  const useKora = paymentMode !== "manual" && !isSimulated;
   if (useKora && !isKoraConfigured()) {
     return res.status(500).json({ error: "Kora is not configured." });
   }
 
   const reference = `ep_${crypto.randomUUID().replace(/-/g, "")}`;
-  const providerLabel = useKora ? `Kora${method ? ` - ${method}` : ""}` : (method || "Manual");
+  const providerLabel = isSimulated
+    ? `Simulated${method ? ` - ${method}` : ""}`
+    : (useKora ? `Kora${method ? ` - ${method}` : ""}` : (method || "Manual"));
 
   const { error } = await supabaseAdmin
     .from("deposits")
@@ -138,11 +147,34 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "failed to create deposit" });
   }
 
+  const xfProto = req.headers["x-forwarded-proto"] || "https";
+  const xfHost = req.headers["x-forwarded-host"] || req.headers.host || "";
+  const baseUrl = xfHost ? `${xfProto}://${xfHost}` : "";
+  const callbackUrl = KORA_CALLBACK_URL || baseUrl || "";
+
+  if (isSimulated) {
+    const { error: confirmError } = await supabaseAdmin.rpc("confirm_deposit_success", {
+      p_provider_reference: reference
+    });
+    if (confirmError) {
+      await supabaseAdmin
+        .from("deposits")
+        .update({ status: "failed" })
+        .eq("provider_reference", reference);
+      return res.status(500).json({ error: "Failed to simulate payment confirmation." });
+    }
+    const redirectBase = callbackUrl || (baseUrl ? `${baseUrl}/` : "/");
+    const redirectWithRef = appendQueryParam(redirectBase, "reference", reference);
+    const redirectUrl = appendQueryParam(redirectWithRef, "payment_simulated", "1");
+    return res.status(200).json({
+      redirect_url: redirectUrl,
+      reference,
+      simulated: true,
+      status: "success"
+    });
+  }
+
   if (useKora) {
-    const xfProto = req.headers["x-forwarded-proto"] || "https";
-    const xfHost = req.headers["x-forwarded-host"] || req.headers.host || "";
-    const baseUrl = xfHost ? `${xfProto}://${xfHost}` : "";
-    const callbackUrl = KORA_CALLBACK_URL || baseUrl || "";
     if (!callbackUrl) {
       return res.status(500).json({ error: "Payment callback URL is not configured." });
     }

@@ -1593,7 +1593,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
         email,
         tier: tier.id,
         method: depMethod || "M-Pesa",
-        payment_mode: "live",
+        payment_mode: PAYMENTS_MODE === "live" ? "live" : "test",
         phone: depPhone || profileRow?.phone || "",
         name: depName || profileRow?.name || authUser?.user_metadata?.full_name || ""
       };
@@ -2727,7 +2727,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
         tier: settingsTargetTierId,
         upgrade_from_tier: t.id,
         method: "M-Pesa",
-        payment_mode: "live",
+        payment_mode: PAYMENTS_MODE === "live" ? "live" : "test",
         phone: profileRow?.phone || draftProfile.phone || "",
         name: profileRow?.name || draftProfile.name || authUser?.user_metadata?.full_name || ""
       };
