@@ -312,6 +312,59 @@ const GlobalStyles = () => {
       .ep-tier-card-shell:active .ep-tier-card-lively { transform:translateY(-2px) !important; }
       .ep-tier-mobile-image-host-landing { min-height:392px; padding-right:0; }
       .ep-tier-mobile-image-content-landing { max-width:100%; width:100%; }
+      .ep-tier-mobile-image-content-select { max-width:58%; }
+      .ep-tier-select-actionbar {
+        display:grid;
+        gap:8px;
+        margin-bottom:10px;
+        padding:8px;
+        border-radius:999px;
+        background:linear-gradient(180deg,#111827 0%, #020617 100%);
+        border:1px solid rgba(148,163,184,0.34);
+        box-shadow:0 16px 28px rgba(2,6,23,0.34), 0 6px 10px rgba(2,6,23,0.26);
+      }
+      .ep-tier-select-action-btn {
+        min-height:44px;
+        border:none;
+        border-radius:999px;
+        background:rgba(248,250,252,0.98);
+        color:#111827;
+        font-size:12px;
+        font-weight:800;
+        letter-spacing:0.01em;
+        padding:0 12px;
+        font-family:"IBM Plex Sans, Geist, sans-serif";
+        cursor:pointer;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        white-space:nowrap;
+        box-shadow:0 4px 10px rgba(2,6,23,0.28);
+        transition:all .2s cubic-bezier(.4,0,.2,1);
+      }
+      .ep-tier-select-action-btn:hover { transform:translateY(-1px); }
+      .ep-tier-select-action-btn:active { transform:translateY(0); box-shadow:inset 0 2px 8px rgba(2,6,23,0.34); }
+      .ep-tier-select-action-btn.is-active {
+        background:#ffffff;
+        color:#0f172a;
+        box-shadow:0 8px 14px rgba(15,23,42,0.25), 0 0 0 1px rgba(255,255,255,0.4) inset;
+      }
+      .ep-tier-select-action-btn-deposit {
+        background:linear-gradient(135deg,#16A34A 0%, #15803D 56%, #166534 100%);
+        color:#ECFDF5;
+        box-shadow:0 10px 16px rgba(22,163,74,0.3), inset 0 1px 0 rgba(255,255,255,0.24);
+      }
+      .ep-tier-select-action-btn-preview {
+        background:#e2e8f0;
+        color:#0f172a;
+        box-shadow:0 6px 12px rgba(15,23,42,0.2);
+      }
+      .ep-tier-select-action-btn:disabled {
+        opacity:0.55;
+        cursor:not-allowed;
+        transform:none;
+        box-shadow:0 3px 8px rgba(2,6,23,0.2);
+      }
       .ep-tier-mobile-image-host-landing .ep-tier-mobile-image-landing {
         display:block !important;
         position:absolute !important;
@@ -433,8 +486,12 @@ const GlobalStyles = () => {
         .ep-tier-mobile-image-host-landing { min-height:366px !important; padding-right:0 !important; }
         .ep-tier-mobile-image-content-landing { max-width:100% !important; width:100% !important; }
         .ep-tier-mobile-image-host-landing .ep-tier-mobile-image-landing { width:45% !important; height:94% !important; right:0 !important; top:50% !important; transform:translateY(-50%) !important; object-fit:contain !important; object-position:right center !important; }
-        .ep-tier-mobile-image-host-select { padding-right:45% !important; min-height:326px !important; overflow:visible !important; }
-        .ep-tier-mobile-image-host-select .ep-tier-mobile-image-select { width:45% !important; height:auto !important; max-height:88% !important; right:-2px !important; bottom:-6px !important; top:auto !important; transform:none !important; object-fit:contain !important; object-position:right bottom !important; }
+        .ep-tier-mobile-image-content-select { max-width:100% !important; width:100% !important; padding-right:40% !important; }
+        .ep-tier-mobile-image-host-select { padding-right:40% !important; min-height:338px !important; overflow:visible !important; }
+        .ep-tier-mobile-image-host-select .ep-tier-mobile-image-select { width:40% !important; height:auto !important; max-height:84% !important; right:-2px !important; bottom:-6px !important; top:auto !important; transform:none !important; object-fit:contain !important; object-position:right bottom !important; opacity:0.88 !important; }
+        .ep-tier-select-actionbar { grid-template-columns:repeat(2,minmax(0,1fr)) !important; border-radius:18px !important; }
+        .ep-tier-select-action-btn { min-height:42px !important; font-size:12px !important; padding:0 10px !important; }
+        .ep-tier-select-action-btn-preview.is-preview { grid-column:1 / -1 !important; }
 
         .ep-videos-shell { border-radius:16px !important; padding:14px !important; gap:14px !important; }
         .ep-videos-hero { padding:12px 14px !important; }
@@ -525,8 +582,12 @@ const GlobalStyles = () => {
         .ep-tier-mobile-image-host-landing { min-height:350px !important; padding-right:0 !important; }
         .ep-tier-mobile-image-content-landing { max-width:100% !important; width:100% !important; }
         .ep-tier-mobile-image-host-landing .ep-tier-mobile-image-landing { width:43% !important; height:90% !important; right:0 !important; top:50% !important; transform:translateY(-50%) !important; object-fit:contain !important; object-position:right center !important; }
-        .ep-tier-mobile-image-host-select { padding-right:47% !important; min-height:302px !important; overflow:visible !important; }
-        .ep-tier-mobile-image-host-select .ep-tier-mobile-image-select { width:47% !important; height:auto !important; max-height:86% !important; right:0 !important; bottom:-4px !important; top:auto !important; transform:none !important; object-fit:contain !important; object-position:right bottom !important; }
+        .ep-tier-mobile-image-content-select { padding-right:36% !important; }
+        .ep-tier-mobile-image-host-select { padding-right:36% !important; min-height:332px !important; overflow:visible !important; }
+        .ep-tier-mobile-image-host-select .ep-tier-mobile-image-select { width:36% !important; height:auto !important; max-height:78% !important; right:0 !important; bottom:-4px !important; top:auto !important; transform:none !important; object-fit:contain !important; object-position:right bottom !important; opacity:0.84 !important; }
+        .ep-tier-select-actionbar { padding:7px !important; gap:7px !important; border-radius:16px !important; }
+        .ep-tier-select-action-btn { min-height:40px !important; font-size:12px !important; letter-spacing:0 !important; }
+        .ep-tier-select-action-btn-preview.is-preview { grid-column:1 / -1 !important; }
 
         .ep-videos-shell { padding:10px !important; border-radius:14px !important; gap:10px !important; }
         .ep-videos-hero { padding:10px 12px !important; }

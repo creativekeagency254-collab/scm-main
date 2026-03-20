@@ -1707,7 +1707,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
                     borderTopRightRadius:22
                   }}
                 />
-                <div className="ep-tier-mobile-image-content" style={{ maxWidth:"58%", position:"relative", zIndex:4 }}>
+                <div className="ep-tier-mobile-image-content ep-tier-mobile-image-content-select" style={{ position:"relative", zIndex:4 }}>
                   <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10, marginBottom:14, paddingBottom:12 }}>
                     <div>
                       <div style={{ fontSize:10, letterSpacing:"0.12em", fontWeight:800, color:"#6d28d9" }}>TIER {tier.id}</div>
@@ -1759,65 +1759,30 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
                   )}
                   {isActive && (
                     <>
-                      <div style={{ display:"grid", gridTemplateColumns:showDepositCta ? "repeat(3,minmax(0,1fr))" : "repeat(2,minmax(0,1fr))", gap:8, marginBottom:10 }}>
+                      <div
+                        className="ep-tier-select-actionbar"
+                        style={{ gridTemplateColumns:showDepositCta ? "repeat(3,minmax(0,1fr))" : "repeat(2,minmax(0,1fr))" }}
+                      >
                         <button
+                          className={`ep-tier-select-action-btn${panel==="earn" ? " is-active" : ""}`}
                           disabled={depLoading}
                           onClick={() => togglePanel("earn")}
-                          style={{
-                            padding:"9px 8px",
-                            borderRadius:10,
-                            border:"none",
-                            background:panel==="earn" ? "#0F172A" : "#FFFFFF",
-                            color:panel==="earn" ? "#FFFFFF" : "#0F172A",
-                            fontWeight:800,
-                            fontSize:12,
-                            cursor:depLoading ? "not-allowed" : "pointer",
-                            fontFamily:"Geist,sans-serif",
-                            boxShadow:panel==="earn" ? "0 8px 16px rgba(15,23,42,0.24)" : "0 6px 12px rgba(15,23,42,0.08)"
-                          }}
                         >
                           Earnings
                         </button>
                         {showDepositCta && (
                           <button
-                            className="ep-tier-deposit-btn"
+                            className="ep-tier-select-action-btn ep-tier-select-action-btn-deposit ep-tier-deposit-btn"
                             disabled={depLoading}
                             onClick={() => handlePayNow(tier)}
-                            style={{
-                              padding:"9px 8px",
-                              borderRadius:10,
-                              border:"none",
-                              background:depLoading ? "#14532D" : "linear-gradient(135deg,#16A34A 0%, #15803D 56%, #166534 100%)",
-                              color:"#ECFDF5",
-                              fontWeight:900,
-                              fontSize:12,
-                              letterSpacing:"0.01em",
-                              cursor:depLoading ? "not-allowed" : "pointer",
-                              fontFamily:"Geist,sans-serif",
-                              boxShadow:depLoading
-                                ? "inset 0 2px 6px rgba(15,23,42,0.45)"
-                                : "0 10px 16px rgba(22,163,74,0.28), inset 0 1px 0 rgba(255,255,255,0.26)"
-                            }}
                           >
                             {depLoading ? "Opening..." : "Deposit Now"}
                           </button>
                         )}
                         <button
+                          className={`ep-tier-select-action-btn ep-tier-select-action-btn-preview${showDepositCta ? " is-preview" : ""}`}
                           disabled={depLoading || !profileTierSelected}
                           onClick={() => handlePreview(tier.id)}
-                          style={{
-                            padding:"9px 8px",
-                            borderRadius:10,
-                            border:"none",
-                            background:"#f5f3ff",
-                            color:"#4c1d95",
-                            fontWeight:800,
-                            fontSize:12,
-                            cursor:(depLoading || !profileTierSelected) ? "not-allowed" : "pointer",
-                            opacity: profileTierSelected ? 1 : 0.55,
-                            fontFamily:"Geist,sans-serif",
-                            boxShadow:"0 6px 12px rgba(109,40,217,0.12)"
-                          }}
                         >
                           Preview
                         </button>
