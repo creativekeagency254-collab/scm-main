@@ -920,10 +920,10 @@ function Landing({ go }) {
             <div>
               <div style={{ fontSize:13, fontWeight:800, color:"#F5F5F5", marginBottom:10 }}>Contact</div>
               <div style={{ fontSize:13, color:"#BDBDBD", lineHeight:1.55 }}>
-                <div>123 Example Road</div>
-                <div>New York, NY 12345</div>
-                <div style={{ marginTop:10 }}>email@example.com</div>
-                <div style={{ marginTop:10 }}>(555) 555-5555</div>
+                <div>Business Bay, Downtown Dubai</div>
+                <div>Dubai, United Arab Emirates</div>
+                <div style={{ marginTop:10 }}>support@eddisonpay.ae</div>
+                <div style={{ marginTop:10 }}>+971 4 555 0100</div>
               </div>
             </div>
           </div>
@@ -1669,13 +1669,12 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
               minFractionDigits: currencyFractionDigits,
               maxFractionDigits: currencyFractionDigits
             });
-            const bonusLabel = tier.bonusType === "none"
-              ? "No bonus"
-              : formatMoney(tier.bonusAmount, {
-                  currency,
-                  minFractionDigits: currencyFractionDigits,
-                  maxFractionDigits: currencyFractionDigits
-                });
+            const selectorVideosLine = `${tier.videos} videos x ${perVideoLabel} each`;
+            const selectorBonusByTier = Number(tier.id) >= 2 ? dailyLabel : "";
+            const selectorRuleLine = Number(tier.id) === 1
+              ? selectorVideosLine
+              : `${selectorVideosLine} + bonus ${selectorBonusByTier}`;
+            const bonusLabel = Number(tier.id) >= 2 ? selectorBonusByTier : "Tier 1 has no bonus";
             return (
               <div
                 key={tier.id}
@@ -1725,13 +1724,16 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
 
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8, marginBottom:14 }}>
                     <div style={{ borderRadius:11, background:"rgba(255,255,255,0.86)", padding:"8px 10px", boxShadow:"0 6px 14px rgba(15,23,42,0.06)" }}>
-                      <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Daily earning</div>
+                      <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Tier earnings</div>
                       <div style={{ fontSize:13, fontWeight:800, color:"#0F172A", marginTop:2 }}>{dailyLabel}</div>
                     </div>
                     <div style={{ borderRadius:11, background:"rgba(255,255,255,0.86)", padding:"8px 10px", boxShadow:"0 6px 14px rgba(15,23,42,0.06)" }}>
                       <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Videos per day</div>
                       <div style={{ fontSize:13, fontWeight:800, color:"#0F172A", marginTop:2 }}>{tier.videos}</div>
                     </div>
+                  </div>
+                  <div style={{ marginTop:-6, marginBottom:14, borderRadius:11, background:"rgba(15,23,42,0.04)", border:"1px solid rgba(148,163,184,0.25)", padding:"8px 10px", fontSize:11, fontWeight:700, color:"#0F172A", lineHeight:1.45 }}>
+                    {selectorRuleLine}
                   </div>
 
                   {!isActive && (
@@ -1841,6 +1843,10 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
                               <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Daily total</div>
                               <div style={{ fontSize:13, fontWeight:900, color:"#0F172A" }}>{dailyLabel}</div>
                             </div>
+                            <div style={{ gridColumn:"1 / -1" }}>
+                              <div style={{ fontSize:10, color:"#94A3B8", fontWeight:700 }}>Tier rule</div>
+                              <div style={{ fontSize:13, fontWeight:800, color:"#111" }}>{selectorRuleLine}</div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1906,12 +1912,10 @@ const CLIENT_NAV = [
   { id: "withdraw",  label: "Wallet",  ic: "wallet" },
 ];
 const DASH_GUIDE_STEPS = [
-  { title:"Help Button", text:"Tap the shield button anytime to contact support quickly from anywhere in the app." },
-  { title:"Deposit & Wallet", text:"Open Wallet and tap Pay Now to unlock earnings and withdrawals for your tier." },
-  { title:"Referral Power", text:"Share your referral link. You earn 10% from direct referral deposits automatically." },
-  { title:"Upgrade Tiers", text:"When ready, top up only the remaining amount to move to the next tier level." },
-  { title:"Video Earnings", text:"Go to Videos, complete required watches, then claim bonus rewards daily." },
-  { title:"Settings", text:"In Settings you can update your profile and replay this full onboarding guide." }
+  { title:"Welcome", text:"Welcome to EdisonPay. I am your onboarding assistant, and I will guide you through the platform in under a minute." },
+  { title:"What EdisonPay Does", text:"EdisonPay helps you manage your account and grow your balance through a guided dashboard, wallet tools, and daily earning actions." },
+  { title:"Key Features", text:"Use the Dashboard for progress, Videos for daily earnings, and Referrals to earn from users who join through your link." },
+  { title:"Get Started", text:"You are all set. Tap Next to explore now, and open Settings then Guide / Tutorial whenever you want to replay this tour." }
 ];
 const DASH_GUIDE_SEEN_KEY = "ep:dashboard-guide-seen";
 const REFERRAL_GUIDE_SEEN_KEY = "ep:referrals-guide-seen";
@@ -1944,7 +1948,7 @@ const imageSource = (rawUrl) => ({ primary: rawUrl, fallback: proxyImageUrl(rawU
 const LANDING_STICKER_TOP_IMAGE = imageSource("https://i.postimg.cc/vBhjCY5X/BG12-removebg-preview.png");
 const LANDING_STICKER_BOTTOM_IMAGE = imageSource("https://i.postimg.cc/1RNtLBB0/BG6_removebg_preview.png");
 const LANDING_STICKER_TIER_IMAGE = imageSource("https://i.postimg.cc/7hXLPsRL/BG5_removebg_preview.png");
-const DASH_BOT_GUIDE_IMAGE = imageSource("https://i.postimg.cc/RFKkTW1c/BG8_removebg_preview.png");
+const DASH_BOT_GUIDE_IMAGE = imageSource("https://i.postimg.cc/RFKkTW1c/BG8-removebg-preview.png");
 const HOME_BALANCE_SIDE_IMAGE = imageSource("https://i.postimg.cc/fyLdGYVG/BG1_removebg_preview.png");
 const REFERRAL_WORK_BOT_IMAGE = imageSource("https://i.postimg.cc/jSrH5wm8/BG2_removebg_preview.png");
 const WALLET_EARNINGS_BOT_IMAGE = imageSource("https://i.postimg.cc/vBhjCY5X/BG12-removebg-preview.png");
@@ -3371,7 +3375,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                   <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                     <button onClick={() => onReplayGuide?.()}
                       style={{ padding:"8px 14px", borderRadius:9, border:"1.5px solid #111", background:"#fff", color:"#111", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif" }}>
-                      Replay Guide
+                      Guide / Tutorial
                     </button>
                     <button onClick={saveProfile} disabled={!profileDirty || profileSaving}
                       style={{ padding:"8px 14px", borderRadius:9, border:"none", background: profileDirty ? "#111" : "#E5E7EB", color: profileDirty ? "#fff" : "#9CA3AF", fontSize:12, fontWeight:800, cursor: profileDirty ? "pointer" : "not-allowed", fontFamily:"Geist,sans-serif" }}>
@@ -7955,6 +7959,7 @@ export default function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideTyped, setGuideTyped] = useState("");
+  const [guideTypingDone, setGuideTypingDone] = useState(false);
   const [guideSeen, setGuideSeen] = useState(false);
   setActiveDisplayCurrency(displayCurrency);
   const dashboardGuideKey = guideSeenKeyForUser(DASH_GUIDE_SEEN_KEY, session?.user?.id);
@@ -8269,23 +8274,38 @@ export default function App() {
     return () => clearTimeout(id);
   }, [route, isAdmin, guideSeen]);
   useEffect(() => {
-    if (!guideOpen) { setGuideTyped(""); return; }
+    if (!guideOpen) {
+      setGuideTyped("");
+      setGuideTypingDone(false);
+      return;
+    }
     const message = DASH_GUIDE_STEPS[guideStep]?.text || "";
     setGuideTyped("");
+    setGuideTypingDone(false);
+    if (!message) {
+      setGuideTypingDone(true);
+      return;
+    }
     let idx = 0;
     const id = setInterval(() => {
       idx += 1;
       setGuideTyped(message.slice(0, idx));
-      if (idx >= message.length) clearInterval(id);
-    }, 18);
+      if (idx >= message.length) {
+        setGuideTypingDone(true);
+        clearInterval(id);
+      }
+    }, 19);
     return () => clearInterval(id);
   }, [guideOpen, guideStep]);
   const openGuideTour = () => {
     setGuideStep(0);
+    setGuideTyped("");
+    setGuideTypingDone(false);
     setGuideOpen(true);
-    try {
-      localStorage.removeItem(referralGuideKey);
-    } catch (e) {}
+  };
+  const skipGuideTour = () => {
+    markGuideSeen();
+    setGuideOpen(false);
   };
   const appViewportHeight = "100vh";
 
@@ -8424,63 +8444,48 @@ export default function App() {
         </div>
       )}
       {route === "dashboard" && guideOpen && !isAdmin && (
-        <div className="ep-guide-panel">
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8 }}>
-            <div style={{ fontSize:10, fontWeight:900, color:"#111", letterSpacing:"0.1em" }}>HELP GUIDE</div>
-            <button
-              onClick={() => setGuideOpen(false)}
-              aria-label="Exit guide"
-              style={{ width:24, height:24, borderRadius:"50%", border:"1.5px solid #111", background:"#fff", color:"#111", display:"grid", placeItems:"center", cursor:"pointer" }}
-            >
-              <I n="xmark" s={12} c="#111" />
-            </button>
-          </div>
-          <div className="ep-guide-bubble">
-            <div style={{ display:"grid", gridTemplateColumns:"82px 1fr", gap:10, padding:"10px 10px 8px" }}>
-              <img
-                src={DASH_BOT_GUIDE_IMAGE.primary}
-                alt="Guide bot"
-                referrerPolicy="no-referrer"
-                onError={(e) => setFallbackSrc(e, DASH_BOT_GUIDE_IMAGE)}
-                className="ep-guide-avatar-bw"
-                style={{ width:78, height:78, objectFit:"contain", alignSelf:"center" }}
-              />
-              <div style={{ minWidth:0 }}>
-                <div style={{ fontSize:10, fontWeight:900, color:"#111", letterSpacing:"0.08em" }}>GUIDED TOUR</div>
-                <div style={{ marginTop:4, fontSize:14, fontWeight:900, color:"#0f172a", lineHeight:1.2 }}>{DASH_GUIDE_STEPS[guideStep]?.title}</div>
-                <div style={{ marginTop:7, fontSize:12, color:"#111827", lineHeight:1.45, minHeight:52 }}>
+        <div className="ep-guide-panel" role="dialog" aria-live="polite" aria-label="Onboarding Assistant">
+          <div className="ep-guide-step-card" key={`guide-step-${guideStep}`}>
+            <div className="ep-guide-chat-row">
+              <div className="ep-guide-avatar-wrap">
+                <img
+                  src={DASH_BOT_GUIDE_IMAGE.primary}
+                  alt="Guide bot avatar"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => setFallbackSrc(e, DASH_BOT_GUIDE_IMAGE)}
+                  className="ep-guide-avatar-bw"
+                />
+              </div>
+              <div className="ep-guide-bubble">
+                <div className="ep-guide-heading">Onboarding Assistant</div>
+                <div className="ep-guide-title">{DASH_GUIDE_STEPS[guideStep]?.title}</div>
+                <div className={`ep-guide-text${guideTypingDone ? " is-written" : ""}`}>
                   {guideTyped}
-                  <span className="ep-guide-cursor">|</span>
+                  {!guideTypingDone && <span className="ep-guide-cursor">|</span>}
                 </div>
-                <div style={{ marginTop:6, fontSize:10, color:"#4b5563", textAlign:"right", fontWeight:700 }}>
-                  Step {guideStep + 1}/{DASH_GUIDE_STEPS.length}
+                <div className="ep-guide-meta">
+                  Step {guideStep + 1} of {DASH_GUIDE_STEPS.length}
                 </div>
               </div>
             </div>
-          </div>
-          <div style={{ marginTop:9, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8 }}>
-            <button
-              onClick={() => setGuideStep(prev => Math.max(0, prev - 1))}
-              disabled={guideStep === 0}
-              style={{ padding:"7px 11px", borderRadius:999, border:"1.5px solid #111", background:"#fff", color:guideStep===0 ? "#9ca3af" : "#111827", fontSize:11, fontWeight:800, cursor:guideStep===0 ? "not-allowed" : "pointer" }}
-            >
-              Back
-            </button>
-            {guideStep < DASH_GUIDE_STEPS.length - 1 ? (
-              <button
-                onClick={() => setGuideStep(prev => Math.min(DASH_GUIDE_STEPS.length - 1, prev + 1))}
-                style={{ padding:"7px 12px", borderRadius:999, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:11, fontWeight:900, cursor:"pointer" }}
-              >
-                Next
+            <div className="ep-guide-actions">
+              <button onClick={skipGuideTour} className="ep-guide-action-btn ep-guide-action-btn-light">
+                Skip
               </button>
-            ) : (
               <button
-                onClick={() => { markGuideSeen(); setGuideOpen(false); }}
-                style={{ padding:"7px 12px", borderRadius:999, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:11, fontWeight:900, cursor:"pointer" }}
+                onClick={() => {
+                  if (guideStep < DASH_GUIDE_STEPS.length - 1) {
+                    setGuideStep((prev) => Math.min(DASH_GUIDE_STEPS.length - 1, prev + 1));
+                    return;
+                  }
+                  markGuideSeen();
+                  setGuideOpen(false);
+                }}
+                className="ep-guide-action-btn ep-guide-action-btn-dark"
               >
-                Done
+                {guideStep < DASH_GUIDE_STEPS.length - 1 ? "Next" : "Get Started"}
               </button>
-            )}
+            </div>
           </div>
         </div>
       )}

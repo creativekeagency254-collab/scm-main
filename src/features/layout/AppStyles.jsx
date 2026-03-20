@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 
 /* "" FONTS "" */
 const Fonts = () => (
-  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Bungee&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 );
 
 /* "" CSS KEYFRAMES injected once "" */
@@ -45,6 +45,9 @@ const GlobalStyles = () => {
       @keyframes ep-help-glare { 0%,90%,100%{opacity:0;} 94%{opacity:.95;} }
       @keyframes ep-cursor-blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
       @keyframes ep-help-ring { 0%{opacity:.75; transform:scale(1);} 100%{opacity:0; transform:scale(1.45);} }
+      @keyframes ep-guide-float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
+      @keyframes ep-guide-step-in { from{opacity:0; transform:translate3d(-4px,10px,0) scale(0.985);} to{opacity:1; transform:translate3d(0,0,0) scale(1);} }
+      @keyframes ep-guide-written-glow { from{opacity:0.82; text-shadow:0 0 0 rgba(255,255,255,0);} to{opacity:1; text-shadow:0 0 12px rgba(255,255,255,0.3);} }
       @keyframes ep-video-bob { 0%,100%{transform:translateY(0) rotate(0deg);} 50%{transform:translateY(-4px) rotate(-6deg);} }
       @keyframes ep-video-ring { 0%,100%{opacity:.32; transform:scale(1);} 50%{opacity:.72; transform:scale(1.08);} }
       @keyframes ep-bonus-border-spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
@@ -273,11 +276,28 @@ const GlobalStyles = () => {
       .ep-process-item.is-done .ep-process-node { background:linear-gradient(135deg,#14532d 0%, #16a34a 100%); }
       .ep-process-item.is-done .ep-process-card { border-color:#bbf7d0; background:#f0fdf4; }
       .ep-process-item.is-done .ep-process-time { border-color:#bbf7d0; background:#ecfdf5; color:#166534; }
-      .ep-guide-panel { position:fixed; right:14px; bottom:76px; width:min(360px, 92vw); border-radius:18px; border:1.5px solid #111; background:linear-gradient(180deg,#f8fafc 0%, #e5e7eb 100%); box-shadow:0 18px 32px rgba(2,6,23,0.28); z-index:9998; padding:10px; }
-      .ep-guide-bubble { position:relative; border:1.5px solid #111; border-radius:18px 18px 18px 6px; background:linear-gradient(180deg,#ffffff 0%, #f3f4f6 100%); box-shadow:0 8px 18px rgba(15,23,42,0.14); }
-      .ep-guide-bubble::after { content:""; position:absolute; right:14px; bottom:-9px; width:14px; height:14px; border-right:1.5px solid #111; border-bottom:1.5px solid #111; background:#f3f4f6; transform:rotate(45deg); border-bottom-right-radius:3px; }
-      .ep-guide-avatar-bw { filter:grayscale(1) contrast(1.1); }
+      .ep-guide-panel { position:fixed; left:14px; bottom:calc(14px + env(safe-area-inset-bottom, 0px)); width:min(420px, calc(100vw - 18px)); border-radius:20px; border:1.5px solid #000; background:linear-gradient(160deg,#ffffff 0%, #f1f1f1 100%); box-shadow:0 14px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.88), inset 0 -1px 0 rgba(0,0,0,0.12); z-index:9998; padding:11px; animation:ep-guide-float 3.8s ease-in-out infinite; }
+      .ep-guide-step-card { animation:ep-guide-step-in .26s ease both; }
+      .ep-guide-chat-row { display:grid; grid-template-columns:74px minmax(0,1fr); align-items:flex-end; gap:10px; }
+      .ep-guide-avatar-wrap { width:74px; height:88px; display:flex; align-items:flex-end; justify-content:center; transform:translateY(-7px); }
+      .ep-guide-avatar-bw { width:72px; height:86px; object-fit:contain; filter:grayscale(1) contrast(1.12) drop-shadow(0 8px 12px rgba(0,0,0,0.24)); }
+      .ep-guide-bubble { position:relative; border:1.5px solid #000; border-radius:16px 16px 16px 8px; background:linear-gradient(168deg,#ffffff 0%, #f4f4f4 72%, #ececec 100%); box-shadow:0 8px 18px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.1); padding:12px 12px 10px; }
+      .ep-guide-bubble::after { content:""; position:absolute; left:-8px; bottom:16px; width:13px; height:13px; border-left:1.5px solid #000; border-bottom:1.5px solid #000; background:#f2f2f2; transform:rotate(45deg); }
+      .ep-guide-heading { font-size:10px; font-weight:900; color:#18181b; letter-spacing:0.12em; text-transform:uppercase; }
+      .ep-guide-title { margin-top:4px; font-size:15px; font-weight:900; color:#0a0a0a; line-height:1.22; }
+      .ep-guide-text { margin-top:8px; color:#0a0a0a; line-height:1.2; font-size:30px; min-height:74px; font-family:"Allura", "Instrument Serif", cursive; letter-spacing:0.01em; }
+      .ep-guide-text.is-written { animation:ep-guide-written-glow .3s ease both; }
       .ep-guide-cursor { animation:ep-cursor-blink .8s steps(1) infinite; font-weight:900; }
+      .ep-guide-meta { margin-top:7px; font-size:10px; font-weight:800; color:#4b5563; text-align:right; letter-spacing:0.02em; }
+      .ep-guide-actions { margin-top:10px; display:flex; justify-content:flex-end; gap:8px; }
+      .ep-guide-action-btn { min-width:88px; padding:8px 13px; border-radius:11px; border:1.5px solid #000; font-size:12px; font-weight:900; cursor:pointer; font-family:"IBM Plex Sans, Geist, sans-serif"; transition:transform .12s ease, box-shadow .12s ease, background-color .14s ease, color .14s ease; box-shadow:0 4px 0 #000, 0 8px 14px rgba(0,0,0,0.16); }
+      .ep-guide-action-btn:hover { transform:translateY(-1px); }
+      .ep-guide-action-btn:active { transform:translateY(2px); box-shadow:0 2px 0 #000, 0 5px 10px rgba(0,0,0,0.14); }
+      .ep-guide-action-btn-light { background:#ffffff; color:#111111; }
+      .ep-guide-action-btn-light:hover { background:#0f0f0f; color:#ffffff; }
+      .ep-guide-action-btn-dark { background:#111111; color:#ffffff; }
+      .ep-guide-action-btn-dark:hover { background:#ffffff; color:#111111; }
+      .ep-guide-action-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; box-shadow:0 2px 0 #000, 0 4px 8px rgba(0,0,0,0.12); }
       .ep-auth-shell { min-height:100%; }
       .ep-auth-right { min-width:0; }
       .ep-auth-form-card { width:min(100%, 560px); margin:0 auto; }
@@ -530,7 +550,14 @@ const GlobalStyles = () => {
         .ep-footer-system { width:100% !important; justify-content:flex-start !important; }
         .ep-landing-balance-video-frame { height:210px !important; }
         .ep-landing-balance-video-side-art { width:min(48%, 190px) !important; max-height:84% !important; right:6px !important; bottom:6px !important; transform:none !important; opacity:0.9 !important; }
-        .ep-guide-panel { right:8px !important; bottom:70px !important; width:min(330px, 96vw) !important; }
+        .ep-guide-panel { left:8px !important; right:auto !important; bottom:calc(8px + env(safe-area-inset-bottom, 0px)) !important; width:min(360px, calc(100vw - 14px)) !important; padding:10px !important; }
+        .ep-guide-chat-row { grid-template-columns:62px minmax(0,1fr) !important; gap:8px !important; }
+        .ep-guide-avatar-wrap { width:62px !important; height:78px !important; transform:translateY(-4px) !important; }
+        .ep-guide-avatar-bw { width:58px !important; height:74px !important; }
+        .ep-guide-title { font-size:14px !important; }
+        .ep-guide-text { font-size:26px !important; min-height:66px !important; }
+        .ep-guide-actions { gap:9px !important; }
+        .ep-guide-action-btn { min-width:104px !important; padding:10px 14px !important; font-size:13px !important; }
       }
       * { box-sizing:border-box; margin:0; padding:0; }
       ::-webkit-scrollbar { width:5px; height:5px; }
