@@ -8004,7 +8004,6 @@ export default function App() {
   const [profileRow, setProfileRow] = useState(null);
   const [authMessage, setAuthMessage] = useState("");
   const [installHint, setInstallHint] = useState("");
-  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideTyped, setGuideTyped] = useState("");
@@ -8095,25 +8094,6 @@ export default function App() {
     observer.observe(root, { subtree: true, childList: true, characterData: true });
     return () => observer.disconnect();
   }, [displayCurrency]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onBeforeInstallPrompt = (event) => {
-      event.preventDefault();
-      setDeferredInstallPrompt(event);
-    };
-    const onAppInstalled = () => {
-      setInstallHint("App installed successfully.");
-      setTimeout(() => setInstallHint(""), 2000);
-      setDeferredInstallPrompt(null);
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onAppInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onAppInstalled);
-    };
-  }, []);
 
   const go = (p) => { setPrevPage(page); setPage(p); };
   const authUser = session?.user || null;
@@ -8395,7 +8375,7 @@ export default function App() {
     ? (IOS_APP_URL || browserInstallFallbackUrl)
     : (ANDROID_APK_URL || IOS_APP_URL || browserInstallFallbackUrl);
   const installLabel = "APP";
-  const handleInstall = async () => {
+  const handleInstall = () => {
     const hasApkLink = /\.apk(\?|#|$)/i.test(ANDROID_APK_URL);
     if (isIOSInstallClient && !IOS_APP_URL) {
       setInstallHint("On iPhone: tap Share, then Add to Home Screen.");
@@ -8403,14 +8383,6 @@ export default function App() {
       return;
     }
     if (!isIOSInstallClient && !hasApkLink) {
-      if (deferredInstallPrompt && typeof deferredInstallPrompt.prompt === "function") {
-        try {
-          await deferredInstallPrompt.prompt();
-          await deferredInstallPrompt.userChoice;
-        } catch (e) {}
-        setDeferredInstallPrompt(null);
-        return;
-      }
       setInstallHint("Open browser menu and tap Install App or Add to Home Screen.");
       setTimeout(() => setInstallHint(""), 3200);
     }
