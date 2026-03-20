@@ -28,6 +28,42 @@ const secureEqual = (a, b) => {
   return crypto.timingSafeEqual(aBuf, bBuf);
 };
 
+const ADMIN_ROLE_TOKENS = new Set([
+  "admin",
+  "admins",
+  "administrator",
+  "administrators",
+  "superadmin",
+  "super_admin",
+  "owner"
+]);
+const normalizeRoleToken = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+const parseRoleList = (raw) => {
+  if (Array.isArray(raw)) return raw.map((v) => normalizeRoleToken(v)).filter(Boolean);
+  if (typeof raw === "string") {
+    return raw
+      .split(/[,\|]/)
+      .map((v) => normalizeRoleToken(v))
+      .filter(Boolean);
+  }
+  return [];
+};
+const hasAdminRole = (profileData) => {
+  const profile = profileData && typeof profileData === "object" ? profileData : {};
+  const directRole = normalizeRoleToken(profile.role || profile.user_role || "");
+  const categoryRole = normalizeRoleToken(profile.category || profile.user_category || "");
+  const roleList = parseRoleList(profile.roles);
+  return (
+    ADMIN_ROLE_TOKENS.has(directRole) ||
+    ADMIN_ROLE_TOKENS.has(categoryRole) ||
+    roleList.some((role) => ADMIN_ROLE_TOKENS.has(role))
+  );
+};
+
 const isAdminUser = async (supabaseAdmin, userId) => {
   if (!userId) return false;
   const { data, error } = await supabaseAdmin
@@ -36,7 +72,7 @@ const isAdminUser = async (supabaseAdmin, userId) => {
     .eq("user_id", userId)
     .maybeSingle();
   if (error || !data) return false;
-  return String(data?.profile_data?.role || "").toLowerCase() === "admin";
+  return hasAdminRole(data?.profile_data);
 };
 
 export default async function handler(req, res) {

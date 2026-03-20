@@ -20,6 +20,31 @@ const CURRENCY_STORAGE_KEY = "ep:currency";
 const DISPLAY_CURRENCIES = { KES: "KES", USD: "USD" };
 let ACTIVE_DISPLAY_CURRENCY = DISPLAY_CURRENCIES.KES;
 const ORIGINAL_CURRENCY_TEXT = new WeakMap();
+const ADMIN_ROLE_TOKENS = new Set([
+  "admin",
+  "admins",
+  "administrator",
+  "administrators",
+  "superadmin",
+  "super_admin",
+  "owner"
+]);
+const normalizeRoleToken = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+const parseRoleList = (raw) => {
+  if (Array.isArray(raw)) return raw.map((v) => normalizeRoleToken(v)).filter(Boolean);
+  if (typeof raw === "string") {
+    return raw
+      .split(/[,\|]/)
+      .map((v) => normalizeRoleToken(v))
+      .filter(Boolean);
+  }
+  return [];
+};
+const hasAdminRoleToken = (value) => ADMIN_ROLE_TOKENS.has(normalizeRoleToken(value));
 
 const normalizeDisplayCurrency = (value) => {
   const raw = String(value || "").trim().toUpperCase();
@@ -267,6 +292,9 @@ async function loadProfileRow(userId) {
     if (error || !data) return null;
     const wallet = Array.isArray(data.wallets) ? data.wallets[0] : data.wallets;
     const meta = data.profile_data || {};
+    const profileRoles = parseRoleList(meta.roles);
+    const profileRole = normalizeRoleToken(meta.role || meta.user_role || "");
+    const profileCategory = String(meta.category || meta.user_category || "").trim();
     const rawStatus = String(data.status || "active");
     const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
     return {
@@ -281,8 +309,9 @@ async function loadProfileRow(userId) {
       referred_by: meta.referred_by || "",
       tier_selected: meta.tier_selected === true,
       tier_selected_at: meta.tier_selected_at || null,
-      role: String(meta.role || "client").toLowerCase(),
-      category: meta.category || "Client",
+      role: profileRole || "client",
+      category: profileCategory || "Client",
+      roles: profileRoles,
       status,
       tier: data.tier ?? 1,
       created_at: data.signup_at || null,
@@ -6782,6 +6811,13 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
     })();
     return () => { ignore = true; };
   }, [loadAdminData]);
+  useEffect(() => {
+    if (!supabase) return;
+    const id = setInterval(() => {
+      loadAdminData();
+    }, 20000);
+    return () => clearInterval(id);
+  }, [loadAdminData, supabase]);
 
   const summaryNum = useCallback((key, fallback = 0) => {
     const n = Number(adminSummary?.[key]);
@@ -8094,9 +8130,13 @@ export default function App() {
     poll();
     return () => { cancelled = true; };
   }, [SUPABASE_ENABLED, authReady, authUser?.id]);
-  const role = String(profileRow?.role || "").trim().toLowerCase();
-  const categoryRole = String(profileRow?.category || "").trim().toLowerCase();
-  const hasProfileAdminRole = role === "admin" || categoryRole === "admin" || categoryRole === "administrator";
+  const role = normalizeRoleToken(profileRow?.role || "");
+  const categoryRole = normalizeRoleToken(profileRow?.category || "");
+  const roleList = Array.isArray(profileRow?.roles) ? profileRow.roles : [];
+  const hasProfileAdminRole =
+    hasAdminRoleToken(role) ||
+    hasAdminRoleToken(categoryRole) ||
+    roleList.some((r) => hasAdminRoleToken(r));
   const isAdmin = hasProfileAdminRole;
   const profileReady = !SUPABASE_ENABLED || !authUser || (profileRow !== null && profileRow?.id === authUser.id);
 
