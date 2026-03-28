@@ -1,0 +1,7 @@
+# Legacy endpoints excluded to fit Vercel Hobby serverless function limit
+api/payments/paynecta/initiate.js
+api/payments/verify/paynecta.js
+api/v1/deposit/create.js
+api/v1/deposit/verify.js
+api/v1/webhook/fonbnk.js
+api/v1/webhook/pesapal.js

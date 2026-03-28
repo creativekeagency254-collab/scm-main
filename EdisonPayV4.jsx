@@ -5,6 +5,7 @@ import { Fonts, GlobalStyles } from "./src/features/layout/AppStyles.jsx";
 import { I, PaymentLogo, BrandMark, PAYMENT_ICON_SOURCES, AnimNum, LazyVideo } from "./src/features/shared/ui-primitives.jsx";
 import { TIERS, V_PRICE, getTierRequiredEarn, getTierDailyTotal, getTierBonusUnit } from "./src/features/config/tiers.js";
 import { AVATAR_PRESETS } from "./src/features/profile/avatar-presets.js";
+const DEFAULT_AVATAR = AVATAR_PRESETS[0] || "";
 
 /* "" SUPABASE (optional) "" */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -51,6 +52,25 @@ const parseBooleanFlag = (value) => {
   const raw = String(value).trim().toLowerCase();
   return ["1", "t", "true", "yes", "on", "y"].includes(raw);
 };
+const normalizeWithdrawalDays = (value) => {
+  const defaults = { tue: true, fri: true };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return defaults;
+  return {
+    tue: parseBooleanFlag(value.tue),
+    fri: parseBooleanFlag(value.fri)
+  };
+};
+const normalizeRuntimeSettingsRow = (row) => {
+  const source = row && typeof row === "object" ? row : {};
+  const videoPriceRaw = Number(source.video_price);
+  return {
+    settings_key: String(source.settings_key || "global"),
+    withdrawal_days: normalizeWithdrawalDays(source.withdrawal_days),
+    video_price: Number.isFinite(videoPriceRaw) && videoPriceRaw > 0 ? videoPriceRaw : 50,
+    maintenance_mode: source.maintenance_mode === true,
+    payout_mode: String(source.payout_mode || "manual").toLowerCase() === "auto" ? "auto" : "manual"
+  };
+};
 
 const normalizeDisplayCurrency = (value) => {
   const raw = String(value || "").trim().toUpperCase();
@@ -71,6 +91,68 @@ const toKesAmount = (amount, currency = getActiveDisplayCurrency()) => {
   if (currency === DISPLAY_CURRENCIES.USD) return Math.round(n * FX_KES_PER_USD);
   return n;
 };
+const clampProgressPercent = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n));
+};
+const DASH_NOTIF_LIMIT = 40;
+const makeNotificationId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return `notif_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+};
+const normalizeNotificationItem = (item, fallbackColor = "#64748B") => {
+  if (!item || typeof item !== "object") return null;
+  const title = String(item.title || item.t || "Account update").trim();
+  if (!title) return null;
+  const sub = String(item.sub || item.s || "").trim();
+  const createdRaw = item.createdAt || item.created_at || item.ts || null;
+  const parsed = createdRaw ? new Date(createdRaw) : null;
+  const createdAt = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();
+  const color = String(item.c || item.color || fallbackColor || "#64748B");
+  return {
+    id: String(item.id || item.key || makeNotificationId()),
+    ic: String(item.ic || "bell"),
+    title,
+    sub,
+    c: color,
+    createdAt,
+    time: String(item.time || "Just now"),
+    read: item.read === true
+  };
+};
+const normalizeNotificationList = (rows, fallbackColor = "#64748B") => {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const seen = new Set();
+  const out = [];
+  rows.forEach((entry) => {
+    const n = normalizeNotificationItem(entry, fallbackColor);
+    if (!n) return;
+    const key = String(n.id || "");
+    if (key && seen.has(key)) return;
+    if (key) seen.add(key);
+    out.push(n);
+  });
+  return out.slice(0, DASH_NOTIF_LIMIT);
+};
+const formatNotificationAge = (createdAt, fallback = "Just now") => {
+  if (!createdAt) return fallback;
+  const ts = Date.parse(createdAt);
+  if (!Number.isFinite(ts)) return fallback;
+  const diffSec = Math.floor((Date.now() - ts) / 1000);
+  if (!Number.isFinite(diffSec) || diffSec < 0) return fallback;
+  if (diffSec < 45) return "Just now";
+  if (diffSec < 3600) return `${Math.max(1, Math.floor(diffSec / 60))}m ago`;
+  if (diffSec < 86400) return `${Math.max(1, Math.floor(diffSec / 3600))}h ago`;
+  return `${Math.max(1, Math.floor(diffSec / 86400))}d ago`;
+};
+const formatProgressPercent = (value, digits = 2) => {
+  const safe = clampProgressPercent(value);
+  const fixed = safe.toFixed(digits);
+  const cleaned = fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  return `${cleaned}%`;
+};
+const toProgressWidth = (value) => `${clampProgressPercent(value).toFixed(4)}%`;
 const formatMoney = (kesAmount, opts = {}) => {
   const {
     currency = getActiveDisplayCurrency(),
@@ -445,9 +527,35 @@ async function upsertProfileRow(payload) {
 const REF_STORAGE_KEY = "ep:ref";
 const TIER_INTENT_KEY = "ep:tier-intent";
 let DEPOSIT_WALLET_BANNER_DISMISSED = false;
-const getBaseUrl = () => {
+const isLocalHostOrigin = (originValue = "") => {
+  const raw = String(originValue || "").trim();
+  if (!raw) return false;
+  try {
+    const parsed = new URL(raw);
+    const host = String(parsed.hostname || "").toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  } catch (e) {
+    return false;
+  }
+};
+const resolveClientRedirectOrigin = () => {
   if (typeof window === "undefined") return "https://edisonpay.co.ke";
-  return window.location.origin;
+  const configured = String(import.meta.env.VITE_AUTH_REDIRECT_URL || "").trim();
+  if (configured) {
+    try {
+      const parsed = new URL(configured);
+      if (!isLocalHostOrigin(parsed.origin)) return parsed.origin;
+      return parsed.origin;
+    } catch (e) {}
+  }
+  const current = String(window.location.origin || "").trim();
+  if (!current) return "https://edisonpay.co.ke";
+  if (isLocalHostOrigin(current)) return current;
+  if (current.startsWith("http://")) return current.replace(/^http:\/\//i, "https://");
+  return current;
+};
+const getBaseUrl = () => {
+  return resolveClientRedirectOrigin();
     };
 const getRefFromUrl = () => {
   if (typeof window === "undefined") return "";
@@ -533,6 +641,10 @@ const storeRef = (ref) => {
   if (!ref || typeof window === "undefined") return;
   try { localStorage.setItem(REF_STORAGE_KEY, ref); } catch (e) {}
     };
+const clearStoredRef = () => {
+  if (typeof window === "undefined") return;
+  try { localStorage.removeItem(REF_STORAGE_KEY); } catch (e) {}
+    };
 const storeTierIntent = (tierId) => {
   if (typeof window === "undefined") return;
   const n = Number(tierId);
@@ -557,7 +669,8 @@ const pickAvatarForSeed = (seed) => {
   const s = String(seed || "0");
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return AVATAR_PRESETS[h % AVATAR_PRESETS.length];
+  if (!AVATAR_PRESETS.length) return DEFAULT_AVATAR;
+  return AVATAR_PRESETS[h % AVATAR_PRESETS.length] || DEFAULT_AVATAR;
     };
 
 const resolveTierIndex = (value) => {
@@ -571,6 +684,31 @@ const resolveTierIndex = (value) => {
   const idx = TIERS.findIndex(t => t.name.toLowerCase() === raw || t.tag.toLowerCase() === raw);
   return idx >= 0 ? idx : null;
     };
+
+const getTierByValue = (value) => {
+  const idx = resolveTierIndex(value);
+  return idx !== null ? TIERS[idx] : null;
+};
+
+const getTierTopUpAmount = (fromTierValue, toTierValue) => {
+  const fromTier = getTierByValue(fromTierValue);
+  const toTier = getTierByValue(toTierValue);
+  if (!fromTier || !toTier) return 0;
+  const fromDeposit = Number(fromTier.deposit) || 0;
+  const toDeposit = Number(toTier.deposit) || 0;
+  return Math.max(toDeposit - fromDeposit, 0);
+};
+
+const TIER_TOP_UP_RULES = TIERS.slice(0, -1).map((tier, index) => {
+  const next = TIERS[index + 1];
+  return {
+    fromId: Number(tier.id),
+    toId: Number(next.id),
+    fromDeposit: Number(tier.deposit) || 0,
+    toDeposit: Number(next.deposit) || 0,
+    topUp: getTierTopUpAmount(tier.id, next.id)
+  };
+});
 
 const getTierCardImage = (tierId) => {
   const arts = [
@@ -1242,7 +1380,7 @@ function Auth({ type, go, from, authMessage }) {
     if (!f.email) { setErr("Email is required."); return; }
     if (!supabase) { setErr("Supabase is not configured."); return; }
     setLoading(true);
-    const redirectTo = `${window.location.origin}/?type=recovery`;
+    const redirectTo = `${resolveClientRedirectOrigin()}/?type=recovery`;
     const { error } = await supabase.auth.resetPasswordForEmail(f.email, { redirectTo });
     setLoading(false);
     if (error) { setErr(error.message); return; }
@@ -1285,7 +1423,8 @@ function Auth({ type, go, from, authMessage }) {
       go(from || "dashboard");
       return;
     }
-    const refBy = normalizeRefCode(f.ref);
+    const refBy = normalizeRefCode(f.ref || getStoredRef() || getRefFromUrl());
+    if (refBy) storeRef(refBy);
     const signupWithSupabase = async () => {
       const { data, error } = await supabase.auth.signUp({
         email: f.email,
@@ -1362,10 +1501,15 @@ function Auth({ type, go, from, authMessage }) {
     setInfo("");
     if (!supabase) { setErr("Supabase is not configured."); return; }
     setLoading(true);
-    const redirectTo = `${window.location.origin}/?auth=google`;
+    const refBy = normalizeRefCode(f.ref || getStoredRef() || getRefFromUrl());
+    if (refBy) storeRef(refBy);
+    const redirectTo = `${resolveClientRedirectOrigin()}/?auth=google${refBy ? `&ref=${encodeURIComponent(refBy)}` : ""}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo }
+      options: {
+        redirectTo,
+        queryParams: { prompt: "select_account" }
+      }
     });
     if (error) { setErr(error.message); setLoading(false); }
   };
@@ -2071,19 +2215,13 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
     if (!isClientTabControlled) setTabState(resolved);
     if (onTabChange) onTabChange(resolved);
   }, [isClientTabControlled, normalizeClientTab, onTabChange, tab]);
+  const authId = authUser?.id || null;
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifs, setNotifs] = useState(() => {
-    try {
-      const raw = localStorage.getItem("ep:dash-notifs");
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(parsed) && parsed.length) return parsed;
-    } catch (e) {}
-    return [
-      { ic:"check", title:"Withdrawal Approved", sub:"KES 1,200 sent to M-Pesa", time:"2h ago", c:"#059669", read:false },
-      { ic:"play",  title:"Bonus credited", sub:"14 videos  -  KES 280 earned", time:"5h ago", c:t.acc, read:false },
-      { ic:"gift",  title:"New referral joined", sub:"Amina K. signed up via your link", time:"1d ago", c:"#E8820C", read:false },
-    ];
-  });
+  const [notifs, setNotifs] = useState([]);
+  const notifStorageKey = useMemo(() => `ep:dash-notifs:${authId || "guest"}`, [authId]);
+  const notifWrapRef = useRef(null);
+  const seenClientTxRef = useRef(new Set());
+  const txSeededRef = useRef(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [depositFocus, setDepositFocus] = useState(false);
@@ -2094,7 +2232,6 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const [stripHidden, setStripHidden] = useState(false);
   const [stripToggleHidden, setStripToggleHidden] = useState(false);
   const lastScrollRef = useRef(0);
-  const authId = authUser?.id || null;
   const tierSelected = parseBooleanFlag(profileRow?.tier_selected);
   const [hasTierDeposit, setHasTierDeposit] = useState(null);
   const [depositCheckBusy, setDepositCheckBusy] = useState(false);
@@ -2103,9 +2240,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const progressLockTriggeredRef = useRef(false);
   const [profile, setProfile] = useState({
     id: null,
-    name: "Alex Johnson",
-    email: "alex@example.com",
-    phone: "0712 345 678",
+    name: "",
+    email: "",
+    phone: "",
     avatar: "",
     balance: null,
     joinNumber: null,
@@ -2114,9 +2251,9 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   });
   const [draftProfile, setDraftProfile] = useState({
     id: null,
-    name: "Alex Johnson",
-    email: "alex@example.com",
-    phone: "0712 345 678",
+    name: "",
+    email: "",
+    phone: "",
     avatar: "",
     balance: null,
     joinNumber: null,
@@ -2133,9 +2270,21 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const [clientRefs, setClientRefs] = useState([]);
   const [clientRefTable, setClientRefTable] = useState([]);
   const [dashboardOverview, setDashboardOverview] = useState(null);
+  const [clientRefreshTick, setClientRefreshTick] = useState(0);
   useEffect(() => {
-    try { localStorage.setItem("ep:dash-notifs", JSON.stringify(notifs)); } catch (e) {}
-  }, [notifs]);
+    let next = [];
+    try {
+      const raw = localStorage.getItem(notifStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      next = normalizeNotificationList(parsed, t.acc);
+    } catch (e) {
+      next = [];
+    }
+    setNotifs(next);
+  }, [notifStorageKey, t.acc]);
+  useEffect(() => {
+    try { localStorage.setItem(notifStorageKey, JSON.stringify(normalizeNotificationList(notifs, t.acc))); } catch (e) {}
+  }, [notifs, notifStorageKey, t.acc]);
   const baseEarn = 0;
   const USE_LOCAL_WALLET = !SUPABASE_ENABLED;
   const [earnBonus, setEarnBonus] = useState(() => {
@@ -2225,7 +2374,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
       setDepositCheckBusy(false);
     })();
     return () => { ignore = true; };
-  }, [authId, t?.id, USE_LOCAL_WALLET]);
+  }, [authId, t?.id, USE_LOCAL_WALLET, clientRefreshTick]);
   useEffect(() => {
     if (!depositRequired) {
       setDepositCountdown(DEPOSIT_AUTO_OPEN_SECS);
@@ -2256,12 +2405,13 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
     setTab("withdraw");
   }, [depositRequired, tab]);
   const earn = Number.isFinite(serverBalance) ? serverBalance : (baseEarn + earnBonus);
-  const goal = getTierDailyTotal(t) * 7;
-  const pct = Math.round((earn / goal) * 100);
+  const weeklyGoalFallback = getTierDailyTotal(t) * 7;
   const profileName = profile.name || "Account";
   const profileParts = profileName.split(" ").filter(Boolean);
   const profileInitials = profileParts.map(n=>n[0]).join("").slice(0,2).toUpperCase() || "EP";
   const profileShort = profileParts.length > 1 ? `${profileParts[0]} ${profileParts[1][0]}.` : profileName;
+  const profileAvatar = profile.avatar || pickAvatarForSeed(profile.id || profile.email || authId || profileName) || DEFAULT_AVATAR;
+  const draftAvatarPreview = draftProfile.avatar || profileAvatar;
   const balanceVal = Number(profile.balance);
   const baseBalance = Number.isFinite(balanceVal) ? balanceVal : (Number.isFinite(serverBalance) ? serverBalance : (baseEarn + earnBonus));
   const balance = Number.isFinite(serverBalance) ? serverBalance : (Number.isFinite(walletBalance) ? walletBalance : baseBalance);
@@ -2275,17 +2425,16 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const refCode = normalizeRefCode(profile.refCode) || makeRefCode(profile.email || profile.id || joinLabel);
   const nextTier = TIERS[t.id];
   const canUpgrade = !!nextTier;
+  const nextTierTopUpAmount = nextTier ? getTierTopUpAmount(t.id, nextTier.id) : 0;
   const settingsNeedsUnlock = hasTierDeposit === false;
   const currentTierDeposit = Number(t?.deposit) || 0;
-  const nextTierDeposit = Number(nextTier?.deposit) || 0;
   const settingsUpgradeAmount = settingsNeedsUnlock
     ? currentTierDeposit
-    : (nextTier ? Math.max(nextTierDeposit - currentTierDeposit, 0) : 0);
+    : (nextTier ? getTierTopUpAmount(t.id, nextTier.id) : 0);
   const settingsTargetTierId = settingsNeedsUnlock ? t.id : (nextTier?.id || t.id);
   const settingsCanUpgradePay = settingsUpgradeAmount > 0;
   const overviewProgressTarget = Number(dashboardOverview?.progress_target_amount);
   const overviewProgressEarned = Number(dashboardOverview?.progress_earned_amount);
-  const overviewProgressPct = Number(dashboardOverview?.progress_percent);
   const progressBaseDeposit = Number.isFinite(Number(firstDepositAmount)) && Number(firstDepositAmount) > 0
     ? Number(firstDepositAmount)
     : (Number(t?.deposit) || 0);
@@ -2324,13 +2473,14 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
     Number.isFinite(overviewProgressEarned) && overviewProgressEarned >= 0
       ? overviewProgressEarned
       : Math.max(0, progressTxTotals.earnings + progressReferralTotal);
-  const progressPctRaw =
-    Number.isFinite(overviewProgressPct) && overviewProgressPct >= 0
-      ? overviewProgressPct
-      : (progressTarget > 0 ? (progressEarnedTotal / progressTarget) * 100 : 0);
-  const progressPct = Math.max(0, Math.min(100, Math.round(progressPctRaw)));
-  const progressFill = progressPct <= 60 ? "#22C55E" : progressPct <= 85 ? "#EAB308" : "#F97316";
+  const progressUiTarget = progressTarget > 0 ? progressTarget : (weeklyGoalFallback > 0 ? weeklyGoalFallback : 1);
+  const progressPct = clampProgressPercent((progressEarnedTotal / progressUiTarget) * 100);
+  const progressPctLabel = formatProgressPercent(progressPct, 2);
+  const progressEarnedDisplay = Math.max(0, Number.isFinite(progressEarnedTotal) ? progressEarnedTotal : 0);
+  const progressFill = "#22C55E";
   const progressTrack = "#DCE4EE";
+  const goal = progressUiTarget;
+  const pct = progressPct;
   useEffect(() => {
     if (!supabase || !authId || progressLockBusy) return;
     if (progressTarget <= 0 || progressEarnedTotal < progressTarget) {
@@ -2367,7 +2517,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   const canWithdraw = ["Tuesday","Friday"].includes(new Date().toLocaleDateString("en-US",{weekday:"long"}));
   const SIDEBAR_W = isMobile ? (isTiny ? 220 : 260) : 260;
   const ICON_W = 60;
-  const headingFont = "Sora, Geist, sans-serif";
+  const headingFont = "Sora, Manrope, Geist, sans-serif";
   const pagePad = isMobile ? (isTiny ? "10px 12px 126px" : "14px 16px 132px") : "26px 34px 48px";
   const headerPad = isMobile ? (isTiny ? "10px 12px 0" : "12px 16px 0") : "18px 28px 0";
   const upgradeBtnActive = {
@@ -2400,22 +2550,123 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
     if (tab !== "withdraw" && depositFocus) setDepositFocus(false);
   }, [tab, depositFocus]);
   const pushNotif = useCallback((item) => {
-    if (!item) return;
+    if (!item || typeof item !== "object") return;
     setNotifs(prev => {
-      const base = Array.isArray(prev) ? prev : [];
-      return [
+      const base = normalizeNotificationList(prev, t.acc);
+      const nextItem = normalizeNotificationItem(
         {
-          ic: item.ic || "bell",
-          title: item.title || "Account update",
-          sub: item.sub || "",
-          time: item.time || "Just now",
-          c: item.c || t.acc,
+          ...item,
+          id: item.id || makeNotificationId(),
+          createdAt: item.createdAt || new Date().toISOString(),
           read: false
         },
-        ...base
-      ].slice(0, 40);
+        t.acc
+      );
+      if (!nextItem) return base;
+      const nextTs = Date.parse(nextItem.createdAt || "");
+      const duplicate = base.some((n) => {
+        if (n.id === nextItem.id) return true;
+        if (n.title !== nextItem.title) return false;
+        if ((n.sub || "") !== (nextItem.sub || "")) return false;
+        const ts = Date.parse(n.createdAt || "");
+        if (!Number.isFinite(ts) || !Number.isFinite(nextTs)) return false;
+        return Math.abs(nextTs - ts) < 12_000;
+      });
+      if (duplicate) return base;
+      return [nextItem, ...base].slice(0, DASH_NOTIF_LIMIT);
     });
   }, [t.acc]);
+  const markNotifRead = useCallback((notifId) => {
+    if (!notifId) return;
+    setNotifs((prev) => (Array.isArray(prev) ? prev : []).map((n) => (
+      String(n?.id || "") === String(notifId) ? { ...n, read: true } : n
+    )));
+  }, []);
+  const markAllNotifsRead = useCallback(() => {
+    setNotifs((prev) => {
+      const rows = Array.isArray(prev) ? prev : [];
+      if (!rows.some((n) => n && n.read !== true)) return rows;
+      return rows.map((n) => ({ ...n, read: true }));
+    });
+  }, []);
+  const unreadNotifCount = useMemo(() => (
+    Array.isArray(notifs) ? notifs.reduce((sum, n) => sum + (n?.read === true ? 0 : 1), 0) : 0
+  ), [notifs]);
+  const txNotifKey = useCallback((tx, i = 0) => {
+    if (!tx || typeof tx !== "object") return "";
+    return String(
+      tx.id ||
+      tx.tx_id ||
+      [
+        tx.text || tx.title || "",
+        tx.sub || "",
+        tx.time || tx.createdAt || "",
+        Number(tx.amt || tx.amount || 0),
+        i
+      ].join("|")
+    );
+  }, []);
+  useEffect(() => {
+    seenClientTxRef.current = new Set();
+    txSeededRef.current = false;
+  }, [authId]);
+  useEffect(() => {
+    const rows = Array.isArray(clientTx) ? clientTx : [];
+    if (!rows.length) return;
+    const seen = seenClientTxRef.current;
+    if (!txSeededRef.current) {
+      rows.forEach((tx, i) => {
+        const key = txNotifKey(tx, i);
+        if (key) seen.add(key);
+      });
+      txSeededRef.current = true;
+      return;
+    }
+    const fresh = [];
+    rows.forEach((tx, i) => {
+      const key = txNotifKey(tx, i);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      fresh.push(tx);
+    });
+    if (!fresh.length) return;
+    fresh
+      .slice(0, 4)
+      .reverse()
+      .forEach((tx) => {
+        const amount = Number(tx?.amt);
+        const defaultSub = Number.isFinite(amount) && amount !== 0
+          ? `${formatMoney(Math.abs(amount), { currency: DISPLAY_CURRENCIES.KES })} activity detected.`
+          : "New activity on your account.";
+        pushNotif({
+          id: tx?.id || tx?.tx_id || undefined,
+          ic: tx?.ic || "wallet",
+          title: tx?.text || tx?.title || "Wallet update",
+          sub: tx?.sub || defaultSub,
+          c: tx?.c || t.acc,
+          time: tx?.time || "Just now",
+          createdAt: tx?.created_at || tx?.createdAt || new Date().toISOString()
+        });
+      });
+  }, [clientTx, pushNotif, t.acc, txNotifKey]);
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onPointerDown = (event) => {
+      if (!notifWrapRef.current) return;
+      if (!notifWrapRef.current.contains(event.target)) setNotifOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setNotifOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [notifOpen]);
   const addClientTx = useCallback((tx) => {
     setClientTx(prev => [tx, ...(Array.isArray(prev) ? prev : [])]);
     if (!tx) return;
@@ -2517,7 +2768,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
     };
     setProfile(prev => ({ ...prev, ...next }));
     setDraftProfile(prev => ({ ...prev, ...next }));
-  }, [profileRow?.id]);
+  }, [profileRow]);
 
   useEffect(() => {
     const fn = () => {
@@ -2696,13 +2947,48 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
       }
     })();;
     return () => { ignore = true; };
-  }, [t.acc, t.deposit, authId, refCode]);
+  }, [t.acc, t.deposit, authId, refCode, clientRefreshTick]);
 
+  useEffect(() => {
+    if (!supabase || !authId || USE_LOCAL_WALLET) return;
+    let pending = false;
+    const queueRefresh = () => {
+      if (pending) return;
+      pending = true;
+      setTimeout(() => {
+        pending = false;
+        setClientRefreshTick((tick) => tick + 1);
+      }, 150);
+    };
+    const channel = supabase
+      .channel(`client-live-${authId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${authId}` }, queueRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "deposits", filter: `user_id=eq.${authId}` }, queueRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments", filter: `user_id=eq.${authId}` }, queueRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "referrals", filter: `referrer_id=eq.${authId}` }, queueRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payout_requests", filter: `user_id=eq.${authId}` }, queueRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "users", filter: `user_id=eq.${authId}` }, queueRefresh)
+      .subscribe();
+    return () => {
+      try { supabase.removeChannel(channel); } catch (e) {}
+    };
+  }, [authId, USE_LOCAL_WALLET]);
+
+  const requiredVideosToday = Number(dashboardOverview?.required_videos_today);
+  const remainingVideos = Math.max(
+    0,
+    (Number(t?.videos) || 0) - (Number.isFinite(requiredVideosToday) ? requiredVideosToday : 0)
+  );
+  const videosBadge = remainingVideos > 0 ? `${remainingVideos} left` : null;
+  const activeReferralCountRaw = Number(dashboardOverview?.active_referral_count);
+  const referralsBadge = Number.isFinite(activeReferralCountRaw)
+    ? (activeReferralCountRaw > 0 ? String(activeReferralCountRaw) : null)
+    : (Array.isArray(clientRefs) && clientRefs.length > 0 ? String(clientRefs.length) : null);
   const navItems = [
     { id:"overview",  label:"Overview",  ic:"grid"   },
-    { id:"videos",    label:"Videos",    ic:"play",  badge: "2 left" },
+    { id:"videos",    label:"Videos",    ic:"play",  badge: videosBadge },
     { id:"analytics", label:"Analytics", ic:"chart"  },
-    { id:"referrals", label:"Referrals", ic:"gift",  badge: "8" },
+    { id:"referrals", label:"Referrals", ic:"gift",  badge: referralsBadge },
     { id:"withdraw",  label:"Wallet",    ic:"wallet" },
     { id:"settings",  label:"Settings",  ic:"settings" },
   ];
@@ -2855,7 +3141,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
   };
 
   return (
-    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#fff", fontFamily:"IBM Plex Sans, Geist, sans-serif", color:"#111", position:"relative" }}>
+    <div style={{ display:"flex", height:"calc(100vh - 44px)", background:"#fff", fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif", color:"#111", position:"relative", lineHeight:1.42 }}>
 
       {/* "" Mobile overlay "" */}
       <div className={`ep-dash-overlay${isMobile && open ? " open" : ""}`} onClick={closeSidebar}
@@ -2922,7 +3208,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2 }}>
                 <span>Upgrade to {nextTier?.name}</span>
                 <span style={{ fontSize:10, fontWeight:800, color: canUpgrade ? "#111" : "#6B7280" }}>
-                  {nextTier ? "Upgrade anytime" : "Max tier"}
+                  {nextTier ? `Add ${formatMoney(nextTierTopUpAmount)}` : "Max tier"}
                 </span>
               </div>
             </button>
@@ -2931,16 +3217,16 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
           {open && isMobile && (
             <div style={{ margin:"10px 0 0" }}>
               <button onClick={()=>setQuickOpen(o=>!o)}
-                style={{ width:"100%", padding:"9px 12px", borderRadius:9, border:"1px solid #E8E8E8", background:"#FAFAFA", fontSize:12, fontWeight:800, color:"#555", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, fontFamily:"Geist,sans-serif" }}>
+                style={{ width:"100%", padding:"9px 12px", borderRadius:9, border:"1px solid #E8E8E8", background:"#FAFAFA", fontSize:12, fontWeight:800, color:"#555", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, fontFamily:"Manrope, Geist, sans-serif" }}>
                 Quick Actions
                 <I n="chevR" s={11} c="#BBB"/>
               </button>
               {quickOpen && (
                 <div style={{ marginTop:8, display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                  <button onClick={()=>setTab("videos")} style={{ padding:"8px 10px", background:"#111", color:"#fff", border:"none", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                  <button onClick={()=>setTab("videos")} style={{ padding:"8px 10px", background:"#111", color:"#fff", border:"none", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
                     <I n="play" s={11} c="#fff"/> Videos
                   </button>
-                  <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 10px", background:"#F5F5F5", color:"#111", border:"1px solid #E8E8E8", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                  <button onClick={()=>setTab("withdraw")} style={{ padding:"8px 10px", background:"#F5F5F5", color:"#111", border:"1px solid #E8E8E8", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
                     <I n="wallet" s={11} c="#111"/> Withdraw
                   </button>
                 </div>
@@ -2999,7 +3285,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                 fontWeight:800,
                 fontSize:12,
                 cursor:"pointer",
-                fontFamily:"Geist,sans-serif",
+                fontFamily:"Manrope, Geist, sans-serif",
                 display:"flex",
                 alignItems:"center",
                 justifyContent:"center",
@@ -3069,17 +3355,17 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               <I n="trendUp" s={14} c={canUpgrade ? "#111" : "#6B7280"}/>
             </span>
             <span style={{ fontSize:11, fontWeight:900, color: canUpgrade ? "#111" : "#6B7280", letterSpacing:"0.02em" }}>
-              {nextTier ? "Upgrade" : "Max Tier"}
+              {nextTier ? `Upgrade ${formatMoney(nextTierTopUpAmount)}` : "Max Tier"}
             </span>
           </button>
 
           {/* Page heading */}
           {!isMobile && (
             <div style={{ display:"flex", flexDirection:"column", gap:2, minWidth:0, marginLeft:2 }}>
-              <span style={{ fontSize:16, fontWeight:900, color:"#0F172A", letterSpacing:"-0.03em", lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+              <span style={{ fontSize:16, fontWeight:900, color:"#0F172A", letterSpacing:"-0.03em", lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", fontFamily:headingFont }}>
                 {navItems.find(n=>n.id===tab)?.label || "Overview"}
               </span>
-              <span style={{ fontSize:10, fontWeight:700, color:"#64748B", letterSpacing:"0.08em", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+              <span style={{ fontSize:10, fontWeight:700, color:"#64748B", letterSpacing:"0.08em", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", fontFamily:headingFont }}>
                 {t.name.toUpperCase()} TIER DASHBOARD
               </span>
             </div>
@@ -3110,32 +3396,44 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
           <div style={{ flex:1, minWidth:0 }}/>
 
           {/* Notifications */}
-          <div style={{ position:"relative" }}>
+          <div ref={notifWrapRef} style={{ position:"relative" }}>
             <button onClick={()=>{setNotifOpen(o=>!o); setProfileOpen(false);}}
               className="ep-dash-icon-btn"
               style={{ width:36, height:36, borderRadius:9, border:"1.5px solid #E8E8E8", background:"#FAFAFA", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
               <I n="bell" s={15} c="#666"/>
-              {notifs.some(n=>!n.read) && (
-                <div style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:"#EF4444", border:"1.5px solid #fff" }}/>
+              {unreadNotifCount > 0 && (
+                <div style={{ position:"absolute", top:3, right:3, minWidth:16, height:16, borderRadius:999, background:"#EF4444", border:"1.5px solid #fff", color:"#fff", fontSize:9, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 3px", lineHeight:1 }}>
+                  {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                </div>
               )}
             </button>
             {notifOpen && (
               <div style={{ position:"absolute", top:44, right:0, width:300, background:"#fff", border:"1px solid #E8E8E8", borderRadius:14, boxShadow:"0 8px 32px rgba(0,0,0,0.12)", zIndex:999, padding:"14px 0", animation:"scaleIn .18s ease both", transformOrigin:"top right" }}>
                 <div style={{ padding:"0 16px 10px", borderBottom:"1px solid #F5F5F5", display:"flex", justifyContent:"space-between" }}>
                   <span style={{ fontSize:13, fontWeight:800 }}>Notifications</span>
-                  <span onClick={()=>setNotifs(ns=>ns.map(n=>({ ...n, read:true })))} style={{ fontSize:11, color:t.acc, fontWeight:700, cursor:"pointer" }}>Mark all read</span>
+                  <span onClick={markAllNotifsRead} style={{ fontSize:11, color:t.acc, fontWeight:700, cursor:"pointer" }}>Mark all read</span>
                 </div>
-                {notifs.map((n,i)=>(
-                  <div key={i} style={{ display:"flex", gap:10, padding:"11px 16px", background:n.read?"#fff":"#FAFAFA", margin:"0 8px 4px", borderRadius:10, opacity:n.read?0.7:1 }}>
-                    <div style={{ width:32, height:32, borderRadius:9, background:`${n.c}18`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      <I n={n.ic} s={14} c={n.c}/>
-                    </div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:"#111" }}>{n.title}</div>
-                      <div style={{ fontSize:11, color:"#888", marginTop:2 }}>{n.sub}</div>
-                    </div>
-                    <span style={{ fontSize:10, color:"#CCC", whiteSpace:"nowrap" }}>{n.time}</span>
+                {notifs.length === 0 && (
+                  <div style={{ padding:"14px 16px", fontSize:12, color:"#9CA3AF", textAlign:"center" }}>
+                    No notifications yet.
                   </div>
+                )}
+                {notifs.map((n,i)=>(
+                  <button
+                    key={n.id || `${n.title}-${i}`}
+                    type="button"
+                    onClick={() => markNotifRead(n.id)}
+                    style={{ width:"calc(100% - 16px)", border:"none", textAlign:"left", display:"flex", gap:10, padding:"11px 16px", background:n.read?"#fff":"#FAFAFA", margin:"0 8px 4px", borderRadius:10, opacity:n.read?0.7:1, cursor:"pointer" }}
+                  >
+                    <div style={{ width:32, height:32, borderRadius:9, background:`${n.c || "#64748B"}18`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <I n={n.ic || "bell"} s={14} c={n.c || "#64748B"}/>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.title}</div>
+                      <div style={{ fontSize:11, color:"#888", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.sub}</div>
+                    </div>
+                    <span style={{ fontSize:10, color:"#CCC", whiteSpace:"nowrap" }}>{formatNotificationAge(n.createdAt, n.time)}</span>
+                  </button>
                 ))}
               </div>
             )}
@@ -3174,11 +3472,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                   flexShrink:0
                 }}
               >
-                {profile.avatar ? (
-                  <img src={profile.avatar} alt={profileName} style={{ display:"block", width:"100%", height:"100%", objectFit:"cover" }} />
-                ) : (
-                  <span style={{ fontSize:11, fontWeight:900, color:"#fff" }}>{profileInitials}</span>
-                )}
+                <img src={profileAvatar} alt={profileName} style={{ display:"block", width:"100%", height:"100%", objectFit:"cover" }} />
               </div>
               {!isMobile && <span style={{ fontSize:12, fontWeight:700, color:"#111", whiteSpace:"nowrap" }}>{profileShort}</span>}
               {!isMobile && <I n="chevR" s={12} c="#CCC"/>}
@@ -3187,11 +3481,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               <div style={{ position:"absolute", top:46, right:0, width:220, background:"#fff", border:"1px solid #E8E8E8", borderRadius:14, boxShadow:"0 8px 32px rgba(0,0,0,0.12)", zIndex:999, padding:"8px", animation:"scaleIn .18s ease both", transformOrigin:"top right" }}>
                 <div style={{ padding:"10px 12px 12px", borderBottom:"1px solid #F5F5F5", marginBottom:4, display:"flex", gap:10, alignItems:"center" }}>
                   <div style={{ width:46, height:46, borderRadius:"50%", background:"linear-gradient(135deg,#111,#333)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"2px solid #111", boxShadow:"0 6px 14px rgba(0,0,0,0.18)" }}>
-                    {profile.avatar ? (
-                      <img src={profile.avatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                    ) : (
-                      <span style={{ fontSize:14, fontWeight:900, color:"#fff" }}>{profileInitials}</span>
-                    )}
+                    <img src={profileAvatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                   </div>
                   <div style={{ minWidth:0 }}>
                     <div style={{ fontSize:13, fontWeight:800 }}>{profileName}</div>
@@ -3250,15 +3540,15 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
             <div style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
               <div style={{ minWidth:0 }}>
                 <p style={{ fontSize:12, color:"#64748B", fontWeight:700, letterSpacing:"0.03em" }}>
-                  {today}  -  <span style={{ color:t.acc, fontWeight:800 }}>{t.name} Tier</span>  -  KES {earn.toLocaleString()} earned
+                  {today}  -  <span style={{ color:t.acc, fontWeight:800 }}>{t.name} Tier</span>  -  KES {progressEarnedDisplay.toLocaleString()} earned
                 </p>
                 <div style={{ marginTop:6, width:"min(420px, 60vw)" }}>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
                     <span style={{ fontSize:10, fontWeight:900, color:"#334155", letterSpacing:"0.08em", textTransform:"uppercase" }}>Progress</span>
-                    <span style={{ fontSize:10, fontWeight:800, color:"#475569" }}>{progressPct}%</span>
+                    <span style={{ fontSize:10, fontWeight:800, color:"#475569" }}>{progressPctLabel}</span>
                   </div>
                   <div style={{ height:7, borderRadius:999, background:progressTrack, border:"1px solid rgba(15,23,42,0.08)", overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${progressPct}%`, borderRadius:999, background:progressFill, transition:"width .3s ease" }} />
+                    <div style={{ height:"100%", width:toProgressWidth(progressPct), borderRadius:999, background:progressFill, transition:"width .55s ease-in-out" }} />
                   </div>
                 </div>
               </div>
@@ -3284,22 +3574,22 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               <div style={{ width:"100%" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
                   <span style={{ fontSize:10, fontWeight:900, color:"#334155", letterSpacing:"0.08em", textTransform:"uppercase" }}>Progress</span>
-                  <span style={{ fontSize:10, fontWeight:800, color:"#475569" }}>{progressPct}%</span>
+                  <span style={{ fontSize:10, fontWeight:800, color:"#475569" }}>{progressPctLabel}</span>
                 </div>
                 <div style={{ height:7, borderRadius:999, background:progressTrack, border:"1px solid rgba(15,23,42,0.08)", overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${progressPct}%`, borderRadius:999, background:progressFill, transition:"width .3s ease" }} />
+                  <div style={{ height:"100%", width:toProgressWidth(progressPct), borderRadius:999, background:progressFill, transition:"width .55s ease-in-out" }} />
                 </div>
               </div>
               <div className="ep-dash-strip-mobile-meta" style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#555", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>{today}</span>
-                <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#111", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>KES {earn.toLocaleString()} earned</span>
+                <span style={{ fontSize:isTiny?9:10, fontWeight:700, color:"#111", background:"#fff", border:"1px solid #E8E8E8", borderRadius:99, padding:"4px 8px" }}>KES {progressEarnedDisplay.toLocaleString()} earned</span>
               </div>
               {tab !== "overview" && (
                 <div style={{ display:"grid", gridTemplateColumns: isTiny ? "1fr" : "1fr 1fr", gap:8 }}>
-                  <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+                  <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif" }}>
                     Watch Now
                   </button>
-                  <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+                  <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1.5px solid #E8E8E8", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif" }}>
                     Withdraw
                   </button>
                 </div>
@@ -3351,7 +3641,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                 </div>
               </div>
               <button onClick={()=>go("tier-select")}
-                style={{ padding:"9px 14px", borderRadius:10, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap" }}>
+                style={{ padding:"9px 14px", borderRadius:10, border:"1.5px solid #111", background:"#111", color:"#fff", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", whiteSpace:"nowrap" }}>
                 Choose Tier
               </button>
             </div>
@@ -3377,7 +3667,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                   </div>
                 </div>
                 <button onClick={() => goDeposit(true)}
-                  style={{ padding:isMobile ? "9px 13px" : "10px 16px", borderRadius:10, border:"1px solid rgba(187,247,208,0.7)", background:"linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:"#ecfdf5", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap", boxShadow:"0 8px 18px rgba(22,163,74,0.28)", alignSelf:"flex-start" }}>
+                  style={{ padding:isMobile ? "9px 13px" : "10px 16px", borderRadius:10, border:"1px solid rgba(187,247,208,0.7)", background:"linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:"#ecfdf5", fontSize:12, fontWeight:900, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", whiteSpace:"nowrap", boxShadow:"0 8px 18px rgba(22,163,74,0.28)", alignSelf:"flex-start" }}>
                   Pay Now
                 </button>
               </div>
@@ -3392,7 +3682,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
               </div>
             </div>
           )}
-          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady} dashboardSummary={dashboardOverview}/>}
+          {tab==="overview"  && <OverviewContent  t={t} earn={earn} goal={goal} pct={pct} progressEarned={progressEarnedTotal} balance={balance} joinCardLabel={joinCardLabel} setTab={setTab} isMobile={isMobile} activityData={activityFeed} referralData={referralFeed} refCode={refCode} goDeposit={goDeposit} stripHidden={stripHidden} mediaEager={overviewMediaReady} dashboardSummary={dashboardOverview}/>}
           {tab==="videos"    && (
             <VideosContent
               t={t}
@@ -3415,11 +3705,11 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                   </div>
                   <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                     <button onClick={() => onReplayGuide?.()}
-                      style={{ padding:"8px 14px", borderRadius:9, border:"1.5px solid #111", background:"#fff", color:"#111", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif" }}>
+                      style={{ padding:"8px 14px", borderRadius:9, border:"1.5px solid #111", background:"#fff", color:"#111", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif" }}>
                       Guide / Tutorial
                     </button>
                     <button onClick={saveProfile} disabled={!profileDirty || profileSaving}
-                      style={{ padding:"8px 14px", borderRadius:9, border:"none", background: profileDirty ? "#111" : "#E5E7EB", color: profileDirty ? "#fff" : "#9CA3AF", fontSize:12, fontWeight:800, cursor: profileDirty ? "pointer" : "not-allowed", fontFamily:"Geist,sans-serif" }}>
+                      style={{ padding:"8px 14px", borderRadius:9, border:"none", background: profileDirty ? "#111" : "#E5E7EB", color: profileDirty ? "#fff" : "#9CA3AF", fontSize:12, fontWeight:800, cursor: profileDirty ? "pointer" : "not-allowed", fontFamily:"Manrope, Geist, sans-serif" }}>
                       {profileSaving ? "Saving..." : "Save Changes"}
                     </button>
                   </div>
@@ -3431,34 +3721,49 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                   </div>
                 )}
 
-                <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "140px 1fr", gap:16 }}>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-                    <div style={{ width:88, height:88, borderRadius:"50%", background:"#111", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"3px solid #F3F4F6" }}>
-                      {draftProfile.avatar ? (
-                        <img src={draftProfile.avatar} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                      ) : (
-                        <span style={{ fontSize:20, fontWeight:900, color:"#fff" }}>{profileInitials}</span>
-                      )}
+                <div style={{ display:"grid", gridTemplateColumns: "1fr", gap:16 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                    <div style={{ width:96, height:96, borderRadius:"50%", background:"#111", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"3px solid #F3F4F6", boxShadow:"0 10px 24px rgba(15,23,42,0.16)" }}>
+                      <img src={draftAvatarPreview} alt={profileName} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                     </div>
-                    <label style={{ fontSize:10, fontWeight:800, color:"#666", cursor:"pointer", background:"#F8FAFC", border:"1px solid #E5E7EB", padding:"6px 10px", borderRadius:9 }}>
-                      Upload Photo
-                      <input type="file" accept="image/*" onChange={e=>handleAvatarFile(e.target.files?.[0])} style={{ display:"none" }} />
-                    </label>
-                    {draftProfile.avatar && (
-                      <button onClick={() => setProfileField("avatar", "")} style={{ fontSize:10, fontWeight:800, color:"#EF4444", background:"transparent", border:"none", cursor:"pointer" }}>
-                        Remove
-                      </button>
-                    )}
-                    <div style={{ width:"100%", marginTop:6 }}>
-                      <div style={{ fontSize:10, fontWeight:800, color:"#666", marginBottom:6, textAlign:"center" }}>Choose Avatar</div>
-                      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
-                        {AVATAR_PRESETS.map((src,i)=>(
-                          <button key={i} onClick={()=>setProfileField("avatar", src)}
-                            style={{ padding:2, borderRadius:"50%", border: draftProfile.avatar===src ? "2px solid #111" : "1px solid #E5E7EB", background:"#fff", cursor:"pointer" }}>
-                            <img src={src} alt={`Avatar ${i+1}`} style={{ width:36, height:36, borderRadius:"50%" }} />
+                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      <div style={{ fontSize:11, color:"#64748B", fontWeight:700 }}>Choose a cartoon avatar or upload your own photo.</div>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <label style={{ fontSize:10, fontWeight:800, color:"#334155", cursor:"pointer", background:"#F8FAFC", border:"1px solid #E5E7EB", padding:"7px 11px", borderRadius:9 }}>
+                          Upload Image
+                          <input type="file" accept="image/*" onChange={e=>handleAvatarFile(e.target.files?.[0])} style={{ display:"none" }} />
+                        </label>
+                        <button onClick={() => setProfileField("avatar", profileAvatar)}
+                          style={{ fontSize:10, fontWeight:800, color:"#0F172A", background:"#EFF6FF", border:"1px solid #BFDBFE", cursor:"pointer", padding:"7px 11px", borderRadius:9 }}>
+                          Use Default
+                        </button>
+                        {draftProfile.avatar && (
+                          <button onClick={() => setProfileField("avatar", "")} style={{ fontSize:10, fontWeight:800, color:"#EF4444", background:"transparent", border:"none", cursor:"pointer", padding:"7px 0" }}>
+                            Clear Choice
                           </button>
-                        ))}
+                        )}
                       </div>
+                    </div>
+                  </div>
+                  <div style={{ width:"100%", marginTop:4 }}>
+                    <div style={{ fontSize:11, fontWeight:900, color:"#334155", marginBottom:8 }}>Choose Profile Avatar</div>
+                    <div style={{ display:"grid", gridTemplateColumns: isMobile ? "repeat(3,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap:10 }}>
+                      {AVATAR_PRESETS.map((src,i)=> {
+                        const active = draftProfile.avatar === src || (!draftProfile.avatar && profileAvatar === src);
+                        return (
+                          <button key={i} onClick={()=>setProfileField("avatar", src)}
+                            style={{
+                              padding:4,
+                              borderRadius:14,
+                              border: active ? "2px solid #111" : "1px solid #E5E7EB",
+                              background: active ? "#EEF2FF" : "#fff",
+                              cursor:"pointer",
+                              transition:"all .15s ease"
+                            }}>
+                            <img src={src} alt={`Avatar ${i+1}`} style={{ width:"100%", aspectRatio:"1 / 1", borderRadius:"50%", display:"block", objectFit:"cover" }} />
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -3466,22 +3771,22 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                     <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                       <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Full Name</label>
                       <input value={draftProfile.name} onChange={e=>setProfileField("name", e.target.value)} placeholder="Your full name"
-                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Manrope, Geist, sans-serif", background:"#fff", outline:"none" }}/>
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                       <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Email</label>
                       <input type="email" value={draftProfile.email} onChange={e=>setProfileField("email", e.target.value)} placeholder="you@email.com"
-                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Manrope, Geist, sans-serif", background:"#fff", outline:"none" }}/>
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                       <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Phone</label>
                       <input value={draftProfile.phone} onChange={e=>setProfileField("phone", e.target.value)} placeholder="07xx xxx xxx"
-                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Manrope, Geist, sans-serif", background:"#fff", outline:"none" }}/>
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                      <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Avatar URL</label>
-                      <input value={draftProfile.avatar} onChange={e=>setProfileField("avatar", e.target.value)} placeholder="https://"
-                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Geist,sans-serif", background:"#fff", outline:"none" }}/>
+                      <label style={{ fontSize:11, fontWeight:700, color:"#666" }}>Referral Code</label>
+                      <input value={refCode} readOnly
+                        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #E8E8E8", borderRadius:9, fontSize:12, color:"#111", fontFamily:"Manrope, Geist, sans-serif", background:"#F8FAFC", outline:"none", fontWeight:700 }}/>
                     </div>
                   </div>
                 </div>
@@ -3579,7 +3884,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                         fontSize:12,
                         fontWeight:900,
                         cursor: (!settingsCanUpgradePay || settingsUpgradeBusy || depositCheckBusy) ? "not-allowed" : "pointer",
-                        fontFamily:"Geist,sans-serif",
+                        fontFamily:"Manrope, Geist, sans-serif",
                         boxShadow: (!settingsCanUpgradePay || depositCheckBusy) ? "none" : "0 8px 18px rgba(22,163,74,0.26)"
                       }}>
                       {settingsUpgradeBusy
@@ -3692,7 +3997,7 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
                     : (active ? "0 8px 14px rgba(15,23,42,0.25)" : "0 3px 8px rgba(2,6,23,0.26)"),
                   transform:isReferral ? (active ? "translateY(-2px)" : "translateY(-1px)") : (active ? "translateY(-1px)" : "translateY(0)"),
                   transition:"all .24s cubic-bezier(.4,0,.2,1)",
-                  fontFamily:"IBM Plex Sans, Geist, sans-serif",
+                  fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif",
                   flexShrink:0,
                   position:"relative"
                 }}>
@@ -3722,11 +4027,7 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
   const link = `${getBaseUrl()}/?ref=${safeCode}`;
   const copy = () => { try { navigator.clipboard?.writeText(link); } catch(e){} setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
-  const baseRefs = [
-    { name:"John M.", bonus: t.deposit*.1, status:"Active", when:"2d ago" },
-    { name:"Amina K.", bonus: t.deposit*.1, status:"Active", when:"5d ago" },
-    { name:"Peter O.", bonus: t.deposit*.1, status:"Pending", when:"1w ago" },
-  ];
+  const baseRefs = [];
   const mapRef = (r, i) => {
     const name = r.name || r.full_name || r.user || `User ${i+1}`;
     const first = name.split(" ").filter(Boolean)[0] || name;
@@ -3779,10 +4080,10 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
             {link}
           </a>
           <div className="ep-referral-mini-actions" style={{ display:"flex", gap:8 }}>
-            <button onClick={copy} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", background: copied?"#ECFDF5":"#111", color: copied?"#059669":"#fff", border:"none", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", transition:"all .2s", whiteSpace:"nowrap" }}>
+            <button onClick={copy} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", background: copied?"#ECFDF5":"#111", color: copied?"#059669":"#fff", border:"none", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", transition:"all .2s", whiteSpace:"nowrap" }}>
               <I n={copied?"check":"copy"} s={12} c={copied?"#059669":"#fff"}/> {copied?"Copied!":"Copy"}
             </button>
-            <a href={link} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", background:"#fff", color:"#111", border:"1px solid #111", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Geist,sans-serif", textDecoration:"none" }}>
+            <a href={link} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", background:"#fff", color:"#111", border:"1px solid #111", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", textDecoration:"none" }}>
               Open Signup
             </a>
           </div>
@@ -3790,17 +4091,23 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
 
         {/* Recent 3 referrals inline */}
         <div style={{ padding:"14px 20px", display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
-          {referrals.map((r,i) => (
-            <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-              <div style={{ width:30, height:30, borderRadius:"50%", background:r.status==="Active"?t.lgt:"#F5F5F5", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900, color:r.status==="Active"?t.acc:"#BBB", border:`1.5px solid ${r.status==="Active"?t.mid:"#E8E8E8"}` }}>{r.name[0]}</div>
-              <div style={{ fontSize:9, fontWeight:700, color:"#555", whiteSpace:"nowrap" }}>{r.first}</div>
+          {referrals.length === 0 ? (
+            <div style={{ fontSize:11, color:"#64748B", fontWeight:700 }}>No referrals yet. Share your link to get started.</div>
+          ) : (
+            referrals.map((r,i) => (
+              <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                <div style={{ width:30, height:30, borderRadius:"50%", background:r.status==="Active"?t.lgt:"#F5F5F5", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900, color:r.status==="Active"?t.acc:"#BBB", border:`1.5px solid ${r.status==="Active"?t.mid:"#E8E8E8"}` }}>{r.name[0]}</div>
+                <div style={{ fontSize:9, fontWeight:700, color:"#555", whiteSpace:"nowrap" }}>{r.first}</div>
+              </div>
+            ))
+          )}
+          {referrals.length > 0 && (
+            <div style={{ paddingLeft:8, borderLeft:"1px solid #F0F0F0" }}>
+              <div style={{ fontSize:11, fontWeight:800, color:t.acc, cursor:"pointer", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:4 }}>
+                View all <I n="chevR" s={11} c={t.acc}/>
+              </div>
             </div>
-          ))}
-          <div style={{ paddingLeft:8, borderLeft:"1px solid #F0F0F0" }}>
-            <div style={{ fontSize:11, fontWeight:800, color:t.acc, cursor:"pointer", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:4 }}>
-              View all <I n="chevR" s={11} c={t.acc}/>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -3830,7 +4137,7 @@ function ReferralMiniCard({ t, data, frame, refCode, compact }) {
     }
 
 /* "" OVERVIEW "" */
-function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden, mediaEager, dashboardSummary }) {
+function OverviewContent({ t, earn, goal, pct, progressEarned, balance, joinCardLabel, setTab, isMobile, activityData, referralData, refCode, goDeposit, stripHidden, mediaEager, dashboardSummary }) {
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const todayIdx = (new Date().getDay() + 6) % 7;
   const dailyEarn = useMemo(() => getTierDailyTotal(t), [t]);
@@ -3854,7 +4161,10 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const summaryReferralCount = Number(summary.referral_count);
   const summaryActiveReferralCount = Number(summary.active_referral_count);
   const summaryTierUpgradeCount = Number(summary.tier_upgrade_count);
-  const summaryProgressPct = Number(summary.progress_percent);
+  const safePct = clampProgressPercent(pct);
+  const pctLabel = formatProgressPercent(safePct, 2);
+  const pctWidth = toProgressWidth(safePct);
+  const progressEarnedValue = Number(progressEarned);
 
   const depositsLabel = Number.isFinite(summaryDepositsCount) ? `${summaryDepositsCount} total` : "-";
   const withdrawalsLabel = Number.isFinite(summaryWithdrawalsCount)
@@ -3863,13 +4173,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const transactionsLabel = Number.isFinite(summaryTransactionsCount)
     ? `${summaryTransactionsCount} records`
     : (Array.isArray(activityData) ? `${activityData.length} records` : "-");
-  const videoEarningsLabel = `KES ${Math.max(0, Number.isFinite(summaryVideoEarnings) ? summaryVideoEarnings : 0).toLocaleString()}`;
-  const referralEarningsLabel = `KES ${Math.max(0, Number.isFinite(summaryReferralEarnings) ? summaryReferralEarnings : 0).toLocaleString()}`;
   const referralsLabel = Number.isFinite(summaryReferralCount)
     ? `${summaryReferralCount} total${Number.isFinite(summaryActiveReferralCount) ? ` (${summaryActiveReferralCount} active)` : ""}`
     : `${Array.isArray(referralData) ? referralData.length : 0} total`;
   const upgradesLabel = Number.isFinite(summaryTierUpgradeCount) ? `${summaryTierUpgradeCount}` : "0";
-  const progressSummaryLabel = `${Number.isFinite(summaryProgressPct) ? Math.max(0, Math.round(summaryProgressPct)) : Math.max(0, Math.round(pct))}%`;
+  const progressSummaryLabel = pctLabel;
 
   const parseKesAmountFromText = useCallback((...parts) => {
     const text = parts
@@ -3926,6 +4234,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     const text = String(tx?.text || tx?.title || "").toLowerCase();
     const ic = String(tx?.ic || "").toLowerCase();
     return type.includes("referral") || type.includes("ref_bonus") || type.includes("ref bonus") || text.includes("referral") || text.includes("signup") || text.includes("bonus") || ic === "gift" || ic === "users";
+  }, []);
+  const isBonusTx = useCallback((tx) => {
+    const type = String(tx?.type || tx?.category || tx?.kind || "").toLowerCase();
+    const text = `${String(tx?.text || tx?.title || "")} ${String(tx?.sub || "")}`.toLowerCase();
+    return type.includes("bonus") || text.includes("bonus");
   }, []);
 
   const txColorFor = useCallback((tx) => {
@@ -4042,10 +4355,77 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   }, [activityEarnTotal, referralBonusTotal, activityHasReferralAmount]);
 
   const incomeTotal = useMemo(() => {
+    if (Number.isFinite(progressEarnedValue) && progressEarnedValue >= 0) return progressEarnedValue;
     if (actualEarnTotal > 0) return actualEarnTotal;
     const liveEarn = Number(earn);
     return Number.isFinite(liveEarn) && liveEarn > 0 ? liveEarn : 0;
-  }, [actualEarnTotal, earn]);
+  }, [progressEarnedValue, actualEarnTotal, earn]);
+  const earningMixRows = useMemo(() => {
+    const totals = { videos: 0, bonus: 0, referrals: 0 };
+    if (Array.isArray(activity) && activity.length > 0) {
+      activity.forEach((tx) => {
+        if (!isEarningTx(tx)) return;
+        const amt = readTxAmountKes(tx, { absolute: true });
+        if (!Number.isFinite(amt) || amt <= 0) return;
+        if (isReferralTx(tx)) {
+          totals.referrals += amt;
+          return;
+        }
+        if (isBonusTx(tx)) {
+          totals.bonus += amt;
+          return;
+        }
+        totals.videos += amt;
+      });
+    }
+    const summaryVideo = Number.isFinite(summaryVideoEarnings) ? Math.max(0, summaryVideoEarnings) : 0;
+    const summaryReferral = Number.isFinite(summaryReferralEarnings) ? Math.max(0, summaryReferralEarnings) : 0;
+    if (totals.videos + totals.bonus <= 0 && summaryVideo > 0) totals.videos = summaryVideo;
+    if (totals.referrals <= 0 && summaryReferral > 0) totals.referrals = summaryReferral;
+    const total = totals.videos + totals.bonus + totals.referrals;
+    const ratio = (value) => (total > 0 ? clampProgressPercent((value / total) * 100) : 0);
+    return [
+      { label: "Videos", pct: ratio(totals.videos), color: t.acc },
+      { label: "Bonus", pct: ratio(totals.bonus), color: t.mid },
+      { label: "Referrals", pct: ratio(totals.referrals), color: "#059669" }
+    ];
+  }, [
+    activity,
+    isEarningTx,
+    isReferralTx,
+    isBonusTx,
+    readTxAmountKes,
+    summaryVideoEarnings,
+    summaryReferralEarnings,
+    t.acc,
+    t.mid
+  ]);
+  const videoEarningsAmount = useMemo(() => {
+    if (!Array.isArray(activity) || activity.length === 0) {
+      return Number.isFinite(summaryVideoEarnings) ? Math.max(0, summaryVideoEarnings) : 0;
+    }
+    const total = activity.reduce((sum, tx) => {
+      if (!isEarningTx(tx) || isReferralTx(tx)) return sum;
+      const amt = readTxAmountKes(tx, { absolute: true });
+      return Number.isFinite(amt) && amt > 0 ? sum + amt : sum;
+    }, 0);
+    if (total > 0) return total;
+    return Number.isFinite(summaryVideoEarnings) ? Math.max(0, summaryVideoEarnings) : 0;
+  }, [activity, isEarningTx, isReferralTx, readTxAmountKes, summaryVideoEarnings]);
+  const referralEarningsAmount = useMemo(() => {
+    if (!Array.isArray(activity) || activity.length === 0) {
+      return Number.isFinite(summaryReferralEarnings) ? Math.max(0, summaryReferralEarnings) : 0;
+    }
+    const total = activity.reduce((sum, tx) => {
+      if (!isReferralTx(tx)) return sum;
+      const amt = readTxAmountKes(tx, { absolute: true });
+      return Number.isFinite(amt) && amt > 0 ? sum + amt : sum;
+    }, 0);
+    if (total > 0) return total;
+    return Number.isFinite(summaryReferralEarnings) ? Math.max(0, summaryReferralEarnings) : 0;
+  }, [activity, isReferralTx, readTxAmountKes, summaryReferralEarnings]);
+  const videoEarningsLabel = `KES ${Math.max(0, videoEarningsAmount).toLocaleString()}`;
+  const referralEarningsLabel = `KES ${Math.max(0, referralEarningsAmount).toLocaleString()}`;
 
   const remainingEarn = useMemo(() => Math.max(goal - incomeTotal, 0), [goal, incomeTotal]);
 
@@ -4078,6 +4458,17 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   }, [activity, isEarningTx, readTxAmountKes]);
 
   const maxV = useMemo(() => Math.max(...weekData.map(x=>x.v), 0), [weekData]);
+  const todayEarnAmount = useMemo(() => {
+    const bucket = weekData[todayIdx];
+    const raw = Number(bucket?.v);
+    return Number.isFinite(raw) && raw > 0 ? raw : 0;
+  }, [weekData, todayIdx]);
+  const dailyPotentialPct = useMemo(
+    () => clampProgressPercent(dailyEarn > 0 ? (todayEarnAmount / dailyEarn) * 100 : 0),
+    [todayEarnAmount, dailyEarn]
+  );
+  const dailyPotentialLabel = formatProgressPercent(dailyPotentialPct, 2);
+  const dailyPotentialWidth = toProgressWidth(dailyPotentialPct);
   const daysLeft = useMemo(() => {
     if (dailyEarn <= 0) return 0;
     return Math.max(0, Math.ceil((goal - incomeTotal) / dailyEarn));
@@ -4095,16 +4486,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     [isMobile]
   );
 
-  const defaultReferrals = useMemo(() => ([
-    { name:"John M.", init:"JM", status:"Active" },
-    { name:"Amina K.", init:"AK", status:"Active" },
-    { name:"Peter O.", init:"PO", status:"Pending" },
-    { name:"Grace W.", init:"GW", status:"Active" },
-  ]), []);
-  const referrals = useMemo(
-    () => (Array.isArray(referralData) ? referralData : defaultReferrals),
-    [referralData, defaultReferrals]
-  );
+  const referrals = useMemo(() => (Array.isArray(referralData) ? referralData : []), [referralData]);
   const txAmountLabel = useCallback((tx) => {
     const amt = Number(tx?.amt);
     if (!Number.isFinite(amt) || amt === 0) return "KES 0";
@@ -4135,7 +4517,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
     return (
       <div style={{ background:"#fff", borderRadius:12, border:"1px solid #EBEBEB", overflow:"hidden" }}>
         <button onClick={() => toggleSection(id)}
-          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"Geist,sans-serif" }}>
+          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif" }}>
           <span style={{ fontSize:13, fontWeight:800, color:"#111" }}>{title}</span>
           <div style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition:"transform .15s" }}>
             <I n="chevR" s={12} c="#999"/>
@@ -4199,7 +4581,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           className={hasTierGlare && !reducePlanMotion ? "ep-tier-glare" : undefined}
           style={{ borderRadius:12, background:`linear-gradient(135deg, ${t.acc} 0%, ${t.acc}CC 100%)`, padding:"16px 14px", position:"relative", overflow:"hidden", border:"1.5px solid #111", boxShadow:"0 4px 0 rgba(0,0,0,0.25)", ...(hasTierGlare && !reducePlanMotion ? {"--glare": tierGlareTone} : {}) }}>
           <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:10 }}>{t.name.toUpperCase()}</div>
-          <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {earn.toLocaleString()}</div>
+          <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6 }}>KES {incomeTotal.toLocaleString()}</div>
           <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:4 }}>
             <span style={{ fontSize:10, color:"rgba(255,255,255,0.55)", letterSpacing:"0.18em" }}>ACCOUNT NO.</span>
             <span style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,0.95)", letterSpacing:"0.16em", fontFamily:"IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace" }}>
@@ -4248,10 +4630,10 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             <div>
               <div style={{ fontSize:9, color:"rgba(255,255,255,0.65)", fontWeight:800, letterSpacing:"0.1em", marginBottom:6 }}>GOAL</div>
               <div style={{ fontSize:16, fontWeight:900, letterSpacing:"-0.03em", color:"#fff" }}>KES {goal.toLocaleString()}</div>
-              <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", marginTop:4 }}>{pct}% complete</div>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", marginTop:4 }}>{pctLabel} complete</div>
             </div>
             <div style={{ height:6, background:"rgba(255,255,255,0.15)", borderRadius:99, overflow:"hidden", marginTop:10 }}>
-              <div style={{ height:"100%", width:`${pct}%`, background:"#22C55E", borderRadius:99 }}/>
+              <div style={{ height:"100%", width:pctWidth, background:"#22C55E", borderRadius:99, transition:"width .55s ease-in-out" }}/>
             </div>
           </div>
         </div>
@@ -4265,7 +4647,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </div>
           </div>
         <button onClick={()=>{ if (canUpgrade) (goDeposit ? goDeposit(true) : setTab("withdraw")); }} disabled={!canUpgrade}
-          style={{ padding:"8px 12px", borderRadius:10, fontSize:11, fontWeight:900, cursor: canUpgrade ? "pointer" : "not-allowed", fontFamily:"IBM Plex Sans, Geist, sans-serif", ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled) }}>
+          style={{ padding:"8px 12px", borderRadius:10, fontSize:11, fontWeight:900, cursor: canUpgrade ? "pointer" : "not-allowed", fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif", ...(canUpgrade ? upgradeBtnActive : upgradeBtnDisabled) }}>
           {nextTier ? "Upgrade" : "Max Tier"}
         </button>
         </div>
@@ -4277,7 +4659,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
   const mobileActions = (
     <div style={{ background:"#fff", borderRadius:12, border:"1px solid #E8E8E8", overflow:"hidden" }}>
       <button onClick={()=>setActionsOpen(o=>!o)}
-        style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:"#F8FAFC", border:"none", cursor:"pointer", fontFamily:"Geist,sans-serif" }}>
+        style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:"#F8FAFC", border:"none", cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif" }}>
         <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", color:"#64748B" }}>PULL DOWN FOR ACTIONS</span>
         <div style={{ transform: actionsOpen ? "rotate(-90deg)" : "rotate(90deg)", transition:"transform .2s" }}>
           <I n="chevR" s={12} c="#94A3B8"/>
@@ -4285,13 +4667,13 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
       </button>
       <div style={{ maxHeight: actionsOpen ? 140 : 0, overflow:"hidden", transition:"max-height .25s ease" }}>
         <div style={{ padding:"12px 14px", display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-          <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+          <button onClick={()=>setTab("videos")} style={{ padding:"10px 0", background:"#111", color:"#fff", border:"none", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif" }}>
             Watch
           </button>
-          <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1px solid #E8E8E8", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+          <button onClick={()=>setTab("withdraw")} style={{ padding:"10px 0", background:"#fff", color:"#111", border:"1px solid #E8E8E8", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif" }}>
             Withdraw
           </button>
-          <button onClick={()=>goDeposit(false)} style={{ padding:"10px 0", background:"linear-gradient(180deg,#FDE68A 0%, #F59E0B 100%)", color:"#111", border:"1px solid #111", borderRadius:10, fontSize:11, fontWeight:900, cursor:"pointer", fontFamily:"IBM Plex Sans, Geist, sans-serif" }}>
+          <button onClick={()=>goDeposit(false)} style={{ padding:"10px 0", background:"linear-gradient(180deg,#FDE68A 0%, #F59E0B 100%)", color:"#111", border:"1px solid #111", borderRadius:10, fontSize:11, fontWeight:900, cursor:"pointer", fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif" }}>
             Deposit
           </button>
         </div>
@@ -4422,14 +4804,14 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
         <MobileSection id="mix" title="Earning Mix">
           <div className="ep-card" style={{ borderRadius:14, padding:"14px 16px" }}>
             <h3 style={{ fontWeight:900, fontSize:13, letterSpacing:"-0.02em", marginBottom:12 }}>Earning Mix</h3>
-            {[["Videos",68,t.acc],["Bonus",22,t.mid],["Referrals",10,"#059669"]].map(([l,p,c],i)=>(
-              <div key={i} style={{ marginBottom:10 }}>
+            {earningMixRows.map((row) => (
+              <div key={row.label} style={{ marginBottom:10 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:4 }}>
-                  <span style={{ color:"#666", fontWeight:600 }}>{l}</span>
-                  <span style={{ fontWeight:800, color:"#111" }}>{p}%</span>
+                  <span style={{ color:"#666", fontWeight:600 }}>{row.label}</span>
+                  <span style={{ fontWeight:800, color:"#111" }}>{formatProgressPercent(row.pct, 2)}</span>
                 </div>
                 <div style={{ height:5, background:"#F5F5F5", borderRadius:99, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${p}%`, background:c, borderRadius:99, transition:"width .9s ease" }}/>
+                  <div style={{ height:"100%", width:toProgressWidth(row.pct), background:row.color, borderRadius:99, transition:"width .55s ease-in-out" }}/>
                 </div>
               </div>
             ))}
@@ -4490,7 +4872,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           <div style={{ fontSize:28, fontWeight:900, color:"#111", letterSpacing:"-0.04em", lineHeight:1.1, marginBottom:6 }}>Financial<br/>Dashboard</div>
           <div style={{ display:"flex", alignItems:"flex-end", gap:12 }}>
             <div>
-              <div style={{ fontSize:36, fontWeight:900, color:"#111", letterSpacing:"-0.05em", lineHeight:1 }}>KES {(earn/1000).toFixed(1)}K</div>
+              <div style={{ fontSize:36, fontWeight:900, color:"#111", letterSpacing:"-0.05em", lineHeight:1 }}>KES {(incomeTotal/1000).toFixed(1)}K</div>
               <div style={{ fontSize:13, color:"rgba(0,0,0,0.55)", fontWeight:600, marginTop:4 }}>Total Balance</div>
             </div>
             {/* Toggle icon pills */}
@@ -4507,11 +4889,11 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
 
         {/* Withdraw / Watch Videos buttons */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:18, position:"relative", zIndex:1 }}>
-          <button onClick={()=>setTab("withdraw")} style={{ padding:"16px 12px", background:"rgba(255,255,255,0.8)", border:"none", borderRadius:14, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:8, fontFamily:"Geist,sans-serif", backdropFilter:"blur(8px)" }}>
+          <button onClick={()=>setTab("withdraw")} style={{ padding:"16px 12px", background:"rgba(255,255,255,0.8)", border:"none", borderRadius:14, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:8, fontFamily:"Manrope, Geist, sans-serif", backdropFilter:"blur(8px)" }}>
             <I n="up" s={20} c="#111"/>
             <span style={{ fontSize:13, fontWeight:800, color:"#111" }}>Withdraw</span>
           </button>
-          <button onClick={()=>setTab("videos")} style={{ padding:"16px 12px", background:"rgba(255,255,255,0.8)", border:"none", borderRadius:14, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:8, fontFamily:"Geist,sans-serif", backdropFilter:"blur(8px)" }}>
+          <button onClick={()=>setTab("videos")} style={{ padding:"16px 12px", background:"rgba(255,255,255,0.8)", border:"none", borderRadius:14, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:8, fontFamily:"Manrope, Geist, sans-serif", backdropFilter:"blur(8px)" }}>
             <I n="down" s={20} c="#111"/>
             <span style={{ fontSize:13, fontWeight:800, color:"#111" }}>Watch Videos</span>
           </button>
@@ -4521,7 +4903,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
         <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:4, position:"relative", zIndex:1 }}>
           {months.map((m,i) => (
             <button key={m} onClick={()=>setActiveMonth(i)}
-              style={{ padding:"6px 14px", borderRadius:50, border:"none", background: activeMonth===i?"#111":"rgba(255,255,255,0.5)", color: activeMonth===i?"#fff":"rgba(0,0,0,0.55)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Geist,sans-serif", whiteSpace:"nowrap", flexShrink:0, position:"relative" }}>
+              style={{ padding:"6px 14px", borderRadius:50, border:"none", background: activeMonth===i?"#111":"rgba(255,255,255,0.5)", color: activeMonth===i?"#fff":"rgba(0,0,0,0.55)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", whiteSpace:"nowrap", flexShrink:0, position:"relative" }}>
               {m}
               {activeMonth===i && <div style={{ position:"absolute", bottom:-8, left:"50%", transform:"translateX(-50%)", width:4, height:4, borderRadius:"50%", background:"#111" }}/>}
             </button>
@@ -4572,15 +4954,15 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             <I n="wallet" s={16} c="#fff"/>
           </div>
           <div style={{ fontSize:11, color:"rgba(255,255,255,0.45)", fontWeight:700, letterSpacing:"0.06em", marginBottom:8 }}>TOTAL EARNINGS</div>
-          <div style={{ fontSize:28, fontWeight:900, color:"#fff", letterSpacing:"-0.05em", lineHeight:1, marginBottom:10 }}>KES {earn.toLocaleString()}</div>
+          <div style={{ fontSize:28, fontWeight:900, color:"#fff", letterSpacing:"-0.05em", lineHeight:1, marginBottom:10 }}>KES {incomeTotal.toLocaleString()}</div>
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             <div style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 8px", background:"rgba(74,222,128,0.2)", borderRadius:50 }}>
               <I n="trendUp" s={9} c="#4ADE80"/>
-              <span style={{ fontSize:10, fontWeight:800, color:"#4ADE80" }}>+KES 500 today</span>
+              <span style={{ fontSize:10, fontWeight:800, color:"#4ADE80" }}>+KES {todayEarnAmount.toLocaleString()} today</span>
             </div>
           </div>
           <div style={{ height:3, background:"rgba(255,255,255,0.08)", borderRadius:99, marginTop:16 }}>
-            <div style={{ height:"100%", width:`${pct}%`, background:t.acc, borderRadius:99 }}/>
+            <div style={{ height:"100%", width:pctWidth, background:t.acc, borderRadius:99, transition:"width .55s ease-in-out" }}/>
           </div>
         </div>
 
@@ -4595,9 +4977,9 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
           </div>
           <div style={{ fontSize:11, color:"#AAA", fontWeight:700, letterSpacing:"0.06em", marginBottom:8 }}>DAILY POTENTIAL</div>
           <div style={{ fontSize:28, fontWeight:900, color:"#111", letterSpacing:"-0.05em", lineHeight:1, marginBottom:10 }}>KES {dailyEarn.toLocaleString()}</div>
-          <div style={{ fontSize:11, color:"#888", fontWeight:600 }}>{t.videos} required videos/day - bonus rewards {t.bonus}/day</div>
+          <div style={{ fontSize:11, color:"#888", fontWeight:600 }}>{t.videos} required videos/day - bonus rewards {t.bonus}/day - {dailyPotentialLabel} complete</div>
           <div style={{ height:3, background:"#F5F5F5", borderRadius:99, marginTop:16 }}>
-            <div style={{ height:"100%", width:"100%", background:`${t.acc}55`, borderRadius:99 }}/>
+            <div style={{ height:"100%", width:dailyPotentialWidth, background:`${t.acc}55`, borderRadius:99, transition:"width .55s ease-in-out" }}/>
           </div>
         </div>
 
@@ -4611,10 +4993,10 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             <div style={{ fontSize:9, fontWeight:800, letterSpacing:"0.06em", color:"#BBB" }}> -  -  - </div>
           </div>
           <div style={{ fontSize:11, color:"#AAA", fontWeight:700, letterSpacing:"0.06em", marginBottom:8 }}>GOAL PROGRESS</div>
-          <div style={{ fontSize:28, fontWeight:900, color:"#111", letterSpacing:"-0.05em", lineHeight:1, marginBottom:10 }}>{pct}%</div>
+          <div style={{ fontSize:28, fontWeight:900, color:"#111", letterSpacing:"-0.05em", lineHeight:1, marginBottom:10 }}>{pctLabel}</div>
           <div style={{ fontSize:11, color:"#059669", fontWeight:700 }}>~{daysLeft} days to weekly target - KES {goal.toLocaleString()}</div>
           <div style={{ height:3, background:"#F5F5F5", borderRadius:99, marginTop:16 }}>
-            <div style={{ height:"100%", width:`${pct}%`, background:"#059669", borderRadius:99, transition:"width 1.2s ease" }}/>
+            <div style={{ height:"100%", width:pctWidth, background:"#059669", borderRadius:99, transition:"width .55s ease-in-out" }}/>
           </div>
         </div>
       </div>
@@ -4738,7 +5120,7 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
               <div style={{ position:"absolute", top:-20, right:-20, width:80, height:80, borderRadius:"50%", background:"rgba(255,255,255,0.15)", pointerEvents:"none" }}/>
               <div style={{ position:"absolute", bottom:-15, left:-15, width:60, height:60, borderRadius:"50%", background:"rgba(255,255,255,0.1)", pointerEvents:"none" }}/>
               <div style={{ fontSize:12, fontWeight:900, color:"rgba(255,255,255,0.9)", letterSpacing:"0.15em", marginBottom:14, position:"relative", zIndex:1 }}>{t.name.toUpperCase()}</div>
-              <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6, position:"relative", zIndex:1 }}>KES {earn.toLocaleString()}</div>
+              <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:"-0.04em", marginBottom:6, position:"relative", zIndex:1 }}>KES {incomeTotal.toLocaleString()}</div>
               <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", letterSpacing:"0.08em", marginBottom:14, position:"relative", zIndex:1 }}>**** **** {t.deposit.toString().slice(0,3)} {t.id.toString().padStart(4,"0")}</div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", position:"relative", zIndex:1 }}>
                 <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)" }}>Deposit<br/><span style={{ color:"rgba(255,255,255,0.8)", fontWeight:700 }}>{formatOverviewMoney(t.deposit)}</span></div>
@@ -4749,12 +5131,12 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             {/* Send / Receive buttons - like Image 1 */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
               <button onClick={()=>setTab("withdraw")}
-                style={{ padding:"11px 0", background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:11, fontSize:12, fontWeight:800, color:"#fff", cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"background .15s" }}
+                style={{ padding:"11px 0", background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:11, fontSize:12, fontWeight:800, color:"#fff", cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"background .15s" }}
                 onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.18)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}>
                 <I n="up" s={13} c="#fff"/> Withdraw
               </button>
               <button onClick={()=>setTab("videos")}
-                style={{ padding:"11px 0", background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:11, fontSize:12, fontWeight:800, color:"#fff", cursor:"pointer", fontFamily:"Geist,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"background .15s" }}
+                style={{ padding:"11px 0", background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:11, fontSize:12, fontWeight:800, color:"#fff", cursor:"pointer", fontFamily:"Manrope, Geist, sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"background .15s" }}
                 onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.18)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}>
                 <I n="play" s={13} c="#fff"/> Watch
               </button>
@@ -4809,14 +5191,14 @@ function OverviewContent({ t, earn, goal, pct, balance, joinCardLabel, setTab, i
             </div>
             {deskOpen.mix && (
               <>
-                {[["Videos",68,t.acc],["Bonus",22,t.mid],["Referrals",10,"#059669"]].map(([l,p,c],i)=>(
-                  <div key={i} style={{ marginBottom:10 }}>
+                {earningMixRows.map((row) => (
+                  <div key={row.label} style={{ marginBottom:10 }}>
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:4 }}>
-                      <span style={{ color:"#666", fontWeight:600 }}>{l}</span>
-                      <span style={{ fontWeight:800, color:"#111" }}>{p}%</span>
+                      <span style={{ color:"#666", fontWeight:600 }}>{row.label}</span>
+                      <span style={{ fontWeight:800, color:"#111" }}>{formatProgressPercent(row.pct, 2)}</span>
                     </div>
                     <div style={{ height:5, background:"#F5F5F5", borderRadius:99, overflow:"hidden" }}>
-                      <div style={{ height:"100%", width:`${p}%`, background:c, borderRadius:99, transition:"width .9s ease" }}/>
+                      <div style={{ height:"100%", width:toProgressWidth(row.pct), background:row.color, borderRadius:99, transition:"width .55s ease-in-out" }}/>
                     </div>
                   </div>
                 ))}
@@ -5171,7 +5553,7 @@ function VideosContent({ t, onEarning, authUser, depositRequired = false, onRequ
       <div className="ep-videos-tab-switch" style={{ display:simpleVideosUI?"none":"flex",gap:2,background:"rgba(15,23,42,0.7)",borderRadius:10,padding:3,width:"100%",justifyContent:"center",flexWrap:"wrap",border:"1px solid rgba(132,204,22,0.25)" }}>
         {[["manual",`Required (${MANUAL_COUNT})`],["bonus","Bonus"]].map(([id,lbl])=>(
           <button key={id} onClick={()=>setActiveTab(id)}
-            style={{ padding:"8px 18px",borderRadius:8,border:"none",background:activeTab===id?"linear-gradient(135deg,#bef264 0%, #84cc16 55%, #16a34a 100%)":"transparent",color:activeTab===id?"#052e16":"rgba(226,232,240,0.7)",fontWeight:activeTab===id?800:600,fontSize:13,cursor:"pointer",fontFamily:"Sora, Geist, sans-serif",boxShadow:activeTab===id?"0 6px 14px rgba(132,204,22,0.35)":"none",transition:"all .15s" }}>
+            style={{ padding:"8px 18px",borderRadius:8,border:"none",background:activeTab===id?"linear-gradient(135deg,#bef264 0%, #84cc16 55%, #16a34a 100%)":"transparent",color:activeTab===id?"#052e16":"rgba(226,232,240,0.7)",fontWeight:activeTab===id?800:600,fontSize:13,cursor:"pointer",fontFamily:"Sora, Manrope, Geist, sans-serif",boxShadow:activeTab===id?"0 6px 14px rgba(132,204,22,0.35)":"none",transition:"all .15s" }}>
             {lbl}
           </button>
         ))}
@@ -5273,7 +5655,7 @@ function VideosContent({ t, onEarning, authUser, depositRequired = false, onRequ
                       {isActive && (
                         <div style={{ textAlign:"center" }}>
                           <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(2,6,23,0.66)",backdropFilter:"blur(8px)",border:"3px solid rgba(190,242,100,0.9)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px" }}>
-                            <span style={{ fontSize:26,fontWeight:900,color:"#fff",fontFamily:"Geist,sans-serif",fontVariantNumeric:"tabular-nums" }}>{timer}</span>
+                            <span style={{ fontSize:26,fontWeight:900,color:"#fff",fontFamily:"Manrope, Geist, sans-serif",fontVariantNumeric:"tabular-nums" }}>{timer}</span>
                           </div>
                           <div style={{ fontSize:11,color:"#d9f99d",fontWeight:800,letterSpacing:"0.06em" }}>WATCHING...</div>
                         </div>
@@ -5327,7 +5709,7 @@ function VideosContent({ t, onEarning, authUser, depositRequired = false, onRequ
                         )}
                         {isReady && (
                           <button onClick={()=>startWatch(i)}
-                            style={{ padding:"8px 16px",background:"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)",color:"#052e16",border:"none",borderRadius:9,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"Sora, Geist, sans-serif",display:"flex",alignItems:"center",gap:5,boxShadow:"0 8px 16px rgba(163,230,53,0.25)" }}>
+                            style={{ padding:"8px 16px",background:"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)",color:"#052e16",border:"none",borderRadius:9,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"Sora, Manrope, Geist, sans-serif",display:"flex",alignItems:"center",gap:5,boxShadow:"0 8px 16px rgba(163,230,53,0.25)" }}>
                             <I n="play" s={11} c="#052e16"/> Watch
                           </button>
                         )}
@@ -5410,7 +5792,7 @@ function VideosContent({ t, onEarning, authUser, depositRequired = false, onRequ
                 onClick={activateBot}
                 disabled={!canActivateBot || BONUS_COUNT === 0}
                 className={canActivateBot && BONUS_COUNT > 0 ? "ep-bonus-claim-btn" : ""}
-                style={{ padding:"8px 14px",background:canActivateBot && BONUS_COUNT>0?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)",color:canActivateBot && BONUS_COUNT>0?"#052e16":"#94a3b8",border:canActivateBot && BONUS_COUNT>0?"none":"1px solid rgba(148,163,184,0.35)",borderRadius:9,fontSize:12,fontWeight:900,cursor:canActivateBot && BONUS_COUNT>0?"pointer":"not-allowed",fontFamily:"Sora, Geist, sans-serif" }}
+                style={{ padding:"8px 14px",background:canActivateBot && BONUS_COUNT>0?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)",color:canActivateBot && BONUS_COUNT>0?"#052e16":"#94a3b8",border:canActivateBot && BONUS_COUNT>0?"none":"1px solid rgba(148,163,184,0.35)",borderRadius:9,fontSize:12,fontWeight:900,cursor:canActivateBot && BONUS_COUNT>0?"pointer":"not-allowed",fontFamily:"Sora, Manrope, Geist, sans-serif" }}
               >
                 {bonusActive ? "Activated Today" : (canActivateBot && BONUS_COUNT > 0 ? `Claim Bonus ${bonusPotentialLabel}` : "Claim Bonus")}
               </button>
@@ -5472,7 +5854,7 @@ function VideosContent({ t, onEarning, authUser, depositRequired = false, onRequ
             </div>
             <button onClick={activateBot} disabled={!canActivateBot}
               className={canActivateBot ? "ep-bonus-claim-btn" : ""}
-              style={{ padding:"8px 14px", background:canActivateBot?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)", color:canActivateBot?"#052e16":"#94a3b8", border:canActivateBot?"none":"1px solid rgba(148,163,184,0.35)", borderRadius:9, fontSize:12, fontWeight:800, cursor:canActivateBot?"pointer":"not-allowed", fontFamily:"Sora, Geist, sans-serif" }}>
+              style={{ padding:"8px 14px", background:canActivateBot?"linear-gradient(135deg,#facc15 0%, #84cc16 52%, #16a34a 100%)":"rgba(148,163,184,0.22)", color:canActivateBot?"#052e16":"#94a3b8", border:canActivateBot?"none":"1px solid rgba(148,163,184,0.35)", borderRadius:9, fontSize:12, fontWeight:800, cursor:canActivateBot?"pointer":"not-allowed", fontFamily:"Sora, Manrope, Geist, sans-serif" }}>
               {bonusActive ? "Activated Today" : canActivateBot ? `Claim Bonus ${bonusPotentialLabel}` : "Complete Required Videos"}
             </button>
           </div>
@@ -5562,7 +5944,7 @@ function VideosContent({ t, onEarning, authUser, depositRequired = false, onRequ
               <button
                 type="button"
                 onClick={() => setShowClaimBotPopup(false)}
-                style={{ marginTop:8, padding:"6px 10px", borderRadius:999, border:"1px solid rgba(148,163,184,0.42)", background:"rgba(15,23,42,0.64)", color:"#cbd5e1", fontSize:10, fontWeight:800, cursor:"pointer", fontFamily:"Sora, Geist, sans-serif" }}
+                style={{ marginTop:8, padding:"6px 10px", borderRadius:999, border:"1px solid rgba(148,163,184,0.42)", background:"rgba(15,23,42,0.64)", color:"#cbd5e1", fontSize:10, fontWeight:800, cursor:"pointer", fontFamily:"Sora, Manrope, Geist, sans-serif" }}
               >
                 Cancel
               </button>
@@ -5634,13 +6016,13 @@ function ReferralLinkCard({ t, refCode, isMobile }) {
               </button>
               <span style={{ flex:1,fontSize:12,fontWeight:700,color:"#111",letterSpacing:"0.01em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{link}</span>
             </div>
-            <button onClick={copy} style={{ padding:"10px 18px",background:copied?"#059669":"#111",color:"#fff",border:"none",borderRadius:9,fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"background .2s",fontFamily:"Geist,sans-serif",whiteSpace:"nowrap" }}>
+            <button onClick={copy} style={{ padding:"10px 18px",background:copied?"#059669":"#111",color:"#fff",border:"none",borderRadius:9,fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"background .2s",fontFamily:"Manrope, Geist, sans-serif",whiteSpace:"nowrap" }}>
               <I n={copied?"check":"copy"} s={12} c="#fff"/>{copied?"Copied!":"Copy Link"}
             </button>
           </div>
           <div style={{ display:"flex",gap:7,marginTop:10,flexWrap:"wrap" }}>
             {socials.map(({label,color,onClick})=>(
-              <button key={label} onClick={onClick || copy} style={{ padding:"6px 12px",background:"#FAFAFA",border:chipBorder,borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",gap:5 }}>
+              <button key={label} onClick={onClick || copy} style={{ padding:"6px 12px",background:"#FAFAFA",border:chipBorder,borderRadius:8,fontSize:11,color:"#555",cursor:"pointer",fontWeight:700,fontFamily:"Manrope, Geist, sans-serif",display:"flex",alignItems:"center",gap:5 }}>
                 <div style={{ width:7,height:7,borderRadius:"50%",background:color }}/>{label}
               </button>
             ))}
@@ -5765,16 +6147,6 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile, authUserId }) {
     setGuideStep(0);
   }, [referralGuideKey]);
 
-  const fallbackRefs = [
-    { name:"John Mwangi",    email:"j.mwangi@gmail.com",  tier:"Standard",     date:"Mar 8, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 3.2) },
-    { name:"Amina Kariuki",  email:"amina.k@yahoo.com",   tier:"Regular",      date:"Mar 5, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 1.8) },
-    { name:"Peter Otieno",   email:"p.otieno@gmail.com",  tier:"Executive",       date:"Mar 1, 2025",  bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 5.1) },
-    { name:"Grace Wanjiku",  email:"grace.w@hotmail.com", tier:"Standard",     date:"Feb 22, 2025", bonus:t.deposit*.1,  status:"Pending", earnings: 0 },
-    { name:"Samuel Njoroge", email:"sam.n@gmail.com",     tier:"Executive Pro",    date:"Feb 18, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 2.4) },
-    { name:"Faith Achieng",  email:"faith.a@gmail.com",   tier:"Regular",      date:"Feb 10, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 0.9) },
-    { name:"Kevin Odhiambo", email:"kevin.o@gmail.com",   tier:"Standard",     date:"Jan 30, 2025", bonus:t.deposit*.1,  status:"Inactive",earnings: 0 },
-    { name:"Beatrice Njoki",  email:"b.njoki@yahoo.com",  tier:"Executive",       date:"Jan 25, 2025", bonus:t.deposit*.1,  status:"Active",  earnings: Math.round(t.deposit*.1 * 4.7) },
-  ];
   const normalizeRefRow = (r, i) => {
     const name = r.name || r.full_name || r.user || `User ${i+1}`;
     const email = r.email || r.user_email || "-";
@@ -5789,7 +6161,7 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile, authUserId }) {
     const level = Number(r.level || r.ref_level || 1);
     return { name, email, tier, date, bonus, status, earnings, level };
   };
-  const ALL_REFS = Array.isArray(refData) ? refData.map(normalizeRefRow) : fallbackRefs.map(normalizeRefRow);
+  const ALL_REFS = Array.isArray(refData) ? refData.map(normalizeRefRow) : [];
 
   const filtered = filter === "all" ? ALL_REFS : ALL_REFS.filter(r => r.status.toLowerCase() === filter);
   const totalBonus = ALL_REFS.filter(r=>r.status==="Active").reduce((sum,r)=>sum + (Number.isFinite(r.bonus)?r.bonus:0),0);
@@ -5873,7 +6245,7 @@ function ReferralsContent({ t, earn, refData, refCode, isMobile, authUserId }) {
           {/* Filter pills */}
           <div style={{ display:"flex",gap:4,background:"#F5F5F5",borderRadius:8,padding:3,flexWrap:"wrap" }}>
             {[["all","All"],["active","Active"],["pending","Pending"],["inactive","Inactive"]].map(([id,lbl])=>(
-              <button key={id} onClick={()=>setFilter(id)} style={{ padding:"5px 12px",borderRadius:6,border:"none",background:filter===id?"#fff":"transparent",color:filter===id?"#111":"#888",fontWeight:filter===id?700:500,fontSize:11,cursor:"pointer",fontFamily:"Geist,sans-serif",boxShadow:filter===id?"0 1px 3px rgba(0,0,0,0.08)":"none",transition:"all .12s" }}>{lbl}</button>
+              <button key={id} onClick={()=>setFilter(id)} style={{ padding:"5px 12px",borderRadius:6,border:"none",background:filter===id?"#fff":"transparent",color:filter===id?"#111":"#888",fontWeight:filter===id?700:500,fontSize:11,cursor:"pointer",fontFamily:"Manrope, Geist, sans-serif",boxShadow:filter===id?"0 1px 3px rgba(0,0,0,0.08)":"none",transition:"all .12s" }}>{lbl}</button>
             ))}
           </div>
         </div>
@@ -5986,12 +6358,31 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
   const canSubmitWithdrawal = canWithdrawNow && hasValidWdAmt;
   const nextTier = TIERS[t.id];
   const currentTierDeposit = Number(t?.deposit) || 0;
-  const upgradeNeed = nextTier ? Math.max(nextTier.deposit - currentTierDeposit, 0) : 0;
+  const upgradeNeed = nextTier ? getTierTopUpAmount(t.id, nextTier.id) : 0;
   const needsUnlock = hasDeposit === false;
   const unlockNeed = needsUnlock ? currentTierDeposit : 0;
   const primaryNeed = needsUnlock ? unlockNeed : upgradeNeed;
   const canDeposit = primaryNeed > 0;
   const targetTierId = needsUnlock ? t.id : (nextTier?.id || t.id);
+  const targetTier = needsUnlock ? t : (nextTier || t);
+  const targetTierDeposit = Number(targetTier?.deposit) || currentTierDeposit;
+  const activeTopUpRule = TIER_TOP_UP_RULES.find((rule) => rule.fromId === Number(t.id)) || null;
+  const walletHeadingFont = "Sora, Manrope, Geist, sans-serif";
+  const walletUpgradeTitle = needsUnlock
+    ? `Unlock ${t.name}`
+    : (nextTier ? `Upgrade to ${nextTier.name}` : "Top Tier Active");
+  const walletUpgradeCopy = needsUnlock
+    ? `Deposit KES ${currentTierDeposit.toLocaleString()} once to unlock wallet withdrawals and earnings.`
+    : (nextTier
+      ? `Move from ${t.name} (${formatMoney(currentTierDeposit)}) to ${nextTier.name} (${formatMoney(targetTierDeposit)}). Add only ${formatMoney(upgradeNeed)}.`
+      : "You are already at the highest tier. No extra payment is needed.");
+  const walletUpgradeButtonLabel = depLoading
+    ? "Opening checkout..."
+    : (!canDeposit
+      ? "No Deposit Required"
+      : (needsUnlock
+        ? `Unlock ${t.name} - ${formatMoney(primaryNeed)}`
+        : `Upgrade to ${nextTier?.name || "Next Tier"} - Add ${formatMoney(primaryNeed)}`));
   useEffect(() => {
     if (!focusDeposit) return;
     if (depositRef.current) depositRef.current.scrollIntoView({ behavior:"smooth", block:"start" });
@@ -6193,13 +6584,6 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
     if (full.includes("pending") || full.includes("requested")) return "Pending";
     return "Completed";
   };
-  const fallbackHistoryRows = [
-    { date:"Mar 7", type:"Withdrawal", amount:1200, status:"Completed" },
-    { date:"Feb 28", type:"Withdrawal", amount:3400, status:"Completed" },
-    { date:"Feb 21", type:"Withdrawal", amount:800, status:"Completed" },
-    { date:"Feb 14", type:"Withdrawal", amount:2100, status:"Pending" },
-    { date:"Feb 7", type:"Withdrawal", amount:950, status:"Completed" },
-  ];
   const mergedHistoryRows = (() => {
     const txRows = Array.isArray(historyData)
       ? historyData.map((tx, i) => {
@@ -6234,7 +6618,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         })
       : [];
     const merged = [...txRows, ...referralRows];
-    return merged.length ? merged : fallbackHistoryRows.map((row, i) => ({ ...row, key:`fallback_${i}` }));
+    return [...txRows, ...referralRows];
   })();
   const historyRows = mergedHistoryRows;
   const historyStatusStyle = (status) => status === "Completed"
@@ -6244,7 +6628,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
       : { bg:"#FEF2F2", col:"#DC2626" };
 
   return (
-    <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
+    <div style={{ display:"flex",flexDirection:"column",gap:16, fontFamily:"Manrope, IBM Plex Sans, Geist, sans-serif" }}>
       {showWithdrawStatusBanner && (
         <div style={{ padding:"14px 16px",borderRadius:10,border:`1px solid ${can?"#A7F3D0":"#FCA5A5"}`,background:can?"#ECFDF5":"#FFF0F0",display:"flex",alignItems:"center",gap:12 }}>
           <div style={{ width:30,height:30,borderRadius:"50%",background:can?"#059669":"#DC2626",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
@@ -6275,7 +6659,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
               <I n="lock" s={13} c="#22C55E"/> Deposit KES {t.deposit.toLocaleString()} once to unlock withdrawals.
             </div>
             <button onClick={() => submitDeposit(depMethod)} disabled={depLoading || !canDeposit}
-              style={{ padding:"8px 12px", borderRadius:10, border:(depLoading || !canDeposit) ? "1px solid rgba(148,163,184,0.5)" : "1px solid rgba(187,247,208,0.7)", background:(depLoading || !canDeposit) ? "rgba(30,41,59,0.6)" : "linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:(depLoading || !canDeposit) ? "#94A3B8" : "#ECFDF5", fontSize:11, fontWeight:900, cursor:(depLoading || !canDeposit) ? "not-allowed" : "pointer", fontFamily:"Geist,sans-serif", alignSelf:"flex-start", boxShadow:(depLoading || !canDeposit) ? "none" : "0 8px 16px rgba(22,163,74,0.28)" }}>
+              style={{ padding:"8px 12px", borderRadius:10, border:(depLoading || !canDeposit) ? "1px solid rgba(148,163,184,0.5)" : "1px solid rgba(187,247,208,0.7)", background:(depLoading || !canDeposit) ? "rgba(30,41,59,0.6)" : "linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)", color:(depLoading || !canDeposit) ? "#94A3B8" : "#ECFDF5", fontSize:11, fontWeight:900, cursor:(depLoading || !canDeposit) ? "not-allowed" : "pointer", fontFamily:"Manrope, Geist, sans-serif", alignSelf:"flex-start", boxShadow:(depLoading || !canDeposit) ? "none" : "0 8px 16px rgba(22,163,74,0.28)" }}>
               {depLoading ? "Opening..." : "Deposit Now"}
             </button>
           </div>
@@ -6296,27 +6680,93 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
         </div>
       )}
 
-      <div ref={depositRef} style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"18px 20px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.08)" }}>
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
+      <div ref={depositRef} style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"18px 20px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.08)",display:"grid",gap:12 }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10 }}>
           <div>
-            <div style={{ fontSize:13,fontWeight:900,color:"#0F172A",letterSpacing:"0.02em" }}>Checkout Gateway</div>
-            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>Choose a verified payment icon and tap to pay instantly.</div>
+            <div style={{ fontSize:11,fontWeight:900,color:"#0F172A",letterSpacing:"0.12em",textTransform:"uppercase" }}>Wallet Upgrade Center</div>
+            <div style={{ fontSize:17,fontWeight:900,color:"#0F172A",letterSpacing:"-0.03em",fontFamily:walletHeadingFont,marginTop:2 }}>{walletUpgradeTitle}</div>
+            <div style={{ fontSize:11,color:"#64748B",marginTop:4 }}>{walletUpgradeCopy}</div>
           </div>
           <div style={{ padding:"6px 10px",background:"#ECFDF5",border:"1px solid #A7F3D0",borderRadius:999,fontSize:11,color:"#047857",fontWeight:800,display:"flex",alignItems:"center",gap:6 }}>
-            <I n="lock" s={11} c="#047857" /> Trusted Secure Checkout
+            <I n="lock" s={11} c="#047857" /> Top-up only checkout
           </div>
         </div>
 
-        <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px",background:"#FFFFFF",display:"flex",flexDirection:"column",gap:10 }}>
-          <div style={{ borderRadius:12,background:"#0F172A",color:"#fff",padding:"12px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
-            <div>
-              <div style={{ fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",opacity:0.7,fontWeight:700 }}>Secure Payment Gateway</div>
-              <div style={{ fontSize:16,fontWeight:900,letterSpacing:"-0.01em",marginTop:4 }}>Secure checkout, instant wallet credit.</div>
+        <div style={{ borderRadius:14,background:"#000",border:"1px solid #171717",color:"#fff",display:"grid",gridTemplateColumns:"minmax(0,1fr) clamp(130px,24vw,210px)",overflow:"hidden",minHeight:136 }}>
+          <div style={{ padding:"13px 14px",display:"flex",flexDirection:"column",gap:10,justifyContent:"center" }}>
+            <div style={{ fontSize:10,fontWeight:900,letterSpacing:"0.12em",color:"rgba(191,219,254,0.9)" }}>UPGRADE BREAKDOWN</div>
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8 }}>
+              {[
+                ["Current", currentTierDeposit],
+                ["Target", targetTierDeposit],
+                ["To Add", Math.max(primaryNeed, 0)]
+              ].map(([label, amount]) => (
+                <div key={label} style={{ borderRadius:9,padding:"7px 8px",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(148,163,184,0.3)" }}>
+                  <div style={{ fontSize:9,fontWeight:800,letterSpacing:"0.08em",color:"rgba(191,219,254,0.86)",textTransform:"uppercase" }}>{label}</div>
+                  <div style={{ marginTop:4,fontSize:11,fontWeight:900,color:"#fff" }}>{formatMoney(amount)}</div>
+                </div>
+              ))}
             </div>
-            <div style={{ padding:"6px 10px",borderRadius:999,background:"rgba(255,255,255,0.14)",border:"1px solid rgba(255,255,255,0.24)",fontSize:10,fontWeight:800,letterSpacing:"0.08em",whiteSpace:"nowrap" }}>
-              VERIFIED
-            </div>
+            <button
+              type="button"
+              onClick={() => submitDeposit(depMethod)}
+              disabled={depLoading || !canDeposit}
+              style={{
+                alignSelf:"flex-start",
+                padding:"9px 12px",
+                borderRadius:10,
+                border:(depLoading || !canDeposit) ? "1px solid rgba(148,163,184,0.45)" : "1px solid rgba(187,247,208,0.7)",
+                background:(depLoading || !canDeposit) ? "rgba(30,41,59,0.58)" : "linear-gradient(135deg,#22c55e 0%, #16a34a 58%, #15803d 100%)",
+                color:(depLoading || !canDeposit) ? "#94A3B8" : "#ECFDF5",
+                fontSize:11,
+                fontWeight:900,
+                cursor:(depLoading || !canDeposit) ? "not-allowed" : "pointer",
+                fontFamily:"Manrope, Geist, sans-serif",
+                boxShadow:(depLoading || !canDeposit) ? "none" : "0 10px 18px rgba(22,163,74,0.28)"
+              }}
+            >
+              {walletUpgradeButtonLabel}
+            </button>
           </div>
+          <div style={{ background:"#000",overflow:"hidden" }}>
+            <img
+              src={WALLET_DEPOSIT_BOT_IMAGE.primary}
+              alt=""
+              referrerPolicy="no-referrer"
+              onError={(e) => setFallbackSrc(e, WALLET_DEPOSIT_BOT_IMAGE)}
+              style={{ width:"100%",height:"100%",objectFit:"cover",objectPosition:"center right",pointerEvents:"none",userSelect:"none" }}
+            />
+          </div>
+        </div>
+
+        <div style={{ border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",padding:"12px 12px" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap" }}>
+            <div style={{ fontSize:12,fontWeight:900,color:"#0F172A",letterSpacing:"0.03em" }}>Tier Top-up Ladder</div>
+            <div style={{ fontSize:10,fontWeight:800,color:"#64748B" }}>Pay only the remaining amount each step.</div>
+          </div>
+          <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(188px,1fr))",gap:8 }}>
+            {TIER_TOP_UP_RULES.map((rule) => {
+              const isActive = !needsUnlock && Number(t.id) === Number(rule.fromId);
+              return (
+                <div key={`${rule.fromId}-${rule.toId}`} style={{ borderRadius:10,padding:"9px 10px",border:`1px solid ${isActive ? "#86EFAC" : "#E2E8F0"}`,background:isActive ? "#F0FDF4" : "#F8FAFC" }}>
+                  <div style={{ fontSize:10,fontWeight:900,color:isActive ? "#166534" : "#334155",letterSpacing:"0.04em" }}>
+                    {`KES ${rule.fromDeposit.toLocaleString()} -> KES ${rule.toDeposit.toLocaleString()}`}
+                  </div>
+                  <div style={{ marginTop:5,fontSize:12,fontWeight:900,color:isActive ? "#166534" : "#0F172A" }}>
+                    Add {formatMoney(rule.topUp)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {activeTopUpRule && !needsUnlock && (
+            <div style={{ marginTop:9,fontSize:11,color:"#166534",fontWeight:700 }}>
+              Current step: {formatMoney(activeTopUpRule.fromDeposit)} to {formatMoney(activeTopUpRule.toDeposit)} (add {formatMoney(activeTopUpRule.topUp)}).
+            </div>
+          )}
+        </div>
+
+        <div style={{ border:"1px solid #E5E7EB",borderRadius:14,padding:"14px",background:"#FFFFFF",display:"grid",gap:10 }}>
           <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8 }}>
             {[
               { label:"SSL Secured", icon:"lock" },
@@ -6328,17 +6778,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
               </div>
             ))}
           </div>
-          <div style={{ padding:"10px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
-            <div>
-              <div style={{ fontSize:9,fontWeight:800,color:"#94A3B8",letterSpacing:"0.12em" }}>LOCKED AMOUNT</div>
-              <div style={{ fontSize:15,fontWeight:900,color:"#0F172A" }}>
-                KES {Math.max(primaryNeed, 0).toLocaleString()}
-              </div>
-            </div>
-            <div style={{ padding:"4px 8px",borderRadius:999,background:"#111827",color:"#fff",fontSize:10,fontWeight:800 }}>FIXED</div>
-          </div>
-
-          <div style={{ marginTop:10 }}>
+          <div>
             <div style={{ fontSize:10,letterSpacing:"0.14em",fontWeight:800,color:"#64748B",textTransform:"uppercase",marginBottom:8 }}>Payment Method</div>
             <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(148px,1fr))",gap:8 }}>
               {DEPOSIT_METHODS.map((m) => {
@@ -6355,7 +6795,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
                       fontWeight:800,
                       fontSize:12,
                       cursor:(depLoading || !canDeposit) ? "not-allowed" : "pointer",
-                      fontFamily:"Geist,sans-serif",
+                      fontFamily:"Manrope, Geist, sans-serif",
                       textAlign:"left",
                       minHeight:74,
                       opacity:(depLoading || !canDeposit) ? 0.7 : 1
@@ -6392,39 +6832,39 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             </div>
           </div>
 
-          <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10 }}>
+          <div style={{ marginTop:2,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10 }}>
             <input
               value={depPhone}
               onChange={e=>setDepPhone(e.target.value)}
               placeholder="Phone (M-Pesa only, optional)"
-              style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+              style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Manrope, Geist, sans-serif",background:"#F8FAFC" }}
             />
             <input
               value={depName}
               onChange={e=>setDepName(e.target.value)}
               placeholder="Full name (optional)"
-              style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Geist,sans-serif",background:"#F8FAFC" }}
+              style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,fontFamily:"Manrope, Geist, sans-serif",background:"#F8FAFC" }}
             />
           </div>
-          <button onClick={() => submitDeposit(depMethod)} disabled={depLoading || !canDeposit} style={{ width:"100%",marginTop:12,padding:"12px 12px",background:(depLoading || !canDeposit)?"#E2E8F0":"linear-gradient(135deg,#22c55e 0%, #16a34a 48%, #15803d 100%)",color:(depLoading || !canDeposit)?"#94A3B8":"#ecfdf5",border: (depLoading || !canDeposit) ? "none" : "1px solid rgba(187,247,208,0.55)",borderRadius:11,fontWeight:900,fontSize:13,cursor:(depLoading || !canDeposit)?"not-allowed":"pointer",fontFamily:"Geist,sans-serif",boxShadow:(depLoading || !canDeposit)?"none":"0 12px 22px rgba(22,163,74,0.28)" }}>
+          <button onClick={() => submitDeposit(depMethod)} disabled={depLoading || !canDeposit} style={{ width:"100%",marginTop:4,padding:"12px 12px",background:(depLoading || !canDeposit)?"#E2E8F0":"linear-gradient(135deg,#22c55e 0%, #16a34a 48%, #15803d 100%)",color:(depLoading || !canDeposit)?"#94A3B8":"#ecfdf5",border: (depLoading || !canDeposit) ? "none" : "1px solid rgba(187,247,208,0.55)",borderRadius:11,fontWeight:900,fontSize:13,cursor:(depLoading || !canDeposit)?"not-allowed":"pointer",fontFamily:"Manrope, Geist, sans-serif",boxShadow:(depLoading || !canDeposit)?"none":"0 12px 22px rgba(22,163,74,0.28)" }}>
             {depLoading
               ? "Opening checkout..."
-              : (!canDeposit ? "No Deposit Required" : (depDone ? "Checkout Started" : "Pay Now"))}
+              : (!canDeposit ? "No Deposit Required" : (depDone ? "Checkout Started" : `Open Checkout - ${formatMoney(primaryNeed)}`))}
           </button>
           {depErrorMsg && (
-            <div style={{ marginTop:8, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
+            <div style={{ marginTop:4, fontSize:11, color:"#DC2626", fontWeight:700, background:"#FFF1F2", border:"1px solid #FECACA", padding:"8px 10px", borderRadius:8 }}>
               {depErrorMsg}
             </div>
           )}
-          <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
-            Pay by mobile money, card, or crypto. You’ll return here automatically after checkout.
+          <div style={{ marginTop:2, fontSize:11, color:"#64748B" }}>
+            Pay by mobile money, card, or crypto. You'll return here automatically after checkout.
           </div>
         </div>
       </div>
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14 }}>
         <div style={{ background:"linear-gradient(180deg,#FFFFFF 0%, #F8FAFC 100%)",borderRadius:16,padding:"20px 22px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.06)" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10 }}>
-            <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A" }}>Request Withdrawal</div>
+            <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A",fontFamily:walletHeadingFont }}>Request Withdrawal</div>
             <div style={{ padding:"5px 10px",background:can?"#ECFDF5":"#FEF2F2",border:`1px solid ${can?"#BBF7D0":"#FECACA"}`,borderRadius:999,fontSize:10,color:can?"#166534":"#991B1B",fontWeight:800 }}>
               {can ? "Payout window open" : "Payouts next Tue/Fri"}
             </div>
@@ -6464,7 +6904,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
             value={wdAmt}
             onChange={e=>setWdAmt(e.target.value)}
             placeholder={`Enter amount in ${currency === DISPLAY_CURRENCIES.USD ? "USD" : "KSH"}...`}
-            style={{ width:"100%",padding:"11px 12px",background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:14,color:"#0F172A",outline:"none",fontFamily:"Geist,sans-serif",boxSizing:"border-box",marginBottom:12 }}
+            style={{ width:"100%",padding:"11px 12px",background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:14,color:"#0F172A",outline:"none",fontFamily:"Manrope, Geist, sans-serif",boxSizing:"border-box",marginBottom:12 }}
           />
           {currency === DISPLAY_CURRENCIES.USD && (
             <div data-currency-static="1" style={{ fontSize:10, color:"#64748B", marginTop:-6, marginBottom:8 }}>
@@ -6492,7 +6932,7 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
                     fontWeight:active ? 800 : 700,
                     cursor:"pointer",
                     fontSize:12,
-                    fontFamily:"Geist,sans-serif",
+                    fontFamily:"Manrope, Geist, sans-serif",
                     transition:"all .15s",
                     textAlign:"left",
                     minHeight:68
@@ -6522,13 +6962,13 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
               );
             })}
           </div>
-          <button onClick={submitWithdrawal} disabled={!canSubmitWithdrawal} style={{ width:"100%",padding:"13px",background:canSubmitWithdrawal?"linear-gradient(135deg,#111827 0%, #0F172A 100%)":"#E2E8F0",color:canSubmitWithdrawal?"#fff":"#94A3B8",border:"none",borderRadius:11,fontWeight:800,fontSize:14,cursor:canSubmitWithdrawal?"pointer":"not-allowed",fontFamily:"Geist,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s",boxShadow:canSubmitWithdrawal?"0 10px 20px rgba(15,23,42,0.18)":"none" }}>
+          <button onClick={submitWithdrawal} disabled={!canSubmitWithdrawal} style={{ width:"100%",padding:"13px",background:canSubmitWithdrawal?"linear-gradient(135deg,#111827 0%, #0F172A 100%)":"#E2E8F0",color:canSubmitWithdrawal?"#fff":"#94A3B8",border:"none",borderRadius:11,fontWeight:800,fontSize:14,cursor:canSubmitWithdrawal?"pointer":"not-allowed",fontFamily:"Manrope, Geist, sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"background .15s",boxShadow:canSubmitWithdrawal?"0 10px 20px rgba(15,23,42,0.18)":"none" }}>
             <I n={done?"check":"wallet"} s={14} c={canSubmitWithdrawal?"#fff":"#94A3B8"}/>{done?"Submitted!":"Submit Withdrawal"}
           </button>
         </div>
         <div style={{ background:"#FFFFFF",borderRadius:16,padding:"20px 22px",border:"1px solid #E5E7EB",boxShadow:"0 10px 26px rgba(15,23,42,0.06)" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-            <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A" }}>History</div>
+            <div style={{ fontWeight:900,fontSize:15,letterSpacing:"-0.02em",color:"#0F172A",fontFamily:walletHeadingFont }}>History</div>
             <div style={{ fontSize:11,color:"#94A3B8",fontWeight:700 }}>{historyRows.length} transactions</div>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1.1fr 1fr 1fr",gap:8,marginBottom:8 }}>
@@ -6554,47 +6994,6 @@ function WithdrawContent({ t, earn, balance, authUser, profileRow, focusDeposit,
    ADMIN DASHBOARD - FULL
  */
 
-const ADMIN_USERS = [
-  { id:"U001", name:"Alice Mwangi",    email:"alice.m@gmail.com",    tier:"Executive",       deposit:20000,  status:"Active",   joined:"Mar 1, 2025",  earn:9400,   phone:"0712 345 678" },
-  { id:"U002", name:"Brian Kamau",     email:"brian.k@gmail.com",    tier:"Standard",     deposit:10000,  status:"Active",   joined:"Feb 25, 2025", earn:3200,   phone:"0723 456 789" },
-  { id:"U003", name:"Carol Njoki",     email:"carol.n@yahoo.com",    tier:"Executive Pro",    deposit:50000,  status:"Active",   joined:"Feb 18, 2025", earn:28000,  phone:"0734 567 890" },
-  { id:"U004", name:"David Otieno",    email:"david.o@gmail.com",    tier:"Regular",      deposit:5000,   status:"Pending",  joined:"Mar 8, 2025",  earn:0,      phone:"0745 678 901" },
-  { id:"U005", name:"Emma Wanjiku",    email:"emma.w@hotmail.com",   tier:"Diamond",deposit:100000, status:"Active",   joined:"Jan 30, 2025", earn:71000,  phone:"0756 789 012" },
-  { id:"U006", name:"Francis Odhiambo",email:"francis.o@gmail.com",  tier:"Standard",     deposit:10000,  status:"Active",   joined:"Feb 10, 2025", earn:5600,   phone:"0767 890 123" },
-  { id:"U007", name:"Grace Achieng",   email:"grace.a@gmail.com",    tier:"Executive",       deposit:20000,  status:"Suspended",joined:"Jan 15, 2025", earn:12000,  phone:"0778 901 234" },
-  { id:"U008", name:"Henry Muriuki",   email:"henry.m@gmail.com",    tier:"Regular",      deposit:5000,   status:"Active",   joined:"Mar 5, 2025",  earn:1200,   phone:"0789 012 345" },
-  { id:"U009", name:"Irene Chebet",    email:"irene.c@gmail.com",    tier:"Executive Pro",    deposit:50000,  status:"Active",   joined:"Feb 1, 2025",  earn:34000,  phone:"0790 123 456" },
-  { id:"U010", name:"James Kimani",    email:"james.k@yahoo.com",    tier:"Standard",     deposit:10000,  status:"Pending",  joined:"Mar 9, 2025",  earn:0,      phone:"0701 234 567" },
-];
-
-const ADMIN_WITHDRAWALS = [
-  { id:"W001", user:"Alice Mwangi",   amount:2400,  method:"M-Pesa",      date:"Mar 8, 2025",  status:"Pending",  phone:"0712 345 678", tier:"Executive" },
-  { id:"W002", user:"Brian Kamau",    amount:1200,  method:"M-Pesa",      date:"Mar 7, 2025",  status:"Pending",  phone:"0723 456 789", tier:"Standard" },
-  { id:"W003", user:"Emma Wanjiku",   amount:8000,  method:"Visa",        date:"Mar 7, 2025",  status:"Approved", phone:"0756 789 012", tier:"Diamond" },
-  { id:"W004", user:"Carol Njoki",    amount:5500,  method:"M-Pesa",      date:"Mar 6, 2025",  status:"Approved", phone:"0734 567 890", tier:"Executive Pro" },
-  { id:"W005", user:"Francis Odhiambo",amount:800, method:"Airtel Money", date:"Mar 5, 2025",  status:"Paid",     phone:"0767 890 123", tier:"Standard" },
-  { id:"W006", user:"Irene Chebet",   amount:4200,  method:"M-Pesa",      date:"Mar 4, 2025",  status:"Paid",     phone:"0790 123 456", tier:"Executive Pro" },
-  { id:"W007", user:"Henry Muriuki",  amount:600,   method:"M-Pesa",      date:"Mar 3, 2025",  status:"Rejected", phone:"0789 012 345", tier:"Regular" },
-  { id:"W008", user:"Alice Mwangi",   amount:1800,  method:"M-Pesa",      date:"Mar 1, 2025",  status:"Paid",     phone:"0712 345 678", tier:"Executive" },
-  { id:"W009", user:"David Otieno",   amount:500,   method:"M-Pesa",      date:"Feb 28, 2025", status:"Rejected", phone:"0745 678 901", tier:"Regular" },
-  { id:"W010", user:"Emma Wanjiku",   amount:12000, method:"Crypto",      date:"Feb 25, 2025", status:"Paid",     phone:"0756 789 012", tier:"Diamond" },
-];
-
-const ADMIN_TXS = [
-  { id:"T001", user:"Emma Wanjiku",    type:"Withdrawal",  amount:8000,   method:"Visa",        date:"Mar 7, 2025",  status:"Approved" },
-  { id:"T002", user:"Carol Njoki",     type:"Withdrawal",  amount:5500,   method:"M-Pesa",      date:"Mar 6, 2025",  status:"Approved" },
-  { id:"T003", user:"Alice Mwangi",    type:"Deposit",     amount:20000,  method:"M-Pesa",      date:"Mar 5, 2025",  status:"Paid" },
-  { id:"T004", user:"Francis Odhiambo",type:"Withdrawal", amount:800,    method:"Airtel Money", date:"Mar 5, 2025",  status:"Paid" },
-  { id:"T005", user:"David Otieno",    type:"Deposit",     amount:5000,   method:"M-Pesa",      date:"Mar 4, 2025",  status:"Pending" },
-  { id:"T006", user:"Irene Chebet",    type:"Withdrawal",  amount:4200,   method:"M-Pesa",      date:"Mar 4, 2025",  status:"Paid" },
-  { id:"T007", user:"Henry Muriuki",   type:"Deposit",     amount:5000,   method:"M-Pesa",      date:"Mar 3, 2025",  status:"Paid" },
-  { id:"T008", user:"Brian Kamau",     type:"Withdrawal",  amount:1200,   method:"M-Pesa",      date:"Mar 2, 2025",  status:"Pending" },
-  { id:"T009", user:"Emma Wanjiku",    type:"Earning",     amount:3500,   method:"Bonus Rewards",  date:"Mar 1, 2025",  status:"Paid" },
-  { id:"T010", user:"Grace Achieng",   type:"Deposit",     amount:20000,  method:"Visa",        date:"Feb 28, 2025", status:"Paid" },
-  { id:"T011", user:"James Kimani",    type:"Deposit",     amount:10000,  method:"M-Pesa",      date:"Feb 27, 2025", status:"Pending" },
-  { id:"T012", user:"Alice Mwangi",    type:"Earning",     amount:2400,   method:"Videos",      date:"Feb 26, 2025", status:"Paid" },
-];
-
 function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChange }) {
   const [sideOpen, setSideOpen] = useState(true);
   const normalizeAdminTab = useCallback((tabId) => {
@@ -6617,9 +7016,9 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   const [userCategory, setUserCategory] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
   const [wdFilter, setWdFilter] = useState("all");
-  const [users, setUsers] = useState(ADMIN_USERS);
-  const [withdrawals, setWithdrawals] = useState(ADMIN_WITHDRAWALS);
-  const [txs, setTxs] = useState(ADMIN_TXS);
+  const [users, setUsers] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [txs, setTxs] = useState([]);
   const [txFilter, setTxFilter] = useState("all");
   const [tierUpgradeEvents, setTierUpgradeEvents] = useState([]);
   const [riskFlags, setRiskFlags] = useState([]);
@@ -6638,6 +7037,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   const [maintenance, setMaintenance] = useState(false);
   const [payoutMode, setPayoutMode] = useState(MANUAL_WITHDRAWALS ? "manual" : "auto");
   const [notifOpen, setNotifOpen] = useState(false);
+  const adminNotifWrapRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const adminHeadingFont = "Sora, Geist, sans-serif";
   const ADMIN_LIST_LIMIT = 500;
@@ -6865,6 +7265,24 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
     }, 20000);
     return () => clearInterval(id);
   }, [loadAdminData, supabase]);
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onPointerDown = (event) => {
+      if (!adminNotifWrapRef.current) return;
+      if (!adminNotifWrapRef.current.contains(event.target)) setNotifOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setNotifOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [notifOpen]);
 
   const summaryNum = useCallback((key, fallback = 0) => {
     const n = Number(adminSummary?.[key]);
@@ -6931,6 +7349,63 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
     {id:"risk",         label:"Fraud Flags",  ic:"shield",   badge:openRiskCount || null},
     {id:"settings",     label:"Settings",     ic:"settings", badge:null},
   ];
+  const pendingWdPreview = withdrawals.find((w) => String(w?.status || "").toLowerCase() === "pending");
+  const pendingDepPreview = deposits.find((d) => String(d?.status || "").toLowerCase() === "pending");
+  const latestRiskPreview = riskFlags.find((r) => String(r?.status || "").toLowerCase() === "open");
+  const newestUserPreview = users[0];
+  const adminNotifications = [];
+  if (pendingWithdrawalsCount > 0) {
+    adminNotifications.push({
+      id: `wd-${pendingWithdrawalsCount}-${pendingWdPreview?.id || "na"}`,
+      ic: "up",
+      t: "Pending withdrawal",
+      s: pendingWdPreview
+        ? `${pendingWdPreview.user || "User"} - KES ${num(pendingWdPreview.amount).toLocaleString()}`
+        : `${pendingWithdrawalsCount} withdrawal request(s) waiting`,
+      c: ADMIN.red
+    });
+  }
+  if (pendingDepositsCount > 0) {
+    adminNotifications.push({
+      id: `dep-${pendingDepositsCount}-${pendingDepPreview?.id || "na"}`,
+      ic: "wallet",
+      t: "Pending deposit",
+      s: pendingDepPreview
+        ? `${pendingDepPreview.user || "User"} - KES ${num(pendingDepPreview.amount).toLocaleString()}`
+        : `${pendingDepositsCount} deposit(s) need confirmation`,
+      c: ADMIN.blue
+    });
+  }
+  if (newestUserPreview) {
+    adminNotifications.push({
+      id: `user-${newestUserPreview.id || newestUserPreview.email || "na"}`,
+      ic: "user",
+      t: "Latest signup",
+      s: `${newestUserPreview.name || "User"} - ${newestUserPreview.tier || "Regular"} tier`,
+      c: ADMIN.blueAlt
+    });
+  }
+  if (openRiskCount > 0) {
+    adminNotifications.push({
+      id: `risk-${openRiskCount}-${latestRiskPreview?.flag_id || "na"}`,
+      ic: "shield",
+      t: "Risk flags open",
+      s: latestRiskPreview
+        ? `${latestRiskPreview.user || "User"} - ${latestRiskPreview.reason || "Needs review"}`
+        : `${openRiskCount} unresolved risk alert(s)`,
+      c: ADMIN.redAlt
+    });
+  }
+  if (adminNotifications.length === 0) {
+    adminNotifications.push({
+      id: "stable",
+      ic: "check",
+      t: "System stable",
+      s: "No pending admin actions right now.",
+      c: ADMIN.green
+    });
+  }
+  const adminHasAlerts = pendingWithdrawalsCount > 0 || pendingDepositsCount > 0 || openRiskCount > 0;
 
   const updateWithdrawal = async (id, status) => {
     setWithdrawals(ws => ws.map(w => w.id===id ? {...w,status} : w));
@@ -7133,23 +7608,31 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
             <div style={{ width:6,height:6,borderRadius:"50%",background:ADMIN.green,animation:"pulse 2s infinite" }}/>
             <span style={{ fontSize:11,color:"#111",fontWeight:700,whiteSpace:"nowrap" }}>Platform Live</span>
           </div>
-          <button onClick={()=>setNotifOpen(o=>!o)} style={{ width:34,height:34,borderRadius:8,border:"1.5px solid #111",background:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",flexShrink:0,boxShadow:"0 3px 0 #111" }}>
-            <I n="bell" s={15} c="#111"/>
-            {withdrawals.filter(w=>w.status==="Pending").length>0&&<div style={{ position:"absolute",top:6,right:6,width:8,height:8,borderRadius:"50%",background:"#DC2626",border:"1.5px solid #111" }}/>}
-          </button>
-          {notifOpen&&(
-            <div style={{ position:"absolute",top:62,right:60,width:300,background:"#fff",border:"2px solid #111",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.4)",zIndex:999,padding:"14px 0",animation:"scaleIn .18s ease" }} onClick={e=>e.stopPropagation()}>
-              <div style={{ padding:"0 16px 10px",borderBottom:"2px solid #111",fontSize:13,fontWeight:900,color:"#111" }}>Notifications</div>
-              {[{t:"New withdrawal request",s:"Alice M. - KES 2,400",c:ADMIN.red},{t:"New user registered",s:"David O. joined - Regular tier",c:ADMIN.blue},{t:"Bonus credited",s:"1,247 bonus sessions done",c:ADMIN.green}].map((n,i)=>(
-                <div key={i} style={{ padding:"10px 16px",display:"flex",gap:10 }}>
-                  <div style={{ width:28,height:28,borderRadius:8,background:`${n.c}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"1px solid #111" }}>
-                    <I n="bell" s={12} c={n.c}/>
-                  </div>
-                  <div><div style={{ fontSize:12,fontWeight:700,color:"#111" }}>{n.t}</div><div style={{ fontSize:11,color:ADMIN.muted,marginTop:2 }}>{n.s}</div></div>
+          <div ref={adminNotifWrapRef} style={{ position:"relative" }}>
+            <button onClick={()=>setNotifOpen(o=>!o)} style={{ width:34,height:34,borderRadius:8,border:"1.5px solid #111",background:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",flexShrink:0,boxShadow:"0 3px 0 #111" }}>
+              <I n="bell" s={15} c="#111"/>
+              {adminHasAlerts && <div style={{ position:"absolute",top:6,right:6,width:8,height:8,borderRadius:"50%",background:"#DC2626",border:"1.5px solid #111" }}/>}
+            </button>
+            {notifOpen&&(
+              <div style={{ position:"absolute",top:42,right:0,width:320,background:"#fff",border:"2px solid #111",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.4)",zIndex:999,padding:"14px 0",animation:"scaleIn .18s ease" }} onClick={e=>e.stopPropagation()}>
+                <div style={{ padding:"0 16px 10px",borderBottom:"2px solid #111",fontSize:13,fontWeight:900,color:"#111",display:"flex",justifyContent:"space-between",gap:8 }}>
+                  <span>Notifications</span>
+                  {lastSyncAt ? <span style={{ fontSize:10,fontWeight:700,color:ADMIN.muted,whiteSpace:"nowrap" }}>Synced {fmtDateTime(lastSyncAt)}</span> : null}
                 </div>
-              ))}
-            </div>
-          )}
+                {adminNotifications.map((n)=>(
+                  <div key={n.id || `${n.t}-${n.s}`} style={{ padding:"10px 16px",display:"flex",gap:10 }}>
+                    <div style={{ width:28,height:28,borderRadius:8,background:`${n.c}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"1px solid #111" }}>
+                      <I n={n.ic || "bell"} s={12} c={n.c}/>
+                    </div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{n.t}</div>
+                      <div style={{ fontSize:11,color:ADMIN.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{n.s}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ width:34,height:34,borderRadius:"50%",background:"#111",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
             <I n="user" s={14} c="#fff"/>
           </div>
@@ -7281,7 +7764,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                   <span onClick={()=>setTab("withdrawals")} style={{ fontSize:11,color:ADMIN.blue,cursor:"pointer",fontWeight:800 }}>Manage All</span>
                 </div>
                 {withdrawals.filter(w=>w.status==="Pending").length===0?(
-                  <div style={{ padding:"20px",textAlign:"center",color:ADMIN.muted,fontSize:13 }}>No pending withdrawals "</div>
+                  <div style={{ padding:"20px",textAlign:"center",color:ADMIN.muted,fontSize:13 }}>No pending withdrawals.</div>
                 ):withdrawals.filter(w=>w.status==="Pending").slice(0,3).map((w,i)=>(
                   <div key={w.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:i>0?"1px solid #111":"none" }}>
                     <div style={{ flex:1 }}>
@@ -8009,6 +8492,7 @@ export default function App() {
   const [guideTyped, setGuideTyped] = useState("");
   const [guideTypingDone, setGuideTypingDone] = useState(false);
   const [guideSeen, setGuideSeen] = useState(false);
+  const referralAttachAttemptsRef = useRef(new Set());
   setActiveDisplayCurrency(displayCurrency);
   const dashboardGuideKey = guideSeenKeyForUser(DASH_GUIDE_SEEN_KEY, session?.user?.id);
   const referralGuideKey = guideSeenKeyForUser(REFERRAL_GUIDE_SEEN_KEY, session?.user?.id);
@@ -8180,11 +8664,20 @@ export default function App() {
   const role = normalizeRoleToken(profileRow?.role || "");
   const categoryRole = normalizeRoleToken(profileRow?.category || "");
   const roleList = Array.isArray(profileRow?.roles) ? profileRow.roles : [];
+  const appRole = normalizeRoleToken(authUser?.app_metadata?.role || authUser?.app_metadata?.user_role || "");
+  const appRoleList = parseRoleList(authUser?.app_metadata?.roles || authUser?.app_metadata?.user_roles);
   const hasProfileAdminRole =
     hasAdminRoleToken(role) ||
     hasAdminRoleToken(categoryRole) ||
     roleList.some((r) => hasAdminRoleToken(r));
-  const isAdmin = hasProfileAdminRole;
+  const hasAppAdminRole =
+    hasAdminRoleToken(appRole) ||
+    appRoleList.some((r) => hasAdminRoleToken(r));
+  const isEmailVerified = Boolean(authUser?.email_confirmed_at);
+  const profileAdminFallbackEnabled = parseBooleanFlag(
+    import.meta.env.VITE_ALLOW_PROFILE_ADMIN_FALLBACK || "0"
+  );
+  const isAdmin = hasAppAdminRole || (profileAdminFallbackEnabled && isEmailVerified && hasProfileAdminRole);
   const profileReady = !SUPABASE_ENABLED || !authUser || (profileRow !== null && profileRow?.id === authUser.id);
 
   useEffect(() => {
@@ -8213,6 +8706,13 @@ export default function App() {
     try {
       const u = new URL(window.location.href);
       u.searchParams.delete("auth");
+      u.searchParams.delete("ref");
+      u.searchParams.delete("referral");
+      u.searchParams.delete("code");
+      u.searchParams.delete("access_token");
+      u.searchParams.delete("refresh_token");
+      u.searchParams.delete("token_type");
+      u.searchParams.delete("expires_in");
       if (!/type=recovery/i.test(u.search + u.hash)) {
         const q = u.searchParams.toString();
         u.search = q ? `?${q}` : "";
@@ -8221,6 +8721,61 @@ export default function App() {
       }
     } catch (e) {}
   }, [SUPABASE_ENABLED, authReady, authUser?.id]);
+
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !authReady || !authUser?.id) return;
+    if (!profileReady) return;
+    const existingReferredBy = normalizeRefCode(profileRow?.referred_by || "");
+    if (existingReferredBy) {
+      clearStoredRef();
+      return;
+    }
+    const selfRefCode = normalizeRefCode(profileRow?.ref_code || "");
+    const candidate = normalizeRefCode(getStoredRef() || getRefFromUrl());
+    if (!candidate || candidate === selfRefCode) return;
+    const attemptKey = `${authUser.id}:${candidate}`;
+    if (referralAttachAttemptsRef.current.has(attemptKey)) return;
+    referralAttachAttemptsRef.current.add(attemptKey);
+
+    let cancelled = false;
+    const attachReferral = async () => {
+      try {
+        const apiBase = getApiBase();
+        if (!apiBase) return;
+        const token = await getAccessToken();
+        if (!token) return;
+        const res = await fetch(`${apiBase}/api/v1/referral/attach`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ ref_code: candidate })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const reason = String(data?.reason || "");
+        if (res.ok && (data?.attached || reason === "already_attached")) {
+          clearStoredRef();
+          const refreshed = await loadProfileRow(authUser.id);
+          if (!cancelled && refreshed) setProfileRow(refreshed);
+          return;
+        }
+        const errText = String(data?.error || "").toLowerCase();
+        if (
+          errText.includes("invalid referral") ||
+          errText.includes("self referral") ||
+          reason === "ineligible_account"
+        ) {
+          clearStoredRef();
+        }
+      } catch (_e) {
+        /* no-op */
+      }
+    };
+    attachReferral();
+    return () => { cancelled = true; };
+  }, [SUPABASE_ENABLED, authReady, authUser?.id, profileReady, profileRow?.referred_by, profileRow?.ref_code]);
 
   useEffect(() => {
     if (!supabase || !authUser?.id) return;

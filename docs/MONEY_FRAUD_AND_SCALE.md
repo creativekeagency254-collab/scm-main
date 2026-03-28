@@ -2,7 +2,7 @@
 
 This document describes the production controls for:
 1. Preventing payment fraud and duplicate credits.
-2. Verifying Kora payment status before wallet credit.
+2. Verifying Fonbnk payment status before wallet credit.
 3. Scaling Supabase/Postgres safely past 1M users.
 
 ## 1) Payment Integrity Controls
@@ -18,11 +18,11 @@ Current controls:
    - `payment_flags` records suspicious cases (mismatch, missing deposit, processing errors).
 7. Referral abuse guard: referral commission is awarded only on the referred user's first successful deposit.
 
-## 2) Double-Check Flow (Kora)
+## 2) Double-Check Flow (Fonbnk)
 
 1. `POST /api/v1/deposit/create` creates `deposits.status='pending'`.
-2. Kora redirect/webhook returns tracking/reference.
-3. Verify/webhook endpoint fetches live provider status from Kora.
+2. Fonbnk redirect/webhook returns tracking/reference.
+3. Verify/webhook endpoint fetches live provider status from Fonbnk.
 4. Service compares provider amount to DB amount.
 5. On exact match, call `confirm_deposit_success(reference)`.
 6. DB function:
@@ -40,16 +40,16 @@ Current controls:
 Run periodically (every 5-15 minutes):
 
 ```bash
-npm run reconcile:kora
+npm run reconcile:fonbnk
 ```
 
 Safety guard:
-1. The job refuses to run when `KORA_MOCK=1` unless `ALLOW_MOCK_RECON=1`.
+1. The job refuses to run when `FONBNK_MOCK=1` unless `ALLOW_MOCK_RECON=1`.
 2. Only set `ALLOW_MOCK_RECON=1` in test/sandbox environments.
 
 The script:
-1. Scans recent pending/failed Kora deposits.
-2. Re-queries Kora status by reference.
+1. Scans recent pending/failed Fonbnk deposits.
+2. Re-queries Fonbnk status by reference.
 3. Confirms success via `confirm_deposit_success`.
 4. Flags amount mismatches/errors for manual review.
 

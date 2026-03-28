@@ -5,9 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5000 --strictPort",
+    "dev:api": "vercel dev --listen 5001",
+    "dev:full": "npx concurrently -k -n API,WEB \"vercel dev --listen 5001\" \"vite --host 0.0.0.0 --port 5000 --strictPort\"",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 5000 --strictPort",
-    "reconcile:kora": "node scripts/reconcile_kora_payments.mjs",
+    "reconcile:fonbnk": "node scripts/reconcile_fonbnk_payments.mjs",
+    "payments:smoke": "node scripts/smoke_payment_gateways.mjs",
+    "payments:reference:test": "node scripts/test_payment_reference_e2e.mjs .tmp_vercel_env_prod_latest https://scm-main-ruddy.vercel.app",
+    "payments:referral:test": "node scripts/test_referral_paystack_flow.mjs .tmp_vercel_env_prod_latest https://scm-main-ruddy.vercel.app 4",
+    "payments:mpesa:test": "node scripts/test_mpesa_sandbox_flow.mjs",
+    "admin:sim:test": "node scripts/test_admin_simulation_lab.mjs",
     "vercel:preflight": "node scripts/vercel-preflight.mjs",
     "vercel:deploy": "npx vercel deploy -y",
     "vercel:deploy:prod": "npx vercel deploy --prod -y"

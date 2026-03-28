@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
+import { applyApiSecurity, readClientIp } from "../../../lib/api/http-security.js";
+import { checkRateLimit } from "../../../lib/api/rate-limit.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -74,9 +76,13 @@ const isAdminUser = async (supabaseAdmin, userId) => {
   if (error || !data) return false;
   return hasAdminRole(data?.profile_data);
 };
+const isSafeIdentifier = (value) => /^[A-Za-z0-9._:-]{1,128}$/.test(String(value || ""));
 
 export default async function handler(req, res) {
-  res.setHeader("Content-Type", "application/json");
+  const security = applyApiSecurity(req, res, { methods: ["POST", "OPTIONS"] });
+  if (!security.ok) {
+    return res.status(403).json({ error: security.error || "forbidden" });
+  }
 
   if (req.method === "OPTIONS") {
     res.setHeader("Allow", "POST, OPTIONS");
@@ -101,10 +107,20 @@ export default async function handler(req, res) {
   if (!payoutId) {
     return res.status(400).json({ error: "payout_id required" });
   }
+  if (!isSafeIdentifier(payoutId)) {
+    return res.status(400).json({ error: "invalid payout_id" });
+  }
 
   const token = getBearerToken(req);
   if (!token) {
     return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const rateKey = `payout-complete:${readClientIp(req) || "unknown"}`;
+  const rate = checkRateLimit(rateKey, { windowMs: 60_000, max: 30 });
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(Math.max(Math.ceil(rate.retryAfterMs / 1000), 1)));
+    return res.status(429).json({ error: "too many requests" });
   }
 
   const supabaseAdmin = getAdmin();

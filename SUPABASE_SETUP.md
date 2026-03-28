@@ -1,6 +1,6 @@
 # Supabase Setup
 
-> Note: The source of truth is the SQL files in `supabase/migrations`. Apply every migration in order, including `20260319_fix_request_withdrawal_new_balance.sql`, `20260320_security_hardening.sql`, `20260320_payments_fraud_and_scale.sql`, `20260320_dashboard_overview_records.sql`, `20260320_loophole_and_malfunction_guards.sql`, `20260320_referral_first_deposit_guard.sql`, `20260320_payment_flags_admin_triage.sql`, `20260320_video_views_deposit_gate.sql`, `20260320_user_upgrade_security.sql`, `20260320_admin_1m_scale.sql`, `20260320_webhook_security_hardening.sql`, `20260320_admin_role_helpers.sql`, and `20260320194000_backfill_tier_selected_from_success_deposits.sql`. The legacy SQL section below is archival reference only and is not the source of truth.
+> Note: The source of truth is the SQL files in `supabase/migrations`. Apply every migration in order, including `20260319_fix_request_withdrawal_new_balance.sql`, `20260320_security_hardening.sql`, `20260320_payments_fraud_and_scale.sql`, `20260320_dashboard_overview_records.sql`, `20260320_loophole_and_malfunction_guards.sql`, `20260320_referral_first_deposit_guard.sql`, `20260320_payment_flags_admin_triage.sql`, `20260320_video_views_deposit_gate.sql`, `20260320_user_upgrade_security.sql`, `20260320_admin_1m_scale.sql`, `20260320_webhook_security_hardening.sql`, `20260320_admin_role_helpers.sql`, `20260320194000_backfill_tier_selected_from_success_deposits.sql`, and `20260322_switch_default_payment_provider_to_fonbnk.sql`. The legacy SQL section below is archival reference only and is not the source of truth.
 
 This project uses Supabase for auth and data when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
 
@@ -27,16 +27,17 @@ For E2E tests (optional):
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-KORA_PUBLIC_KEY=your_kora_public_key
-KORA_SECRET_KEY=your_kora_secret_key
-KORA_WEBHOOK_URL=https://your-domain.com/api/v1/webhook/kora
+FONBNK_SOURCE=your_fonbnk_source
+FONBNK_URL_SIGNATURE_SECRET=your_fonbnk_url_signature_secret
+FONBNK_CLIENT_ID=your_fonbnk_client_id
+FONBNK_CLIENT_SECRET=your_fonbnk_client_secret_base64
+FONBNK_WEBHOOK_URL=https://your-domain.com/api/v1/webhook/fonbnk
+FONBNK_CALLBACK_URL=https://your-domain.com
 API_BASE=http://localhost:8787
-KORA_WEBHOOK_ENFORCE=1
-KORA_WEBHOOK_TOKEN=your_shared_webhook_token
-KORA_WEBHOOK_HMAC_SECRET=your_webhook_hmac_secret
-KORA_WEBHOOK_REQUIRE_TIMESTAMP=1
-KORA_WEBHOOK_REPLAY_ENFORCE=1
-KORA_WEBHOOK_MAX_SKEW_SECONDS=300
+FONBNK_WEBHOOK_ENFORCE=1
+FONBNK_WEBHOOK_TOKEN=your_shared_webhook_token
+FONBNK_WEBHOOK_SECRET=your_webhook_secret
+FONBNK_WEBHOOK_REPLAY_ENFORCE=1
 AUTO_PAYOUT_ADMIN_TOKEN=your_strong_random_admin_token
 ```
 
@@ -69,6 +70,8 @@ Run these in Supabase SQL editor, in order:
 16) `supabase/migrations/20260320_webhook_security_hardening.sql`
 17) `supabase/migrations/20260320_admin_role_helpers.sql`
 18) `supabase/migrations/20260320194000_backfill_tier_selected_from_success_deposits.sql`
+19) `supabase/migrations/20260322_switch_default_payment_provider_to_fonbnk.sql`
+20) `supabase/migrations/20260327_mpesa_sandbox_mvp.sql`
 
 Important:
 - If you already applied `20260315_withdrawal_deposit_gate.sql`, still run `20260319_fix_request_withdrawal_new_balance.sql`.
@@ -85,6 +88,8 @@ Important:
 - Run `20260320_webhook_security_hardening.sql` to add durable webhook replay protection (`register_payment_webhook_receipt`) and admin visibility for webhook receipts.
 - Run `20260320_admin_role_helpers.sql` to add helper functions for assigning/revoking admin role labels in `users.profile_data`.
 - Run `20260320194000_backfill_tier_selected_from_success_deposits.sql` to auto-mark legacy deposited users as tier-activated.
+- Run `20260322_switch_default_payment_provider_to_fonbnk.sql` to set default payment provider labels to `fonbnk`.
+- Run `20260327_mpesa_sandbox_mvp.sql` to add Daraja sandbox payment fields/tables (`payments` environment columns, `courses`, `course_access`, `mpesa_stk_requests`).
 
 Legacy schema (no longer used) is below:
 

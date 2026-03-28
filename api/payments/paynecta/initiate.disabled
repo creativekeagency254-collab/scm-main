@@ -1,0 +1,176 @@
+import {
+  buildPublicUrl,
+  createPendingPaymentRecords,
+  ensureUserIdentity,
+  expectedKesForPlan,
+  getAuthUser,
+  getSupabaseAdmin,
+  isSupabaseConfigured,
+  isValidEmail,
+  newReference,
+  normalizeAmount,
+  normalizeEmail,
+  normalizePhoneKe,
+  rekeyPaymentReference,
+  readBodyObject,
+  sanitizePlanId,
+  updatePaymentRecordsStatus
+} from "../../../lib/api/payment-common.js";
+import { applyApiSecurity, readClientIp, resolveRuntimeBaseUrl } from "../../../lib/api/http-security.js";
+import { checkRateLimit } from "../../../lib/api/rate-limit.js";
+import { initiatePaynectaStkPush, isPaynectaConfigured } from "../../../lib/payments/index.js";
+
+const formatPaynectaInitError = (err) => {
+  const msg = String(err?.message || "").trim();
+  const lower = msg.toLowerCase();
+  if (lower.includes("email is required")) {
+    return "Paynecta merchant email is required. Set PAYNECTA_USER_EMAIL to the email that owns your PAYNECTA_API_KEY.";
+  }
+  if (lower.includes("user not found with provided email") || lower.includes("api key does not belong")) {
+    return "Paynecta credentials mismatch. Set PAYNECTA_USER_EMAIL to the exact account email linked to your PAYNECTA_API_KEY.";
+  }
+  return msg || "failed to initiate paynecta payment";
+};
+
+export default async function handler(req, res) {
+  const security = applyApiSecurity(req, res, { methods: ["POST", "OPTIONS"] });
+  if (!security.ok) {
+    return res.status(403).json({ error: security.error || "forbidden" });
+  }
+
+  if (req.method === "OPTIONS") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(204).end();
+  }
+
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(405).json({ error: "method not allowed" });
+  }
+
+  if (!isSupabaseConfigured()) {
+    return res.status(500).json({ error: "supabase not configured" });
+  }
+  if (!isPaynectaConfigured()) {
+    return res.status(500).json({ error: "paynecta not configured" });
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: "supabase not configured" });
+  }
+
+  const { user, error: authError } = await getAuthUser(supabaseAdmin, req);
+  if (authError || !user?.id) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const rateKey = `paynecta-initiate:${user.id}:${readClientIp(req) || "unknown"}`;
+  const rate = checkRateLimit(rateKey, { windowMs: 60_000, max: 20 });
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(Math.max(Math.ceil(rate.retryAfterMs / 1000), 1)));
+    return res.status(429).json({ error: "too many requests" });
+  }
+
+  const body = readBodyObject(req);
+  const planId = sanitizePlanId(body.planId || body.plan_id || body.tier || body.tierId);
+  if (!planId) {
+    return res.status(400).json({ error: "invalid planId" });
+  }
+
+  const expectedKes = expectedKesForPlan(planId);
+  if (!Number.isFinite(expectedKes) || expectedKes <= 0) {
+    return res.status(400).json({ error: "invalid plan amount" });
+  }
+
+  const providedKes = normalizeAmount(body.amountKES ?? body.amount_kes ?? body.amountKes ?? body.amount);
+  if (!Number.isFinite(providedKes) || Math.abs(providedKes - expectedKes) > 0.009) {
+    return res.status(400).json({ error: `invalid amountKES for plan ${planId}` });
+  }
+
+  const phoneNumber = normalizePhoneKe(body.phoneNumber || body.phone_number || body.phone || "");
+  if (!phoneNumber) {
+    return res.status(400).json({ error: "invalid phoneNumber" });
+  }
+
+  const requestedEmail = normalizeEmail(body.userEmail || body.email || body.user_email || user.email || "");
+  if (!isValidEmail(requestedEmail)) {
+    return res.status(400).json({ error: "invalid userEmail" });
+  }
+
+  const identity = ensureUserIdentity({
+    authUser: user,
+    userId: body.userId || body.user_id || user.id,
+    email: requestedEmail
+  });
+  if (!identity.ok) {
+    return res.status(403).json({ error: identity.error || "forbidden" });
+  }
+
+  const reference = newReference("paynecta");
+  const createRows = await createPendingPaymentRecords(supabaseAdmin, {
+    userId: identity.userId,
+    planId,
+    amount: expectedKes,
+    currency: "KES",
+    provider: "paynecta",
+    reference,
+    depositProviderLabel: "paynecta - mpesa"
+  });
+  if (!createRows.ok) {
+    return res.status(500).json({ error: createRows.error || "failed to create payment records" });
+  }
+
+  try {
+    const response = await initiatePaynectaStkPush({
+      phoneNumber,
+      amountKes: expectedKes,
+      reference,
+      planId,
+      userId: identity.userId,
+      userEmail: identity.email,
+      metadata: {
+        planId,
+        userId: identity.userId,
+        userEmail: identity.email
+      }
+    });
+    if (!response.success) {
+      throw new Error(response.message || "Failed to initiate M-Pesa payment.");
+    }
+
+    let effectiveReference = reference;
+    const providerReference = String(response.providerReference || "").trim();
+    if (providerReference && providerReference !== reference) {
+      const rekey = await rekeyPaymentReference(supabaseAdmin, {
+        currentReference: reference,
+        nextReference: providerReference
+      });
+      if (!rekey.ok) {
+        throw new Error(rekey.error || "Failed to reconcile provider reference.");
+      }
+      effectiveReference = rekey.reference || providerReference;
+    }
+
+    const baseUrl = resolveRuntimeBaseUrl(req);
+    const redirectUrl = buildPublicUrl(
+      baseUrl,
+      body.success_url || body.successUrl || "/payment-success",
+      { provider: "paynecta", reference: effectiveReference, planId }
+    );
+    return res.status(200).json({
+      success: response.success,
+      message: response.message || "M-Pesa prompt sent to your phone.",
+      reference: effectiveReference,
+      provider_reference: providerReference || effectiveReference,
+      redirect_url: redirectUrl,
+      provider: "paynecta"
+    });
+  } catch (err) {
+    await updatePaymentRecordsStatus(supabaseAdmin, { reference, status: "failed" });
+    return res.status(502).json({
+      success: false,
+      message: formatPaynectaInitError(err).slice(0, 240)
+    });
+  }
+}

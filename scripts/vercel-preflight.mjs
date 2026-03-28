@@ -47,16 +47,23 @@ const criticalVars = [
 ];
 
 const paymentVars = [
-  "KORA_PUBLIC_KEY",
-  "KORA_SECRET_KEY",
-  "KORA_WEBHOOK_URL",
-  "KORA_CALLBACK_URL"
+  "MPESA_ENVIRONMENT",
+  "MPESA_CONSUMER_KEY",
+  "MPESA_CONSUMER_SECRET",
+  "MPESA_PASSKEY",
+  "MPESA_SHORTCODE"
+];
+const paymentRecommendedVars = [
+  "MPESA_CALLBACK_SECRET",
+  "MPESA_SIMULATION_TOKEN"
 ];
 
 const missingCritical = [];
 const placeholderCritical = [];
 const missingPayment = [];
 const placeholderPayment = [];
+const missingPaymentRecommended = [];
+const placeholderPaymentRecommended = [];
 const warnings = [];
 
 for (const key of criticalVars) {
@@ -69,6 +76,11 @@ for (const key of paymentVars) {
   const value = values[key];
   if (!value) missingPayment.push(key);
   else if (looksPlaceholder(value)) placeholderPayment.push(key);
+}
+for (const key of paymentRecommendedVars) {
+  const value = values[key];
+  if (!value) missingPaymentRecommended.push(key);
+  else if (looksPlaceholder(value)) placeholderPaymentRecommended.push(key);
 }
 
 const apiBaseRaw = String(values.VITE_API_BASE || "").trim();
@@ -85,16 +97,19 @@ if (apiBaseRaw) {
   }
 }
 
-for (const key of ["KORA_CALLBACK_URL", "KORA_WEBHOOK_URL"]) {
+for (const key of ["PAYFLEE_API_BASE_URL", "PAYNECTA_API_URL", "MPESA_API_BASE_URL"]) {
   const value = String(values[key] || "").trim().toLowerCase();
   if (!value) continue;
   if (value.startsWith("http://")) {
-    warnings.push(`${key} is using http://. Use https:// for production callbacks/webhooks.`);
+    warnings.push(`${key} is using http://. Use https:// in production.`);
   }
 }
 
 const hasBlockingErrors =
-  missingCritical.length > 0 || placeholderCritical.length > 0;
+  missingCritical.length > 0 ||
+  placeholderCritical.length > 0 ||
+  missingPayment.length > 0 ||
+  placeholderPayment.length > 0;
 
 console.log("Vercel preflight checks");
 console.log("======================");
@@ -120,6 +135,12 @@ if (!missingPayment.length && !placeholderPayment.length) {
     console.log(`- Placeholder payment vars: ${placeholderPayment.join(", ")}`);
   }
 }
+if (missingPaymentRecommended.length) {
+  console.log(`- Recommended payment vars missing: ${missingPaymentRecommended.join(", ")}`);
+}
+if (placeholderPaymentRecommended.length) {
+  console.log(`- Recommended payment vars placeholders: ${placeholderPaymentRecommended.join(", ")}`);
+}
 
 if (warnings.length) {
   console.log("- Warnings:");
@@ -127,7 +148,7 @@ if (warnings.length) {
 }
 
 if (hasBlockingErrors) {
-  console.log("\nPreflight failed. Fix critical env vars before deploying.");
+  console.log("\nPreflight failed. Fix required env vars before deploying.");
   process.exit(1);
 }
 

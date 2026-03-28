@@ -1,0 +1,214 @@
+import crypto from "node:crypto";
+import {
+  applyDepositSuccess,
+  fetchDepositByReference,
+  fetchPaymentByReference,
+  getAuthUser,
+  getSupabaseAdmin,
+  isAdminUser,
+  isSafeReference,
+  isSupabaseConfigured,
+  patchPaymentRecord,
+  updatePaymentRecordsStatus
+} from "../../../lib/api/payment-common.js";
+import { applyApiSecurity, readClientIp } from "../../../lib/api/http-security.js";
+import { checkRateLimit } from "../../../lib/api/rate-limit.js";
+import { getMpesaEnvironment, isMpesaSandbox } from "../../../lib/payments/index.js";
+
+const clean = (value) => String(value || "").trim();
+const boolFlag = (value) => ["1", "true", "yes", "on"].includes(clean(value).toLowerCase());
+const MPESA_SIMULATION_TOKEN = clean(process.env.MPESA_SIMULATION_TOKEN);
+const MPESA_SIMULATION_ALLOW_LIVE = boolFlag(process.env.MPESA_SIMULATION_ALLOW_LIVE || "0");
+
+const secureEqual = (a, b) => {
+  const left = String(a || "");
+  const right = String(b || "");
+  if (!left || !right) return false;
+  const aBuf = Buffer.from(left);
+  const bBuf = Buffer.from(right);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+};
+
+const readHeader = (req, key) => {
+  const value = req.headers?.[key];
+  return Array.isArray(value) ? clean(value[0]) : clean(value);
+};
+
+export default async function handler(req, res) {
+  const security = applyApiSecurity(req, res, { methods: ["POST", "OPTIONS"] });
+  if (!security.ok) {
+    return res.status(403).json({ error: security.error || "forbidden" });
+  }
+
+  if (req.method === "OPTIONS") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(204).end();
+  }
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(405).json({ error: "method not allowed" });
+  }
+
+  if (!isSupabaseConfigured()) {
+    return res.status(500).json({ error: "supabase not configured" });
+  }
+  if (!isMpesaSandbox() && !MPESA_SIMULATION_ALLOW_LIVE) {
+    return res.status(403).json({ error: "simulation is enabled only in sandbox mode" });
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: "supabase not configured" });
+  }
+
+  const simulationToken =
+    readHeader(req, "x-mpesa-simulation-token") || readHeader(req, "x-simulation-token");
+  const usingServiceSimulationToken =
+    MPESA_SIMULATION_TOKEN && simulationToken && secureEqual(simulationToken, MPESA_SIMULATION_TOKEN);
+
+  let authUser = null;
+  let adminAccess = false;
+  if (!usingServiceSimulationToken) {
+    const auth = await getAuthUser(supabaseAdmin, req);
+    if (auth.error || !auth.user?.id) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    authUser = auth.user;
+    adminAccess = await isAdminUser(supabaseAdmin, auth.user.id);
+  }
+
+  const rateKey = `mpesa-simulate:${usingServiceSimulationToken ? "token" : authUser?.id}:${readClientIp(req) || "unknown"}`;
+  const rate = checkRateLimit(rateKey, { windowMs: 60_000, max: 50 });
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(Math.max(Math.ceil(rate.retryAfterMs / 1000), 1)));
+    return res.status(429).json({ error: "too many requests" });
+  }
+
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  const reference = clean(body.reference || body.payment_reference || body.merchant_reference);
+  if (!reference) return res.status(400).json({ error: "reference required" });
+  if (!isSafeReference(reference)) return res.status(400).json({ error: "invalid reference" });
+
+  const scenarioRaw = clean(body.scenario || body.status || "success").toLowerCase();
+  const scenario = ["success", "failed", "failure"].includes(scenarioRaw)
+    ? scenarioRaw === "failure"
+      ? "failed"
+      : scenarioRaw
+    : "success";
+
+  const [paymentLookup, depositLookup, stkLookup] = await Promise.all([
+    fetchPaymentByReference(supabaseAdmin, reference),
+    fetchDepositByReference(supabaseAdmin, reference),
+    supabaseAdmin
+      .from("mpesa_stk_requests")
+      .select("reference,user_id,checkout_request_id,merchant_request_id,amount,phone_number")
+      .eq("reference", reference)
+      .maybeSingle()
+  ]);
+
+  if (paymentLookup.error) return res.status(500).json({ error: paymentLookup.error });
+  if (depositLookup.error) return res.status(500).json({ error: depositLookup.error });
+  if (stkLookup.error) return res.status(500).json({ error: stkLookup.error.message || "failed to load stk row" });
+
+  const paymentRow = paymentLookup.row;
+  const depositRow = depositLookup.row;
+  const stkRow = stkLookup.data || null;
+  if (!paymentRow || !depositRow || !stkRow) {
+    return res.status(404).json({ error: "payment not found" });
+  }
+
+  if (!usingServiceSimulationToken && !adminAccess && String(paymentRow.user_id || "") !== String(authUser?.id || "")) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+
+  const nowIso = new Date().toISOString();
+  const checkoutRequestId = clean(stkRow.checkout_request_id || `ws_CO_${Date.now()}`);
+  const merchantRequestId = clean(stkRow.merchant_request_id || `mr_SIM_${Date.now()}`);
+  const baseReceipt = `SIM${Date.now().toString().slice(-10)}`;
+  const payload = {
+    Body: {
+      stkCallback: {
+        MerchantRequestID: merchantRequestId,
+        CheckoutRequestID: checkoutRequestId,
+        ResultCode: scenario === "success" ? 0 : 1032,
+        ResultDesc:
+          scenario === "success"
+            ? "The service request is processed successfully."
+            : "Request cancelled by user.",
+        CallbackMetadata:
+          scenario === "success"
+            ? {
+                Item: [
+                  { Name: "Amount", Value: Number(paymentRow.amount || stkRow.amount || 0) },
+                  { Name: "MpesaReceiptNumber", Value: baseReceipt },
+                  {
+                    Name: "TransactionDate",
+                    Value: nowIso
+                      .replace(/[-:TZ.]/g, "")
+                      .slice(0, 14)
+                  },
+                  { Name: "PhoneNumber", Value: clean(stkRow.phone_number || "") }
+                ]
+              }
+            : undefined
+      }
+    }
+  };
+
+  await supabaseAdmin
+    .from("mpesa_stk_requests")
+    .update({
+      checkout_request_id: checkoutRequestId,
+      merchant_request_id: merchantRequestId,
+      status: scenario,
+      result_code: scenario === "success" ? 0 : 1032,
+      result_desc:
+        scenario === "success"
+          ? "Simulated success"
+          : "Simulated failure",
+      receipt_number: scenario === "success" ? baseReceipt : null,
+      callback_payload: payload,
+      callback_received_at: nowIso,
+      completed_at: nowIso,
+      updated_at: nowIso
+    })
+    .eq("reference", reference);
+
+  if (scenario === "success") {
+    const applied = await applyDepositSuccess(supabaseAdmin, reference);
+    if (!applied.ok) {
+      return res.status(500).json({ error: applied.error || "failed to confirm payment" });
+    }
+    await updatePaymentRecordsStatus(supabaseAdmin, {
+      reference,
+      status: "success",
+      confirmedAt: nowIso
+    });
+    await patchPaymentRecord(supabaseAdmin, {
+      reference,
+      patch: {
+        provider_transaction_id: checkoutRequestId,
+        mpesa_receipt: baseReceipt,
+        callback_received_at: nowIso
+      }
+    });
+  } else {
+    await updatePaymentRecordsStatus(supabaseAdmin, {
+      reference,
+      status: "failed",
+      confirmedAt: nowIso
+    });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    reference,
+    scenario,
+    status: scenario,
+    provider: "mpesa",
+    provider_code: "mpesa_daraja",
+    environment: getMpesaEnvironment()
+  });
+}
+

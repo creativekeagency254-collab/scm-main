@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { applyApiSecurity, readClientIp } from "../../../lib/api/http-security.js";
+import { checkRateLimit } from "../../../lib/api/rate-limit.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -70,9 +72,13 @@ const isAdminUser = async (supabaseAdmin, userId) => {
   if (error || !data) return false;
   return hasAdminRole(data?.profile_data);
 };
+const isSafeIdentifier = (value) => /^[A-Za-z0-9._:-]{1,128}$/.test(String(value || ""));
 
 export default async function handler(req, res) {
-  res.setHeader("Content-Type", "application/json");
+  const security = applyApiSecurity(req, res, { methods: ["GET", "OPTIONS"] });
+  if (!security.ok) {
+    return res.status(403).json({ error: security.error || "forbidden" });
+  }
 
   if (req.method === "OPTIONS") {
     res.setHeader("Allow", "GET, OPTIONS");
@@ -97,14 +103,21 @@ export default async function handler(req, res) {
   if (authError || !user?.id) {
     return res.status(401).json({ error: "unauthorized" });
   }
+  const rateKey = `deposit-status:${user.id}:${readClientIp(req) || "unknown"}`;
+  const rate = checkRateLimit(rateKey, { windowMs: 60_000, max: 60 });
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(Math.max(Math.ceil(rate.retryAfterMs / 1000), 1)));
+    return res.status(429).json({ error: "too many requests" });
+  }
   const adminAccess = await isAdminUser(supabaseAdmin, user.id);
 
   const reference = String(req.query?.reference || "").trim();
   if (!reference) return res.status(400).json({ error: "reference required" });
+  if (!isSafeIdentifier(reference)) return res.status(400).json({ error: "invalid reference" });
 
   const { data, error } = await supabaseAdmin
     .from("deposits")
-    .select("status, amount, user_id, tier_at_deposit, confirmed_at")
+    .select("status, amount, user_id, tier_at_deposit, confirmed_at, provider")
     .eq("provider_reference", reference)
     .maybeSingle();
 
@@ -114,5 +127,18 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: "forbidden" });
   }
 
-  return res.status(200).json(data);
+  const { data: paymentRow } = await supabaseAdmin
+    .from("payments")
+    .select("status,environment,payment_reference,payment_type,payment_timestamp,provider,reference")
+    .eq("reference", reference)
+    .maybeSingle();
+
+  return res.status(200).json({
+    ...data,
+    payment_status: paymentRow?.status || data.status,
+    environment: paymentRow?.environment || null,
+    payment_reference: paymentRow?.payment_reference || paymentRow?.reference || reference,
+    payment_type: paymentRow?.payment_type || null,
+    payment_timestamp: paymentRow?.payment_timestamp || null
+  });
 }

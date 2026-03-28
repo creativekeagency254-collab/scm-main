@@ -335,7 +335,7 @@ Caching opportunities:
 
 Recommended monitoring:
 1. Log all webhook attempts.
-2. Daily reconciliation of Kora transaction list vs `deposits`.
+2. Daily reconciliation of Fonbnk transaction list vs `deposits`.
 3. Alerts for mismatches greater than 0.1 percent.
 
 ---
@@ -359,13 +359,13 @@ Required environment values:
 2. `VITE_SUPABASE_ANON_KEY`
 3. `VITE_API_BASE`
 4. `SUPABASE_SERVICE_ROLE_KEY` for server only
-5. `KORA_PUBLIC_KEY` and `KORA_SECRET_KEY` for server only
-6. `KORA_CALLBACK_URL` and `KORA_WEBHOOK_URL` for Kora redirect/webhook handling
+5. `FONBNK_SOURCE`, `FONBNK_URL_SIGNATURE_SECRET`, `FONBNK_CLIENT_ID`, and `FONBNK_CLIENT_SECRET` for server only
+6. `FONBNK_CALLBACK_URL` and `FONBNK_WEBHOOK_URL` for Fonbnk redirect/webhook handling
 7. `CORS_ORIGIN` list for API
 
 Deployment notes:
 1. Never expose service role key in frontend.
-2. Use HTTPS domains for Kora callbacks/webhooks.
+2. Use HTTPS domains for Fonbnk callbacks/webhooks.
 3. Set Supabase site URL and OAuth redirect URLs correctly.
 
 ---

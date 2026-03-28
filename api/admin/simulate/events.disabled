@@ -1,0 +1,457 @@
+import crypto from "node:crypto";
+import {
+  applyDepositSuccess,
+  createPendingPaymentRecords,
+  expectedKesForPlan,
+  getAuthUser,
+  getSupabaseAdmin,
+  isAdminUser,
+  isSupabaseConfigured,
+  normalizeAmount,
+  patchPaymentRecord,
+  sanitizePlanId,
+  updatePaymentRecordsStatus
+} from "../../../lib/api/payment-common.js";
+import { applyApiSecurity, readClientIp } from "../../../lib/api/http-security.js";
+import { checkRateLimit } from "../../../lib/api/rate-limit.js";
+
+const clean = (value) => String(value || "").trim();
+const normalizeEnvironment = (value) =>
+  clean(value).toLowerCase().includes("live") ? "live" : "sandbox";
+
+const safeBody = (value) =>
+  value && typeof value === "object" && !Array.isArray(value) ? value : {};
+
+const isoDate = () => new Date().toISOString();
+
+const yyyyMmDd = () => {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const safeInsertOptional = async (supabaseAdmin, table, payload) => {
+  try {
+    await supabaseAdmin.from(table).insert(payload);
+    return true;
+  } catch (_e) {
+    return false;
+  }
+};
+
+const resolveTargetUser = async (supabaseAdmin, { userId, userEmail, fallbackUserId }) => {
+  const idRaw = clean(userId || fallbackUserId);
+  const emailRaw = clean(userEmail).toLowerCase();
+
+  if (idRaw) {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("user_id,tier,email,full_name,profile_data")
+      .eq("user_id", idRaw)
+      .maybeSingle();
+    if (!error && data) return data;
+  }
+
+  if (emailRaw) {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("user_id,tier,email,full_name,profile_data")
+      .eq("email", emailRaw)
+      .maybeSingle();
+    if (!error && data) return data;
+  }
+
+  return null;
+};
+
+const buildRef = (prefix) => `${prefix}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+
+const createSimDeposit = async (
+  supabaseAdmin,
+  {
+    targetUserId,
+    tier,
+    phoneNumber,
+    environment,
+    scenario = "success"
+  }
+) => {
+  const amount = expectedKesForPlan(tier);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, error: "invalid tier amount for simulation" };
+  }
+  const nowIso = isoDate();
+  const reference = buildRef("sim_mpesa");
+  const createRows = await createPendingPaymentRecords(supabaseAdmin, {
+    userId: targetUserId,
+    planId: tier,
+    amount,
+    depositAmount: amount,
+    currency: "KES",
+    provider: "mpesa_daraja",
+    reference,
+    paymentReference: reference,
+    paymentType: "CustomerPayBillOnline",
+    environment,
+    paymentTimestamp: nowIso,
+    phoneNumber,
+    metadata: {
+      simulation: true,
+      source: "admin_lab",
+      scenario
+    },
+    depositProviderLabel: "mpesa_daraja",
+    depositCreatedAt: nowIso
+  });
+
+  if (!createRows.ok) {
+    return { ok: false, error: createRows.error || "failed creating simulated deposit rows" };
+  }
+
+  await safeInsertOptional(supabaseAdmin, "mpesa_stk_requests", {
+    reference,
+    user_id: targetUserId,
+    plan_id: tier,
+    amount,
+    phone_number: clean(phoneNumber || "254708374149"),
+    status: "pending",
+    environment,
+    callback_token: buildRef("simtok"),
+    merchant_request_id: buildRef("sim_mr"),
+    checkout_request_id: buildRef("sim_cr"),
+    result_code: null,
+    result_desc: null,
+    request_payload: { simulation: true },
+    response_payload: { simulation: true },
+    query_payload: {},
+    callback_payload: {},
+    created_at: nowIso,
+    updated_at: nowIso
+  });
+
+  if (scenario === "success") {
+    const applied = await applyDepositSuccess(supabaseAdmin, reference);
+    if (!applied.ok) return { ok: false, error: applied.error || "failed applying simulated deposit success" };
+    await updatePaymentRecordsStatus(supabaseAdmin, {
+      reference,
+      status: "success",
+      confirmedAt: nowIso
+    });
+    await patchPaymentRecord(supabaseAdmin, {
+      reference,
+      patch: {
+        provider_transaction_id: buildRef("sim_checkout"),
+        mpesa_receipt: `SIM${Date.now().toString().slice(-10)}`,
+        callback_received_at: nowIso
+      }
+    });
+    await supabaseAdmin
+      .from("mpesa_stk_requests")
+      .update({
+        status: "success",
+        result_code: 0,
+        result_desc: "Simulated success",
+        completed_at: nowIso,
+        updated_at: nowIso
+      })
+      .eq("reference", reference);
+  } else {
+    await supabaseAdmin
+      .from("deposits")
+      .update({ status: "failed" })
+      .eq("provider_reference", reference)
+      .neq("status", "success");
+    await updatePaymentRecordsStatus(supabaseAdmin, {
+      reference,
+      status: "failed",
+      confirmedAt: nowIso
+    });
+    await supabaseAdmin
+      .from("mpesa_stk_requests")
+      .update({
+        status: "failed",
+        result_code: 1032,
+        result_desc: "Simulated failure",
+        completed_at: nowIso,
+        updated_at: nowIso
+      })
+      .eq("reference", reference);
+  }
+
+  return { ok: true, reference, amount, tier, status: scenario === "success" ? "success" : "failed" };
+};
+
+const createSimWithdrawal = async (
+  supabaseAdmin,
+  {
+    targetUserId,
+    amount,
+    paid = false
+  }
+) => {
+  const safeAmount = normalizeAmount(amount);
+  if (!Number.isFinite(safeAmount) || safeAmount <= 0) {
+    return { ok: false, error: "invalid amount for withdrawal simulation" };
+  }
+  const nowIso = isoDate();
+  const payoutStatus = paid ? "completed" : "queued";
+  const { data: payoutRow, error: payoutErr } = await supabaseAdmin
+    .from("payout_requests")
+    .insert({
+      user_id: targetUserId,
+      requested_amount: safeAmount,
+      status: payoutStatus,
+      scheduled_for: yyyyMmDd(),
+      processed_at: paid ? nowIso : null
+    })
+    .select("*")
+    .maybeSingle();
+
+  if (payoutErr || !payoutRow) {
+    return { ok: false, error: payoutErr?.message || "failed creating payout request simulation" };
+  }
+
+  await safeInsertOptional(supabaseAdmin, "transactions", {
+    user_id: targetUserId,
+    type: "withdrawal",
+    amount: -Math.abs(safeAmount),
+    related_id: payoutRow.payout_id,
+    reference: buildRef("sim_wd"),
+    created_at: nowIso
+  });
+
+  return {
+    ok: true,
+    payout_id: payoutRow.payout_id,
+    amount: safeAmount,
+    status: paid ? "paid" : "pending"
+  };
+};
+
+const createSimTierUpgrade = async (
+  supabaseAdmin,
+  {
+    targetUser,
+    requestedTier
+  }
+) => {
+  const currentTier = Number(targetUser?.tier) || 1;
+  let nextTier = sanitizePlanId(requestedTier);
+  if (!nextTier || nextTier <= currentTier) {
+    nextTier = Math.min(5, currentTier + 1);
+  }
+  if (nextTier <= currentTier) {
+    return { ok: false, error: "user already at highest tier" };
+  }
+  const prevProfile =
+    targetUser?.profile_data && typeof targetUser.profile_data === "object"
+      ? targetUser.profile_data
+      : {};
+  const patchProfile = {
+    ...prevProfile,
+    tier_selected: true,
+    tier_selected_at: isoDate()
+  };
+  const { error } = await supabaseAdmin
+    .from("users")
+    .update({
+      tier: nextTier,
+      profile_data: patchProfile
+    })
+    .eq("user_id", targetUser.user_id);
+  if (error) {
+    return { ok: false, error: error.message || "failed to simulate tier upgrade" };
+  }
+  return { ok: true, from_tier: currentTier, to_tier: nextTier };
+};
+
+const createSimTransaction = async (
+  supabaseAdmin,
+  {
+    targetUserId,
+    amount,
+    type
+  }
+) => {
+  const allowedType = ["accrual", "referral", "adjustment", "fee", "deposit", "withdrawal"].includes(
+    clean(type).toLowerCase()
+  )
+    ? clean(type).toLowerCase()
+    : "accrual";
+  const safeAmount = normalizeAmount(amount);
+  if (!Number.isFinite(safeAmount) || safeAmount === 0) {
+    return { ok: false, error: "invalid transaction amount" };
+  }
+  const signedAmount =
+    allowedType === "withdrawal" || allowedType === "fee"
+      ? -Math.abs(safeAmount)
+      : Math.abs(safeAmount);
+  const nowIso = isoDate();
+  const { data, error } = await supabaseAdmin
+    .from("transactions")
+    .insert({
+      user_id: targetUserId,
+      type: allowedType,
+      amount: signedAmount,
+      reference: buildRef("sim_tx"),
+      created_at: nowIso
+    })
+    .select("*")
+    .maybeSingle();
+  if (error || !data) {
+    return { ok: false, error: error?.message || "failed to create transaction simulation" };
+  }
+  return { ok: true, tx_id: data.tx_id, type: data.type, amount: data.amount };
+};
+
+export default async function handler(req, res) {
+  const security = applyApiSecurity(req, res, { methods: ["POST", "OPTIONS"] });
+  if (!security.ok) {
+    return res.status(403).json({ error: security.error || "forbidden" });
+  }
+
+  if (req.method === "OPTIONS") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(204).end();
+  }
+
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(405).json({ error: "method not allowed" });
+  }
+
+  if (!isSupabaseConfigured()) {
+    return res.status(500).json({ error: "supabase not configured" });
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: "supabase not configured" });
+  }
+
+  const { user, error: authError } = await getAuthUser(supabaseAdmin, req);
+  if (authError || !user?.id) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const adminAccess = await isAdminUser(supabaseAdmin, user.id);
+  if (!adminAccess) {
+    return res.status(403).json({ error: "admin required" });
+  }
+
+  const rateKey = `admin-sim:${user.id}:${readClientIp(req) || "unknown"}`;
+  const rate = checkRateLimit(rateKey, { windowMs: 60_000, max: 45 });
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(Math.max(Math.ceil(rate.retryAfterMs / 1000), 1)));
+    return res.status(429).json({ error: "too many requests" });
+  }
+
+  const body = safeBody(req.body);
+  const action = clean(body.action).toLowerCase();
+  if (!action) {
+    return res.status(400).json({ error: "action is required" });
+  }
+
+  const targetUser = await resolveTargetUser(supabaseAdmin, {
+    userId: body.userId || body.user_id,
+    userEmail: body.userEmail || body.user_email || body.email,
+    fallbackUserId: user.id
+  });
+  if (!targetUser) {
+    return res.status(404).json({ error: "target user not found" });
+  }
+
+  const tierInput = sanitizePlanId(body.tier || body.planId || body.plan_id || body.tierId);
+  const amountInput = normalizeAmount(body.amount || body.amountKes || body.amount_kes);
+  const phoneNumber = clean(body.phoneNumber || body.phone || "254708374149");
+  const environment = normalizeEnvironment(body.environment || process.env.MPESA_ENVIRONMENT || "sandbox");
+
+  if (action === "deposit_success" || action === "deposit_failed") {
+    const tier = tierInput || sanitizePlanId(targetUser.tier) || 1;
+    const result = await createSimDeposit(supabaseAdmin, {
+      targetUserId: targetUser.user_id,
+      tier,
+      phoneNumber,
+      environment,
+      scenario: action === "deposit_success" ? "success" : "failed"
+    });
+    if (!result.ok) {
+      return res.status(500).json({ error: result.error || "simulation failed" });
+    }
+    return res.status(200).json({
+      ok: true,
+      action,
+      target_user_id: targetUser.user_id,
+      result
+    });
+  }
+
+  if (action === "withdrawal_pending" || action === "withdrawal_paid") {
+    const amount = Number.isFinite(amountInput) && amountInput > 0 ? amountInput : 1500;
+    const result = await createSimWithdrawal(supabaseAdmin, {
+      targetUserId: targetUser.user_id,
+      amount,
+      paid: action === "withdrawal_paid"
+    });
+    if (!result.ok) {
+      return res.status(500).json({ error: result.error || "simulation failed" });
+    }
+    return res.status(200).json({
+      ok: true,
+      action,
+      target_user_id: targetUser.user_id,
+      result
+    });
+  }
+
+  if (action === "tier_upgrade") {
+    const result = await createSimTierUpgrade(supabaseAdmin, {
+      targetUser,
+      requestedTier: tierInput
+    });
+    if (!result.ok) {
+      return res.status(409).json({ error: result.error || "simulation failed" });
+    }
+    return res.status(200).json({
+      ok: true,
+      action,
+      target_user_id: targetUser.user_id,
+      result
+    });
+  }
+
+  if (action === "earning_tx" || action === "referral_tx" || action === "adjustment_tx") {
+    const amount = Number.isFinite(amountInput) && amountInput !== 0 ? amountInput : 500;
+    const type = action === "earning_tx" ? "accrual" : action === "referral_tx" ? "referral" : "adjustment";
+    const result = await createSimTransaction(supabaseAdmin, {
+      targetUserId: targetUser.user_id,
+      amount,
+      type
+    });
+    if (!result.ok) {
+      return res.status(500).json({ error: result.error || "simulation failed" });
+    }
+    return res.status(200).json({
+      ok: true,
+      action,
+      target_user_id: targetUser.user_id,
+      result
+    });
+  }
+
+  return res.status(400).json({
+    error: "unsupported action",
+    supported_actions: [
+      "deposit_success",
+      "deposit_failed",
+      "withdrawal_pending",
+      "withdrawal_paid",
+      "tier_upgrade",
+      "earning_tx",
+      "referral_tx",
+      "adjustment_tx"
+    ]
+  });
+}

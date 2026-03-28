@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const path = require("path");
@@ -10,7 +10,7 @@ dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 const webhookApp = require("./pesapal-webhook");
 const {
-  isKoraConfigured,
+  isFonbnkConfigured,
   getIpnId,
   submitOrder,
   getTransactionStatus
@@ -41,6 +41,20 @@ const normalizeAmount = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return Number(n.toFixed(2));
+};
+const normalizePaymentMethod = (value) => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "M-Pesa";
+  if (raw.includes("mpesa") || raw.includes("m-pesa") || raw.includes("m pesa")) return "M-Pesa";
+  if (
+    raw.includes("crypto") ||
+    raw.includes("usdt") ||
+    raw.includes("btc") ||
+    raw.includes("bitcoin")
+  ) {
+    return "Crypto";
+  }
+  return "";
 };
 
 async function getSupabase() {
@@ -138,7 +152,7 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
     }
     if (dep.rowCount === 0) {
       await client.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','Kora',$4,now(),now())",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','Fonbnk',$4,now(),now())",
         [userId, amount, tierVal, providerReference]
       );
     } else {
@@ -285,7 +299,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
     const email = String(req.body?.email || "").trim();
     let userId = String(req.body?.user_id || "").trim();
     const tier = Number(req.body?.tier || 1);
-    const method = String(req.body?.method || "Kora");
+    const method = normalizePaymentMethod(req.body?.method);
     const currency = String(req.body?.currency || "KES");
     const phone = String(req.body?.phone || "").trim();
     const name = String(req.body?.name || "").trim();
@@ -293,16 +307,19 @@ app.post("/api/v1/deposit/create", async (req, res) => {
     const manualRequested = ["manual", "true", "1"].includes(
       String(req.body?.payment_mode || req.body?.mode || "").toLowerCase()
     );
-    const mockKora = ["1", "true", "yes", "on"].includes(
-      String(process.env.KORA_MOCK || process.env.PESAPAL_MOCK || "").toLowerCase()
+    const mockFonbnk = ["1", "true", "yes", "on"].includes(
+      String(process.env.FONBNK_MOCK || process.env.PESAPAL_MOCK || "").toLowerCase()
     );
     const callbackUrl =
-      process.env.KORA_CALLBACK_URL ||
+      process.env.FONBNK_CALLBACK_URL ||
       process.env.PESAPAL_CALLBACK_URL ||
-      (mockKora ? process.env.KORA_MOCK_REDIRECT_URL || "http://localhost:5000/" : "");
+      (mockFonbnk ? process.env.FONBNK_MOCK_REDIRECT_URL || "http://localhost:5000/" : "");
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ error: "invalid amount" });
+    }
+    if (!method) {
+      return res.status(400).json({ error: "invalid payment method; allowed methods are M-Pesa and Crypto" });
     }
     if (!email || !userId) {
       return res.status(400).json({ error: "email and user_id required" });
@@ -368,18 +385,18 @@ app.post("/api/v1/deposit/create", async (req, res) => {
       });
     }
 
-    if (!isKoraConfigured()) {
+    if (!isFonbnkConfigured()) {
       return res
         .status(500)
-        .json({ error: "KORA_SECRET_KEY not set" });
+        .json({ error: "Fonbnk credentials are not set" });
     }
     if (!callbackUrl) {
-      return res.status(500).json({ error: "KORA_CALLBACK_URL not set" });
+      return res.status(500).json({ error: "FONBNK_CALLBACK_URL not set" });
     }
 
     const ipnId = await getIpnId();
     if (!ipnId) {
-      return res.status(500).json({ error: "KORA_WEBHOOK_URL not set" });
+      return res.status(500).json({ error: "FONBNK_WEBHOOK_URL not set" });
     }
 
     const billingAddress = {
@@ -409,7 +426,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
     const merchantReference =
       submitRes?.merchant_reference || submitRes?.merchantReference || reference;
     if (!authUrl) {
-      return res.status(400).json({ error: "Kora did not return a checkout URL." });
+      return res.status(400).json({ error: "Fonbnk did not return a checkout URL." });
     }
 
     // Persist pending deposit
@@ -423,7 +440,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
             amount,
             tier_at_deposit: tier,
             status: "pending",
-            provider: "Kora",
+            provider: "Fonbnk",
             provider_reference: reference,
             created_at: new Date().toISOString()
           },
@@ -432,7 +449,7 @@ app.post("/api/v1/deposit/create", async (req, res) => {
       if (error) throw error;
     } else {
       await pool.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at) VALUES ($1,$2,$3,'pending','Kora',$4,now()) ON CONFLICT (provider_reference) DO NOTHING",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at) VALUES ($1,$2,$3,'pending','Fonbnk',$4,now()) ON CONFLICT (provider_reference) DO NOTHING",
         [userId, amount, tier, reference]
       );
     }
@@ -517,10 +534,10 @@ app.get("/api/v1/deposit/verify", async (req, res) => {
     if (!trackingId) {
       return res.status(400).json({ error: "orderTrackingId required" });
     }
-    if (!isKoraConfigured()) {
+    if (!isFonbnkConfigured()) {
       return res
         .status(500)
-        .json({ error: "KORA_SECRET_KEY not set" });
+        .json({ error: "Fonbnk credentials are not set" });
     }
 
     let authUserId = null;
@@ -645,3 +662,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, startServer, pool };
+

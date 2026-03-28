@@ -1,5 +1,5 @@
-// Kora webhook handler (Node/Express) with idempotency + wallet ledger update
-// Env: KORA_SECRET_KEY, DATABASE_URL
+// Fonbnk webhook handler (Node/Express) with idempotency + wallet ledger update
+// Env: FONBNK_WEBHOOK_SECRET (or FONBNK_WEBHOOK_SIGNATURE_SECRET), DATABASE_URL
 
 const express = require("express");
 const crypto = require("crypto");
@@ -12,32 +12,36 @@ dotenv.config({ path: path.join(__dirname, ".env") });
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 const app = express();
-const KORA_WEBHOOK_TOKEN = String(
-  process.env.KORA_WEBHOOK_TOKEN || process.env.PESAPAL_WEBHOOK_TOKEN || ""
+const FONBNK_WEBHOOK_TOKEN = String(
+  process.env.FONBNK_WEBHOOK_TOKEN || process.env.PESAPAL_WEBHOOK_TOKEN || ""
 ).trim();
-const KORA_WEBHOOK_HMAC_SECRET = String(
-  process.env.KORA_WEBHOOK_HMAC_SECRET || process.env.PESAPAL_WEBHOOK_HMAC_SECRET || ""
+const FONBNK_WEBHOOK_SECRET = String(
+  process.env.FONBNK_WEBHOOK_SECRET ||
+    process.env.FONBNK_WEBHOOK_SIGNATURE_SECRET ||
+    process.env.FONBNK_WEBHOOK_HMAC_SECRET ||
+    process.env.PESAPAL_WEBHOOK_HMAC_SECRET ||
+    ""
 ).trim();
-const KORA_WEBHOOK_ENFORCE = ["1", "true", "yes", "on"].includes(
+const FONBNK_WEBHOOK_ENFORCE = ["1", "true", "yes", "on"].includes(
   String(
-    process.env.KORA_WEBHOOK_ENFORCE ||
+    process.env.FONBNK_WEBHOOK_ENFORCE ||
       process.env.PESAPAL_WEBHOOK_ENFORCE ||
-      (KORA_WEBHOOK_TOKEN || KORA_WEBHOOK_HMAC_SECRET ? "1" : "0")
+      (FONBNK_WEBHOOK_TOKEN || FONBNK_WEBHOOK_SECRET ? "1" : "0")
   ).toLowerCase()
 );
-const KORA_WEBHOOK_MAX_SKEW_SECONDS = Math.max(
+const FONBNK_WEBHOOK_MAX_SKEW_SECONDS = Math.max(
   0,
-  Number(process.env.KORA_WEBHOOK_MAX_SKEW_SECONDS || 300) || 300
+  Number(process.env.FONBNK_WEBHOOK_MAX_SKEW_SECONDS || 300) || 300
 );
-const KORA_WEBHOOK_REQUIRE_TIMESTAMP = ["1", "true", "yes", "on"].includes(
+const FONBNK_WEBHOOK_REQUIRE_TIMESTAMP = ["1", "true", "yes", "on"].includes(
   String(
-    process.env.KORA_WEBHOOK_REQUIRE_TIMESTAMP ||
+    process.env.FONBNK_WEBHOOK_REQUIRE_TIMESTAMP ||
       process.env.PESAPAL_WEBHOOK_REQUIRE_TIMESTAMP ||
-      (KORA_WEBHOOK_HMAC_SECRET ? "1" : "0")
+      (FONBNK_WEBHOOK_SECRET ? "1" : "0")
   ).toLowerCase()
 );
-const KORA_WEBHOOK_REPLAY_ENFORCE = ["1", "true", "yes", "on"].includes(
-  String(process.env.KORA_WEBHOOK_REPLAY_ENFORCE || (KORA_WEBHOOK_ENFORCE ? "1" : "0")).toLowerCase()
+const FONBNK_WEBHOOK_REPLAY_ENFORCE = ["1", "true", "yes", "on"].includes(
+  String(process.env.FONBNK_WEBHOOK_REPLAY_ENFORCE || (FONBNK_WEBHOOK_ENFORCE ? "1" : "0")).toLowerCase()
 );
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -145,23 +149,23 @@ const hashPayload = (raw) =>
   crypto.createHash("sha256").update(String(raw || "")).digest("hex");
 
 const verifyWebhookRequest = (req, src) => {
-  if (!KORA_WEBHOOK_ENFORCE) {
+  if (!FONBNK_WEBHOOK_ENFORCE) {
     return { ok: true, signature: "", payloadHash: hashPayload(canonicalPayloadFrom(req, src)) };
   }
 
-  const token = readHeader(req, ["x-webhook-token", "x-kora-webhook-token"]);
-  if (KORA_WEBHOOK_TOKEN && !secureEqual(token, KORA_WEBHOOK_TOKEN)) {
+  const token = readHeader(req, ["x-webhook-token", "x-fonbnk-webhook-token"]);
+  if (FONBNK_WEBHOOK_TOKEN && !secureEqual(token, FONBNK_WEBHOOK_TOKEN)) {
     return { ok: false, reason: "invalid webhook token" };
   }
 
   const payloadRaw = canonicalPayloadFrom(req, src);
   const payloadHash = hashPayload(payloadRaw);
   const signature = normalizeSignature(
-    readHeader(req, ["x-kora-signature", "x-korapay-signature", "x-signature"])
+    readHeader(req, ["x-signature", "x-fonbnk-signature"])
   );
-  const timestampRaw = readHeader(req, ["x-webhook-timestamp", "x-kora-timestamp", "x-timestamp"]);
+  const timestampRaw = readHeader(req, ["x-webhook-timestamp", "x-fonbnk-timestamp", "x-timestamp"]);
 
-  if (KORA_WEBHOOK_REQUIRE_TIMESTAMP && KORA_WEBHOOK_MAX_SKEW_SECONDS > 0) {
+  if (FONBNK_WEBHOOK_REQUIRE_TIMESTAMP && FONBNK_WEBHOOK_MAX_SKEW_SECONDS > 0) {
     let timestampMs = Number(timestampRaw);
     if (Number.isFinite(timestampMs) && timestampMs > 0 && timestampMs < 1_000_000_000_000) {
       timestampMs *= 1000;
@@ -170,26 +174,40 @@ const verifyWebhookRequest = (req, src) => {
       return { ok: false, reason: "missing webhook timestamp" };
     }
     const skewSeconds = Math.abs(Date.now() - timestampMs) / 1000;
-    if (skewSeconds > KORA_WEBHOOK_MAX_SKEW_SECONDS) {
+    if (skewSeconds > FONBNK_WEBHOOK_MAX_SKEW_SECONDS) {
       return { ok: false, reason: "stale webhook timestamp" };
     }
   }
 
-  if (KORA_WEBHOOK_HMAC_SECRET) {
+  if (FONBNK_WEBHOOK_SECRET) {
     if (!signature) {
       return { ok: false, reason: "missing webhook signature" };
     }
+    const hashedSecret = crypto
+      .createHash("sha256")
+      .update(FONBNK_WEBHOOK_SECRET)
+      .digest("hex");
+    const expectedSecretFirst = crypto
+      .createHash("sha256")
+      .update(`${hashedSecret}${payloadRaw}`)
+      .digest("hex");
+    const expectedPayloadFirst = crypto
+      .createHash("sha256")
+      .update(`${payloadRaw}${hashedSecret}`)
+      .digest("hex");
     const expectedWithTs = timestampRaw
       ? crypto
-          .createHmac("sha256", KORA_WEBHOOK_HMAC_SECRET)
+          .createHmac("sha256", FONBNK_WEBHOOK_SECRET)
           .update(`${timestampRaw}.${payloadRaw}`)
           .digest("hex")
       : "";
     const expectedRaw = crypto
-      .createHmac("sha256", KORA_WEBHOOK_HMAC_SECRET)
+      .createHmac("sha256", FONBNK_WEBHOOK_SECRET)
       .update(payloadRaw)
       .digest("hex");
     const valid =
+      secureEqual(signature, expectedSecretFirst) ||
+      secureEqual(signature, expectedPayloadFirst) ||
       secureEqual(signature, expectedWithTs) ||
       secureEqual(signature, expectedRaw);
     if (!valid) {
@@ -210,10 +228,10 @@ async function registerWebhookReceipt({
   if (!hasSupabase()) return { accepted: true, duplicate: false };
   try {
     const sb = await getSupabase();
-    const eventKey = `kora:${source}:${trackingId}:${merchantReference}:${payloadHash}`;
+    const eventKey = `fonbnk:${source}:${trackingId}:${merchantReference}:${payloadHash}`;
     const { data, error } = await sb.rpc("register_payment_webhook_receipt", {
       p_event_key: eventKey,
-      p_provider: "kora",
+      p_provider: "fonbnk",
       p_source: source,
       p_tracking_id: trackingId || null,
       p_merchant_reference: merchantReference || null,
@@ -223,7 +241,7 @@ async function registerWebhookReceipt({
     if (error) {
       const msg = String(error.message || "").toLowerCase();
       if (msg.includes("register_payment_webhook_receipt") || msg.includes("payment_webhook_receipts")) {
-        if (KORA_WEBHOOK_REPLAY_ENFORCE) {
+        if (FONBNK_WEBHOOK_REPLAY_ENFORCE) {
           return { accepted: false, duplicate: false, error: "webhook replay protection not configured" };
         }
         return { accepted: true, duplicate: false };
@@ -233,7 +251,7 @@ async function registerWebhookReceipt({
     const inserted = Array.isArray(data) ? Boolean(data[0]) : Boolean(data);
     return { accepted: inserted, duplicate: !inserted };
   } catch (_e) {
-    if (KORA_WEBHOOK_REPLAY_ENFORCE) {
+    if (FONBNK_WEBHOOK_REPLAY_ENFORCE) {
       return { accepted: false, duplicate: false, error: "webhook replay registration failed" };
     }
     return { accepted: true, duplicate: false };
@@ -254,7 +272,7 @@ async function maybeFlagIssue({
   try {
     const sb = await getSupabase();
     await sb.from("payment_flags").insert({
-      provider: "kora",
+      provider: "fonbnk",
       source,
       reason,
       tracking_id: trackingId || null,
@@ -334,7 +352,7 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
     }
     if (dep.rowCount === 0) {
       await client.query(
-        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','Kora',$4,now(),now())",
+        "INSERT INTO deposits (user_id, amount, tier_at_deposit, status, provider, provider_reference, created_at, confirmed_at) VALUES ($1,$2,$3,'success','Fonbnk',$4,now(),now())",
         [userId, amount, tierVal, providerReference]
       );
     } else {
@@ -389,7 +407,7 @@ async function applyDepositSuccess({ providerReference, amount, userId, tierAtDe
   }
 }
 
-app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) => {
+app.all(["/api/v1/webhook/fonbnk", "/api/v1/webhook/pesapal"], async (req, res) => {
   const params = { ...(req.query || {}), ...(req.body || {}) };
   const webhookCheck = verifyWebhookRequest(req, params);
   if (!webhookCheck.ok) {
@@ -401,29 +419,32 @@ app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) =>
       ? params.data
       : {};
   const orderTrackingId = pickParam(params, [
+    "orderId",
+    "tracking_id",
+    "order_tracking_id",
     "OrderTrackingId",
     "orderTrackingId",
-    "order_tracking_id",
-    "tracking_id",
-    "reference"
-  ]) || pickParam(dataPayload, ["reference"]);
+    "reference",
+    "merchant_reference"
+  ]) || pickParam(dataPayload, ["orderId", "reference", "merchantOrderParams"]);
   const merchantReference = pickParam(params, [
+    "merchant_reference",
+    "orderParams",
+    "merchantOrderParams",
     "OrderMerchantReference",
     "orderMerchantReference",
-    "merchant_reference",
     "reference"
-  ]) || pickParam(dataPayload, ["reference"]);
+  ]) || pickParam(dataPayload, ["merchantOrderParams", "orderParams", "reference"]) || orderTrackingId;
 
-  if (!orderTrackingId) {
-    return res.status(400).json({ ok: false, error: "OrderTrackingId required" });
+  if (!orderTrackingId && !merchantReference) {
+    return res.status(400).json({ ok: false, error: "tracking_id or merchant_reference required" });
   }
-  if (!merchantReference) {
-    return res.status(400).json({ ok: false, error: "OrderMerchantReference required" });
-  }
+
+  const effectiveTrackingId = orderTrackingId || merchantReference;
 
   const receipt = await registerWebhookReceipt({
     source: "webhook",
-    trackingId: orderTrackingId,
+    trackingId: effectiveTrackingId,
     merchantReference,
     signature: webhookCheck.signature,
     payloadHash: webhookCheck.payloadHash
@@ -434,7 +455,7 @@ app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) =>
   if (receipt.duplicate) {
     return res.status(200).json({
       orderNotificationType: "IPNCHANGE",
-      orderTrackingId,
+      orderTrackingId: effectiveTrackingId,
       orderMerchantReference: merchantReference,
       status: 200,
       duplicate: true
@@ -442,8 +463,30 @@ app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) =>
   }
 
   try {
-    const statusPayload = await getTransactionStatus(orderTrackingId);
+    const statusPayload = await getTransactionStatus(effectiveTrackingId);
     const success = isSuccessfulStatus(statusPayload, eventName);
+    const statusDesc = String(
+      statusPayload?.payment_status_description ||
+        statusPayload?.payment_status ||
+        statusPayload?.transaction_status ||
+        statusPayload?.status ||
+        ""
+    ).toLowerCase();
+    const statusCode = Number(statusPayload?.status_code ?? statusPayload?.statusCode ?? NaN);
+    const isFailedStatus =
+      statusCode === 2 ||
+      [
+        "failed",
+        "invalid",
+        "reversed",
+        "deposit_invalid",
+        "deposit_canceled",
+        "deposit_expired",
+        "payout_failed",
+        "refund_pending",
+        "refund_successful",
+        "refund_failed"
+      ].includes(statusDesc);
     const amountFromStatus = Number(statusPayload?.amount || 0);
     const refFromStatus =
       statusPayload?.merchant_reference || statusPayload?.merchantReference || merchantReference;
@@ -478,7 +521,7 @@ app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) =>
         await maybeFlagIssue({
           source: "webhook",
           reason: "deposit_not_found",
-          trackingId: orderTrackingId,
+          trackingId: effectiveTrackingId,
           merchantReference: refFromStatus,
           expectedAmount,
           providerAmount,
@@ -491,7 +534,7 @@ app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) =>
         await maybeFlagIssue({
           source: "webhook",
           reason: "amount_mismatch",
-          trackingId: orderTrackingId,
+          trackingId: effectiveTrackingId,
           merchantReference: refFromStatus,
           expectedAmount,
           providerAmount,
@@ -507,13 +550,13 @@ app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) =>
         userId,
         tierAtDeposit
       });
-    } else {
+    } else if (isFailedStatus) {
       await markDepositFailed(refFromStatus);
     }
 
     return res.status(200).json({
       orderNotificationType: "IPNCHANGE",
-      orderTrackingId,
+      orderTrackingId: effectiveTrackingId,
       orderMerchantReference: refFromStatus,
       status: 200
     });
@@ -524,3 +567,4 @@ app.all(["/api/v1/webhook/kora", "/api/v1/webhook/pesapal"], async (req, res) =>
 });
 
 module.exports = app;
+

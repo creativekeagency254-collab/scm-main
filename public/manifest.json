@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "Dollar App",
   "short_name": "Dollar",
-  "description": "Dollar App — earn, track, and manage your balance.",
+  "description": "Dollar App - earn, track, and manage your balance.",
   "start_url": "/",
   "id": "/",
   "scope": "/",

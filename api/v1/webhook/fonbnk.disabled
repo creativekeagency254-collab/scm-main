@@ -1,36 +1,26 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
-import { getTransactionStatus, isKoraConfigured } from "../../lib/pesapal.js";
+import { getTransactionStatus, isFonbnkConfigured } from "../../../lib/api/fonbnk.js";
+import { applyApiSecurity, readClientIp } from "../../../lib/api/http-security.js";
+import { checkRateLimit } from "../../../lib/api/rate-limit.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const KORA_WEBHOOK_TOKEN = String(
-  process.env.KORA_WEBHOOK_TOKEN || process.env.PESAPAL_WEBHOOK_TOKEN || ""
+const FONBNK_WEBHOOK_TOKEN = String(process.env.FONBNK_WEBHOOK_TOKEN || "").trim();
+const FONBNK_WEBHOOK_SECRET = String(
+  process.env.FONBNK_WEBHOOK_SECRET ||
+    process.env.FONBNK_WEBHOOK_SIGNATURE_SECRET ||
+    process.env.FONBNK_WEBHOOK_HMAC_SECRET ||
+    ""
 ).trim();
-const KORA_WEBHOOK_HMAC_SECRET = String(
-  process.env.KORA_WEBHOOK_HMAC_SECRET || process.env.PESAPAL_WEBHOOK_HMAC_SECRET || ""
-).trim();
-const KORA_WEBHOOK_ENFORCE = ["1", "true", "yes", "on"].includes(
-  String(
-    process.env.KORA_WEBHOOK_ENFORCE ||
-      process.env.PESAPAL_WEBHOOK_ENFORCE ||
-      (KORA_WEBHOOK_TOKEN || KORA_WEBHOOK_HMAC_SECRET ? "1" : "0")
-  ).toLowerCase()
+const FONBNK_WEBHOOK_ENFORCE = ["1", "true", "yes", "on"].includes(
+  String(process.env.FONBNK_WEBHOOK_ENFORCE || (FONBNK_WEBHOOK_TOKEN || FONBNK_WEBHOOK_SECRET ? "1" : "0"))
+    .toLowerCase()
 );
-const KORA_WEBHOOK_MAX_SKEW_SECONDS = Math.max(
-  0,
-  Number(process.env.KORA_WEBHOOK_MAX_SKEW_SECONDS || 300) || 300
+const FONBNK_WEBHOOK_REPLAY_ENFORCE = ["1", "true", "yes", "on"].includes(
+  String(process.env.FONBNK_WEBHOOK_REPLAY_ENFORCE || (FONBNK_WEBHOOK_ENFORCE ? "1" : "0")).toLowerCase()
 );
-const KORA_WEBHOOK_REQUIRE_TIMESTAMP = ["1", "true", "yes", "on"].includes(
-  String(
-    process.env.KORA_WEBHOOK_REQUIRE_TIMESTAMP ||
-      process.env.PESAPAL_WEBHOOK_REQUIRE_TIMESTAMP ||
-      (KORA_WEBHOOK_HMAC_SECRET ? "1" : "0")
-  ).toLowerCase()
-);
-const KORA_WEBHOOK_REPLAY_ENFORCE = ["1", "true", "yes", "on"].includes(
-  String(process.env.KORA_WEBHOOK_REPLAY_ENFORCE || (KORA_WEBHOOK_ENFORCE ? "1" : "0")).toLowerCase()
-);
+const WEBHOOK_MAX_DRIFT_SECONDS = Number(process.env.FONBNK_WEBHOOK_MAX_DRIFT_SECONDS || 5 * 60);
 
 const getAdmin = () => {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
@@ -44,12 +34,35 @@ const normalizeStatus = (payload) => {
     payload?.payment_status_description ||
       payload?.payment_status ||
       payload?.transaction_status ||
+      payload?.status ||
       ""
-  ).toLowerCase();
+  )
+    .trim()
+    .toLowerCase();
   const codeRaw = payload?.status_code ?? payload?.statusCode;
   const code = Number.isFinite(Number(codeRaw)) ? Number(codeRaw) : null;
-  if (code === 1 || desc === "completed") return "success";
-  if (code === 2 || code === 0 || code === 3 || ["failed", "invalid", "reversed"].includes(desc)) return "failed";
+
+  if (code === 1 || ["deposit_successful", "payout_successful", "completed", "success"].includes(desc)) {
+    return "success";
+  }
+  if (
+    code === 2 ||
+    code === 3 ||
+    [
+      "deposit_invalid",
+      "deposit_canceled",
+      "deposit_expired",
+      "payout_failed",
+      "refund_pending",
+      "refund_successful",
+      "refund_failed",
+      "failed",
+      "invalid",
+      "reversed"
+    ].includes(desc)
+  ) {
+    return "failed";
+  }
   return "pending";
 };
 
@@ -58,6 +71,8 @@ const toMoney = (value) => {
   if (!Number.isFinite(n)) return null;
   return Number(n.toFixed(2));
 };
+
+const isSafeIdentifier = (value) => /^[A-Za-z0-9._:-]{1,128}$/.test(String(value || ""));
 
 const secureEqual = (a, b) => {
   const left = String(a || "");
@@ -99,63 +114,57 @@ const canonicalPayloadFrom = (req, src) => {
   return JSON.stringify(src || {});
 };
 
-const hashPayload = (raw) =>
-  crypto.createHash("sha256").update(String(raw || "")).digest("hex");
+const sha256Hex = (raw) => crypto.createHash("sha256").update(String(raw || "")).digest("hex");
+const hashPayload = (raw) => sha256Hex(raw);
 
 const verifyWebhookRequest = (req, src) => {
-  if (!KORA_WEBHOOK_ENFORCE) {
-    return { ok: true, signature: "", payloadHash: hashPayload(canonicalPayloadFrom(req, src)) };
+  const payloadRaw = canonicalPayloadFrom(req, src);
+  const payloadHash = hashPayload(payloadRaw);
+
+  if (!FONBNK_WEBHOOK_ENFORCE) {
+    return { ok: true, signature: "", payloadHash };
   }
 
-  const token = readHeader(req, ["x-webhook-token", "x-kora-webhook-token"]);
-  if (KORA_WEBHOOK_TOKEN && !secureEqual(token, KORA_WEBHOOK_TOKEN)) {
+  const token = readHeader(req, ["x-webhook-token", "x-fonbnk-webhook-token"]);
+  if (FONBNK_WEBHOOK_TOKEN && !secureEqual(token, FONBNK_WEBHOOK_TOKEN)) {
     return { ok: false, reason: "invalid webhook token" };
   }
 
-  const payloadRaw = canonicalPayloadFrom(req, src);
-  const payloadHash = hashPayload(payloadRaw);
-  const signature = normalizeSignature(
-    readHeader(req, ["x-kora-signature", "x-korapay-signature", "x-signature"])
-  );
-  const timestampRaw = readHeader(req, ["x-webhook-timestamp", "x-kora-timestamp", "x-timestamp"]);
+  const signature = normalizeSignature(readHeader(req, ["x-signature", "x-fonbnk-signature"]));
+  const timestampRaw = readHeader(req, ["x-webhook-timestamp", "x-fonbnk-timestamp", "x-timestamp"]);
+  const timestamp = Number(timestampRaw);
 
-  if (KORA_WEBHOOK_REQUIRE_TIMESTAMP && KORA_WEBHOOK_MAX_SKEW_SECONDS > 0) {
-    let timestampMs = Number(timestampRaw);
-    if (Number.isFinite(timestampMs) && timestampMs > 0 && timestampMs < 1_000_000_000_000) {
-      timestampMs *= 1000;
-    }
-    if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
-      return { ok: false, reason: "missing webhook timestamp" };
-    }
-    const skewSeconds = Math.abs(Date.now() - timestampMs) / 1000;
-    if (skewSeconds > KORA_WEBHOOK_MAX_SKEW_SECONDS) {
+  if (timestampRaw) {
+    if (!Number.isFinite(timestamp)) return { ok: false, reason: "invalid webhook timestamp" };
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (Math.abs(nowSec - timestamp) > WEBHOOK_MAX_DRIFT_SECONDS) {
       return { ok: false, reason: "stale webhook timestamp" };
     }
   }
 
-  if (KORA_WEBHOOK_HMAC_SECRET) {
+  if (FONBNK_WEBHOOK_SECRET) {
     if (!signature) {
       return { ok: false, reason: "missing webhook signature" };
     }
-    const expectedWithTs = timestampRaw
-      ? crypto
-          .createHmac("sha256", KORA_WEBHOOK_HMAC_SECRET)
-          .update(`${timestampRaw}.${payloadRaw}`)
-          .digest("hex")
-      : "";
-    const expectedRaw = crypto
-      .createHmac("sha256", KORA_WEBHOOK_HMAC_SECRET)
-      .update(payloadRaw)
-      .digest("hex");
+    const hashedSecret = sha256Hex(FONBNK_WEBHOOK_SECRET);
+    const expectedSecretFirst = sha256Hex(`${hashedSecret}${payloadRaw}`);
+    const expectedPayloadFirst = sha256Hex(`${payloadRaw}${hashedSecret}`);
+    const expectedWithTs = timestampRaw ? sha256Hex(`${payloadRaw}:${timestampRaw}:${hashedSecret}`) : "";
+    const expectedRaw = sha256Hex(`${payloadRaw}${FONBNK_WEBHOOK_SECRET}`);
+
     const valid =
-      secureEqual(signature, expectedWithTs) ||
+      secureEqual(signature, expectedSecretFirst) ||
+      secureEqual(signature, expectedPayloadFirst) ||
+      (expectedWithTs && secureEqual(signature, expectedWithTs)) ||
       secureEqual(signature, expectedRaw);
+
     if (!valid) {
       return { ok: false, reason: "invalid webhook signature" };
     }
+    return { ok: true, signature, payloadHash };
   }
 
-  return { ok: true, signature, payloadHash };
+  return { ok: true, signature: "", payloadHash };
 };
 
 const registerWebhookReceipt = async (
@@ -165,7 +174,7 @@ const registerWebhookReceipt = async (
   try {
     const { data, error } = await supabaseAdmin.rpc("register_payment_webhook_receipt", {
       p_event_key: eventKey,
-      p_provider: "kora",
+      p_provider: "fonbnk",
       p_source: source,
       p_tracking_id: trackingId || null,
       p_merchant_reference: merchantReference || null,
@@ -175,7 +184,7 @@ const registerWebhookReceipt = async (
     if (error) {
       const msg = String(error.message || "").toLowerCase();
       if (msg.includes("register_payment_webhook_receipt") || msg.includes("payment_webhook_receipts")) {
-        if (KORA_WEBHOOK_REPLAY_ENFORCE) {
+        if (FONBNK_WEBHOOK_REPLAY_ENFORCE) {
           return { accepted: false, duplicate: false, error: "webhook replay protection not configured" };
         }
         return { accepted: true, duplicate: false };
@@ -185,17 +194,12 @@ const registerWebhookReceipt = async (
     const inserted = Array.isArray(data) ? Boolean(data[0]) : Boolean(data);
     return { accepted: inserted, duplicate: !inserted };
   } catch (_e) {
-    if (KORA_WEBHOOK_REPLAY_ENFORCE) {
+    if (FONBNK_WEBHOOK_REPLAY_ENFORCE) {
       return { accepted: false, duplicate: false, error: "webhook replay registration failed" };
     }
     return { accepted: true, duplicate: false };
   }
 };
-
-const readClientIp = (req) =>
-  String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "")
-    .split(",")[0]
-    .trim();
 
 const loadDepositRow = async (supabaseAdmin, merchantReference) => {
   if (!merchantReference) return null;
@@ -214,7 +218,7 @@ const maybeLogPaymentEvent = async (
 ) => {
   try {
     await supabaseAdmin.from("payment_audit_events").insert({
-      provider: "kora",
+      provider: "fonbnk",
       source,
       tracking_id: trackingId || null,
       merchant_reference: merchantReference || null,
@@ -226,9 +230,7 @@ const maybeLogPaymentEvent = async (
       user_agent: String(req.headers["user-agent"] || "").slice(0, 512),
       payload: payload && typeof payload === "object" ? payload : {}
     });
-  } catch (e) {
-    // Keep payment flow resilient if telemetry table is not deployed yet.
-  }
+  } catch (_e) {}
 };
 
 const maybeFlagPaymentIssue = async (
@@ -237,7 +239,7 @@ const maybeFlagPaymentIssue = async (
 ) => {
   try {
     await supabaseAdmin.from("payment_flags").insert({
-      provider: "kora",
+      provider: "fonbnk",
       source,
       reason,
       tracking_id: trackingId || null,
@@ -247,9 +249,7 @@ const maybeFlagPaymentIssue = async (
       currency: currency || null,
       payload: payload && typeof payload === "object" ? payload : {}
     });
-  } catch (e) {
-    // Keep payment flow resilient if telemetry table is not deployed yet.
-  }
+  } catch (_e) {}
 };
 
 const applyDepositSuccess = async (supabaseAdmin, merchantReference) => {
@@ -272,13 +272,15 @@ const applyDepositFailure = async (supabaseAdmin, merchantReference) => {
 };
 
 export default async function handler(req, res) {
-  res.setHeader("Content-Type", "application/json");
+  const security = applyApiSecurity(req, res, { methods: ["GET", "POST", "OPTIONS"] });
+  if (!security.ok) {
+    return res.status(403).json({ error: security.error || "forbidden" });
+  }
 
   if (req.method === "OPTIONS") {
     res.setHeader("Allow", "GET, POST, OPTIONS");
     return res.status(204).end();
   }
-
   if (req.method !== "GET" && req.method !== "POST") {
     res.setHeader("Allow", "GET, POST, OPTIONS");
     return res.status(405).json({ error: "method not allowed" });
@@ -287,8 +289,15 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: "supabase not configured" });
   }
-  if (!isKoraConfigured()) {
-    return res.status(500).json({ error: "Kora is not configured." });
+  if (!isFonbnkConfigured()) {
+    return res.status(500).json({ error: "Fonbnk is not configured." });
+  }
+
+  const rateKey = `fonbnk-webhook:${readClientIp(req) || "unknown"}`;
+  const rate = checkRateLimit(rateKey, { windowMs: 60_000, max: 300 });
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(Math.max(Math.ceil(rate.retryAfterMs / 1000), 1)));
+    return res.status(429).json({ error: "too many requests" });
   }
 
   const supabaseAdmin = getAdmin();
@@ -296,41 +305,60 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "supabase not configured" });
   }
 
-  const src = req.method === "GET" ? req.query : req.body || {};
+  const src =
+    req.method === "GET"
+      ? req.query
+      : req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? req.body
+        : {};
   const webhookCheck = verifyWebhookRequest(req, src);
   if (!webhookCheck.ok) {
     return res.status(401).json({ error: webhookCheck.reason || "unauthorized webhook" });
   }
 
-  const trackingId =
-    String(
+  const trackingId = String(
+    src?.orderId ||
+      src?.tracking_id ||
       src?.OrderTrackingId ||
-        src?.orderTrackingId ||
-        src?.tracking_id ||
-        src?.reference ||
-        src?.merchant_reference ||
-        src?.data?.reference ||
-        ""
-    ).trim();
-  const merchantReference =
-    String(
-      src?.OrderMerchantReference ||
-        src?.orderMerchantReference ||
-        src?.merchant_reference ||
-        src?.reference ||
-        src?.data?.reference ||
-        ""
-    ).trim();
+      src?.orderTrackingId ||
+      src?.data?.order?._id ||
+      src?.data?.order?.id ||
+      src?.reference ||
+      src?.merchant_reference ||
+      src?.data?.order?.merchantOrderParams ||
+      ""
+  ).trim();
 
-  if (!trackingId || !merchantReference) {
+  const merchantReference = String(
+    src?.merchant_reference ||
+      src?.orderParams ||
+      src?.merchantOrderParams ||
+      src?.OrderMerchantReference ||
+      src?.orderMerchantReference ||
+      src?.data?.order?.merchantOrderParams ||
+      src?.data?.order?.merchant_order_params ||
+      src?.data?.orderParams ||
+      src?.reference ||
+      trackingId ||
+      ""
+  ).trim();
+
+  if (!trackingId && !merchantReference) {
     return res.status(400).json({ error: "missing tracking_id or merchant_reference" });
   }
+  if (trackingId && !isSafeIdentifier(trackingId)) {
+    return res.status(400).json({ error: "invalid tracking_id" });
+  }
+  if (merchantReference && !isSafeIdentifier(merchantReference)) {
+    return res.status(400).json({ error: "invalid merchant_reference" });
+  }
 
-  const eventKey = `kora:webhook:${trackingId}:${merchantReference}:${webhookCheck.payloadHash}`;
+  const effectiveTrackingId = trackingId || merchantReference;
+  const eventKey = `fonbnk:webhook:${effectiveTrackingId}:${merchantReference}:${webhookCheck.payloadHash}`;
   const receipt = await registerWebhookReceipt(supabaseAdmin, {
     eventKey,
     source: "webhook",
-    trackingId,
+    trackingId: effectiveTrackingId,
     merchantReference,
     signature: webhookCheck.signature,
     payloadHash: webhookCheck.payloadHash
@@ -341,7 +369,7 @@ export default async function handler(req, res) {
   if (receipt.duplicate) {
     return res.status(200).json({
       orderNotificationType: "IPNCHANGE",
-      orderTrackingId: trackingId,
+      orderTrackingId: effectiveTrackingId,
       orderMerchantReference: merchantReference,
       status: 200,
       duplicate: true
@@ -349,17 +377,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const statusPayload = await getTransactionStatus(trackingId);
+    const statusPayload = await getTransactionStatus(effectiveTrackingId);
     const status = normalizeStatus(statusPayload);
-    const providerAmount =
-      toMoney(
-        statusPayload?.amount ??
-          statusPayload?.data?.amount ??
-          statusPayload?.amount_paid ??
-          statusPayload?.data?.amount_paid
-      );
-    const currency =
-      String(statusPayload?.currency || statusPayload?.data?.currency || "").trim().toUpperCase() || null;
+    const providerAmount = toMoney(
+      statusPayload?.amount ??
+        statusPayload?.data?.amount ??
+        statusPayload?.amount_paid ??
+        statusPayload?.data?.amount_paid
+    );
+    const currency = String(statusPayload?.currency || statusPayload?.data?.currency || "").trim().toUpperCase() || null;
     const depositRow = await loadDepositRow(supabaseAdmin, merchantReference);
     const expectedAmount = toMoney(depositRow?.amount);
     const amountMismatch =
@@ -369,11 +395,11 @@ export default async function handler(req, res) {
       Math.abs(providerAmount - expectedAmount) > 0.009;
 
     if (status === "success") {
-      if (!depositRow) {
+      if (!merchantReference) {
         await maybeFlagPaymentIssue(supabaseAdmin, {
           source: "webhook",
-          reason: "deposit_not_found",
-          trackingId,
+          reason: "missing_merchant_reference",
+          trackingId: effectiveTrackingId,
           merchantReference,
           expectedAmount,
           providerAmount,
@@ -383,7 +409,31 @@ export default async function handler(req, res) {
         await maybeLogPaymentEvent(supabaseAdmin, {
           req,
           source: "webhook",
-          trackingId,
+          trackingId: effectiveTrackingId,
+          merchantReference,
+          decision: "rejected",
+          expectedAmount,
+          providerAmount,
+          currency,
+          payload: statusPayload
+        });
+        return res.status(400).json({ error: "merchant_reference required" });
+      }
+      if (!depositRow) {
+        await maybeFlagPaymentIssue(supabaseAdmin, {
+          source: "webhook",
+          reason: "deposit_not_found",
+          trackingId: effectiveTrackingId,
+          merchantReference,
+          expectedAmount,
+          providerAmount,
+          currency,
+          payload: statusPayload
+        });
+        await maybeLogPaymentEvent(supabaseAdmin, {
+          req,
+          source: "webhook",
+          trackingId: effectiveTrackingId,
           merchantReference,
           decision: "rejected",
           expectedAmount,
@@ -397,7 +447,7 @@ export default async function handler(req, res) {
         await maybeFlagPaymentIssue(supabaseAdmin, {
           source: "webhook",
           reason: "amount_mismatch",
-          trackingId,
+          trackingId: effectiveTrackingId,
           merchantReference,
           expectedAmount,
           providerAmount,
@@ -408,7 +458,7 @@ export default async function handler(req, res) {
         await maybeLogPaymentEvent(supabaseAdmin, {
           req,
           source: "webhook",
-          trackingId,
+          trackingId: effectiveTrackingId,
           merchantReference,
           decision: "rejected",
           expectedAmount,
@@ -422,13 +472,14 @@ export default async function handler(req, res) {
           provider_amount: providerAmount
         });
       }
+
       const applied = await applyDepositSuccess(supabaseAdmin, merchantReference);
       if (!applied?.updated) {
         const isMissing = String(applied?.reason || "").toLowerCase().includes("not found");
         await maybeFlagPaymentIssue(supabaseAdmin, {
           source: "webhook",
           reason: applied?.reason || "confirm_failed",
-          trackingId,
+          trackingId: effectiveTrackingId,
           merchantReference,
           expectedAmount,
           providerAmount,
@@ -438,7 +489,7 @@ export default async function handler(req, res) {
         await maybeLogPaymentEvent(supabaseAdmin, {
           req,
           source: "webhook",
-          trackingId,
+          trackingId: effectiveTrackingId,
           merchantReference,
           decision: "error",
           expectedAmount,
@@ -448,14 +499,14 @@ export default async function handler(req, res) {
         });
         return res.status(isMissing ? 404 : 500).json({
           error: applied?.reason || "failed to confirm deposit",
-          orderTrackingId: trackingId,
+          orderTrackingId: effectiveTrackingId,
           orderMerchantReference: merchantReference
         });
       }
       await maybeLogPaymentEvent(supabaseAdmin, {
         req,
         source: "webhook",
-        trackingId,
+        trackingId: effectiveTrackingId,
         merchantReference,
         decision: "success",
         expectedAmount,
@@ -468,7 +519,7 @@ export default async function handler(req, res) {
       await maybeLogPaymentEvent(supabaseAdmin, {
         req,
         source: "webhook",
-        trackingId,
+        trackingId: effectiveTrackingId,
         merchantReference,
         decision: "failed",
         expectedAmount,
@@ -480,7 +531,7 @@ export default async function handler(req, res) {
       await maybeLogPaymentEvent(supabaseAdmin, {
         req,
         source: "webhook",
-        trackingId,
+        trackingId: effectiveTrackingId,
         merchantReference,
         decision: "pending",
         expectedAmount,
@@ -489,13 +540,16 @@ export default async function handler(req, res) {
         payload: statusPayload
       });
     }
+
     return res.status(200).json({
       orderNotificationType: "IPNCHANGE",
-      orderTrackingId: trackingId,
+      orderTrackingId: effectiveTrackingId,
       orderMerchantReference: merchantReference,
       status: status === "success" ? 200 : status === "failed" ? 400 : 202
     });
   } catch (e) {
-    return res.status(500).json({ error: e?.message || "failed to process IPN" });
+    console.error("fonbnk webhook error", e);
+    return res.status(500).json({ error: "failed to process webhook" });
   }
 }
+

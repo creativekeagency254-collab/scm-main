@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { getTransactionStatus, isKoraConfigured } from "../api/lib/pesapal.js";
+import { getTransactionStatus, isFonbnkConfigured } from "../lib/api/fonbnk.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,7 +32,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RECON_LIMIT = Number(process.env.RECON_LIMIT || "200");
 const RECON_DAYS = Number(process.env.RECON_DAYS || "7");
 const SOURCE = "reconcile";
-const KORA_MOCK_ENABLED = String(process.env.KORA_MOCK || "").trim() === "1";
+const FONBNK_MOCK_ENABLED = String(process.env.FONBNK_MOCK || "").trim() === "1";
 const ALLOW_MOCK_RECON = String(process.env.ALLOW_MOCK_RECON || "").trim() === "1";
 
 function must(name, value) {
@@ -57,7 +57,7 @@ const normalizeStatus = (payload) => {
   const codeRaw = payload?.status_code ?? payload?.statusCode;
   const code = Number.isFinite(Number(codeRaw)) ? Number(codeRaw) : null;
   if (code === 1 || desc === "completed" || desc === "success") return "success";
-  if (code === 2 || code === 0 || code === 3 || ["failed", "invalid", "reversed"].includes(desc)) return "failed";
+  if (code === 2 || code === 3 || ["failed", "invalid", "reversed"].includes(desc)) return "failed";
   return "pending";
 };
 
@@ -76,11 +76,13 @@ async function safeInsert(table, row) {
 }
 
 async function main() {
-  if (!isKoraConfigured()) {
-    throw new Error("Kora is not configured (missing KORA_SECRET_KEY / KORA_MOCK).");
+  if (!isFonbnkConfigured()) {
+    throw new Error(
+      "Fonbnk is not configured (missing FONBNK_SOURCE, FONBNK_URL_SIGNATURE_SECRET, FONBNK_CLIENT_ID, or FONBNK_CLIENT_SECRET)."
+    );
   }
-  if (KORA_MOCK_ENABLED && !ALLOW_MOCK_RECON) {
-    throw new Error("Refusing to run reconciliation with KORA_MOCK=1. Set ALLOW_MOCK_RECON=1 only for test environments.");
+  if (FONBNK_MOCK_ENABLED && !ALLOW_MOCK_RECON) {
+    throw new Error("Refusing to run reconciliation with FONBNK_MOCK=1. Set ALLOW_MOCK_RECON=1 only for test environments.");
   }
 
   const cutoff = new Date(Date.now() - RECON_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -131,7 +133,7 @@ async function main() {
           .eq("provider_reference", merchantReference)
           .neq("status", "success");
         await safeInsert("payment_flags", {
-          provider: "kora",
+          provider: "fonbnk",
           source: SOURCE,
           reason: "amount_mismatch",
           merchant_reference: merchantReference,
@@ -143,7 +145,7 @@ async function main() {
           status: "open"
         });
         await safeInsert("payment_audit_events", {
-          provider: "kora",
+          provider: "fonbnk",
           source: SOURCE,
           tracking_id: merchantReference,
           merchant_reference: merchantReference,
@@ -163,7 +165,7 @@ async function main() {
         if (error) throw new Error(error.message || "confirm_deposit_success failed");
         successCount += 1;
         await safeInsert("payment_audit_events", {
-          provider: "kora",
+          provider: "fonbnk",
           source: SOURCE,
           tracking_id: merchantReference,
           merchant_reference: merchantReference,
@@ -181,7 +183,7 @@ async function main() {
           .eq("provider_reference", merchantReference)
           .neq("status", "success");
         await safeInsert("payment_audit_events", {
-          provider: "kora",
+          provider: "fonbnk",
           source: SOURCE,
           tracking_id: merchantReference,
           merchant_reference: merchantReference,
@@ -194,7 +196,7 @@ async function main() {
       } else {
         pendingCount += 1;
         await safeInsert("payment_audit_events", {
-          provider: "kora",
+          provider: "fonbnk",
           source: SOURCE,
           tracking_id: merchantReference,
           merchant_reference: merchantReference,
@@ -208,7 +210,7 @@ async function main() {
     } catch (e) {
       errorCount += 1;
       await safeInsert("payment_flags", {
-        provider: "kora",
+        provider: "fonbnk",
         source: SOURCE,
         reason: "reconcile_error",
         merchant_reference: merchantReference,
@@ -220,7 +222,7 @@ async function main() {
     }
   }
 
-  console.log("RECONCILE KORA PAYMENTS COMPLETE");
+  console.log("RECONCILE FONBNK PAYMENTS COMPLETE");
   console.log(`Scanned: ${rows.length}`);
   console.log(`Confirmed success: ${successCount}`);
   console.log(`Marked failed: ${failedCount}`);
@@ -230,6 +232,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("RECONCILE KORA PAYMENTS FAILED:", err.message);
+  console.error("RECONCILE FONBNK PAYMENTS FAILED:", err.message);
   process.exit(1);
 });
