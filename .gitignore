@@ -11,3 +11,5 @@ pnpm-debug.log*
 .vercel
 .vercel.backup.*/
 supabase/.temp/
+
+.vercel

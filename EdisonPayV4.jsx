@@ -1730,6 +1730,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
   const depMethod = "M-Pesa";
   const [depLoading, setDepLoading] = useState(false);
   const [depError, setDepError] = useState("");
+  const [hasExistingDeposit, setHasExistingDeposit] = useState(false);
   const depErrorMsg = formatDepositError(depError);
   useEffect(() => {
     const intent = getTierIntent();
@@ -1745,7 +1746,30 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
       setDepName(String(profileRow?.name || profileRow?.full_name));
     }
   }, [profileRow?.phone, profileRow?.name, profileRow?.full_name]);
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !supabase || !authUser?.id) {
+      setHasExistingDeposit(false);
+      return;
+    }
+    let ignore = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("deposits")
+          .select("deposit_id")
+          .eq("user_id", authUser.id)
+          .eq("status", "success")
+          .limit(1);
+        if (ignore) return;
+        setHasExistingDeposit(!error && Array.isArray(data) && data.length > 0);
+      } catch (_e) {
+        if (!ignore) setHasExistingDeposit(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [authUser?.id]);
   const profileTierSelected = parseBooleanFlag(profileRow?.tier_selected);
+  const canAccessDashboardPreview = profileTierSelected || hasExistingDeposit;
   const currency = getActiveDisplayCurrency();
   const currencyFractionDigits = currency === DISPLAY_CURRENCIES.USD ? 2 : 0;
 
@@ -1773,7 +1797,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
   const handlePreview = async (tierId) => {
     setErr("");
     setDepError("");
-    if (profileTierSelected !== true) {
+    if (!canAccessDashboardPreview) {
       setErr("Complete your tier deposit first to unlock dashboard access.");
       return;
     }
@@ -1873,7 +1897,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
             const isActive = Number(selected) === Number(tier.id);
             const daily = getTierDailyTotal(tier);
             const tierArt = getTierCardImage(tier.id);
-            const showDepositCta = !profileTierSelected;
+            const showDepositCta = !canAccessDashboardPreview;
             const depositLabel = formatMoney(tier.deposit, {
               currency,
               minFractionDigits: currencyFractionDigits,
@@ -2001,7 +2025,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
                         )}
                         <button
                           className={`ep-tier-select-action-btn ep-tier-select-action-btn-preview${showDepositCta ? " is-preview" : ""}`}
-                          disabled={depLoading || !profileTierSelected}
+                          disabled={depLoading || !canAccessDashboardPreview}
                           onClick={() => handlePreview(tier.id)}
                         >
                           Preview
@@ -2009,7 +2033,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
                       </div>
 
                       {panel === "earn" && (
-                        <div style={{ padding:"12px 14px", borderRadius:12, background:"rgba(248,250,252,0.92)", marginBottom:10, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.85), 0 8px 16px rgba(15,23,42,0.06)" }}>
+                        <div style={{ padding:"12px 14px", borderRadius:12, background:"linear-gradient(150deg,#ffffff 0%, #f8fafc 58%, #eef2ff 100%)", marginBottom:10, border:"1px solid rgba(148,163,184,0.22)", boxShadow:"0 14px 22px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.92)", transform:"translateY(-1px)" }}>
                           <div style={{ fontSize:10, letterSpacing:"0.14em", fontWeight:800, color:"#64748B", textTransform:"uppercase", marginBottom:10 }}>Earnings Breakdown</div>
                           <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }}>
                             <div>
@@ -2042,7 +2066,7 @@ function TierSelect({ go, authUser, profileRow, onPreviewToVideos }) {
                       )}
                       {!showDepositCta && (
                         <div style={{ marginTop:8, fontSize:11, color:"#64748B" }}>
-                          Tier already selected. Use Wallet checkout to deposit anytime.
+                          Active deposit detected. Open Dashboard to manage earnings and upgrade when ready.
                         </div>
                       )}
                     </>
@@ -2576,6 +2600,21 @@ function ClientDash({ t, go, authUser, profileRow, onSignOut, onReplayGuide, ext
       return [nextItem, ...base].slice(0, DASH_NOTIF_LIMIT);
     });
   }, [t.acc]);
+  useEffect(() => {
+    if (!authId || hasTierDeposit !== true || !nextTier) return;
+    const key = `ep:upgrade-nudge:${authId}:${t.id}-to-${nextTier.id}`;
+    try {
+      if (localStorage.getItem(key) === "1") return;
+      localStorage.setItem(key, "1");
+    } catch (_e) {}
+    pushNotif({
+      id: key,
+      ic: "up",
+      title: `Upgrade to ${nextTier.name}`,
+      sub: `Add only ${formatMoney(nextTierTopUpAmount)} to unlock higher daily earnings.`,
+      c: "#E8820C"
+    });
+  }, [authId, hasTierDeposit, nextTier, nextTierTopUpAmount, pushNotif]);
   const markNotifRead = useCallback((notifId) => {
     if (!notifId) return;
     setNotifs((prev) => (Array.isArray(prev) ? prev : []).map((n) => (
@@ -7093,6 +7132,8 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
     const status = statusRaw.charAt(0).toUpperCase() + statusRaw.slice(1).toLowerCase();
     const tierSelectedRaw = String(meta.tier_selected ?? "").toLowerCase();
     const tierSelected = meta.tier_selected === true || ["1", "true", "yes", "on"].includes(tierSelectedRaw);
+    const joinedRaw = u.joined || u.signup_at || u.created_at || u.date || null;
+    const joinedTs = Date.parse(String(joinedRaw || ""));
     const balance = num(wallet?.balance ?? u.balance);
     return {
       id: u.id || u.user_id || `U${String(i+1).padStart(3,"0")}`,
@@ -7101,7 +7142,8 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
       tier: tierLabel,
       deposit: num(u.deposit || u.deposit_amount || u.amount),
       status: status || "Active",
-      joined: fmtDate(u.joined || u.signup_at || u.created_at || u.date),
+      joined: fmtDate(joinedRaw),
+      joinedAt: Number.isFinite(joinedTs) ? joinedTs : 0,
       earn: num(u.earn || u.earnings || u.total_earnings || balance),
       phone: u.phone || u.msisdn || "?",
       category: meta.category || u.category || "Client",
@@ -7128,16 +7170,42 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
       tier: tierLabel,
     };
   };
-  const normalizeTx = (t, i) => ({
-    id: t.id || t.tx_id || `T${String(i+1).padStart(3,"0")}`,
-    userId: t.user_id || null,
-    user: t.user || t.name || t.user_name || "Unknown",
-    type: t.type || t.category || "Earning",
-    amount: num(t.amount || t.amount_kes),
-    method: t.method || t.channel || "-",
-    date: fmtDate(t.date || t.created_at),
-    status: t.status || "Paid",
-  });
+  const normalizeTx = (t, i, userEmailMap = {}) => {
+    const typeRaw = String(t.type || t.category || "earning").toLowerCase();
+    const statusRaw = String(t.status || "paid").toLowerCase();
+    const typeMap = {
+      accrual: "Earning",
+      earning: "Earning",
+      referral: "Referral",
+      deposit: "Deposit",
+      withdrawal: "Withdrawal",
+      payout: "Withdrawal"
+    };
+    const statusMap = {
+      success: "Paid",
+      completed: "Paid",
+      paid: "Paid",
+      pending: "Pending",
+      processing: "Pending",
+      failed: "Failed",
+      rejected: "Rejected"
+    };
+    const userId = t.user_id || null;
+    const fallbackEmail = userId ? userEmailMap[String(userId)] : "";
+    const userEmail = t.user_email || t.email || fallbackEmail || "";
+    const userName = t.user || t.name || t.user_name || (userEmail ? userEmail.split("@")[0] : "Unknown");
+    return {
+      id: t.id || t.tx_id || `T${String(i + 1).padStart(3, "0")}`,
+      userId,
+      user: userName,
+      email: userEmail,
+      type: typeMap[typeRaw] || (typeRaw ? typeRaw.charAt(0).toUpperCase() + typeRaw.slice(1) : "Earning"),
+      amount: num(t.amount || t.amount_kes),
+      method: t.method || t.channel || "-",
+      date: fmtDate(t.date || t.created_at),
+      status: statusMap[statusRaw] || (statusRaw ? statusRaw.charAt(0).toUpperCase() + statusRaw.slice(1) : "Paid"),
+    };
+  };
   const normalizeTierUpgradeEvent = (event, i) => {
     const linkedUser = Array.isArray(event?.users) ? event.users[0] : event?.users;
     const fromTierVal = Number(event?.from_tier);
@@ -7230,9 +7298,20 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
       const audits = Array.isArray(auditRows) ? auditRows : [];
       const deps = Array.isArray(depRows) ? depRows : [];
       const refs = Array.isArray(refRows) ? refRows : [];
-      setUsers(u.length ? u.map(normalizeUser) : []);
+      const userEmailMap = u.reduce((acc, row) => {
+        const id = row?.user_id || row?.id;
+        const email = row?.email || row?.user_email;
+        if (id && email) acc[String(id)] = String(email);
+        return acc;
+      }, {});
+      const normalizedUsers = u.length
+        ? u
+            .map(normalizeUser)
+            .sort((a, b) => num(b.joinedAt) - num(a.joinedAt))
+        : [];
+      setUsers(normalizedUsers);
       setWithdrawals(w.length ? w.map(normalizeWithdrawal) : []);
-      setTxs(txRows.length ? txRows.map(normalizeTx) : []);
+      setTxs(txRows.length ? txRows.map((tx, i) => normalizeTx(tx, i, userEmailMap)) : []);
       setRiskFlags(flags);
       setTierUpgradeEvents(upgrades.map(normalizeTierUpgradeEvent));
       setAuditEvents(audits.map(normalizeAuditEvent));
@@ -7381,7 +7460,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
       id: `user-${newestUserPreview.id || newestUserPreview.email || "na"}`,
       ic: "user",
       t: "Latest signup",
-      s: `${newestUserPreview.name || "User"} - ${newestUserPreview.tier || "Regular"} tier`,
+      s: `${newestUserPreview.name || "User"} - ${newestUserPreview.email || "-"} - ${newestUserPreview.tier || "Regular"} tier`,
       c: ADMIN.blueAlt
     });
   }
@@ -7472,7 +7551,10 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
 
   const filteredUsers = users.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase());
-    const matchFilter = userFilter==="all" || u.status.toLowerCase()===userFilter;
+    const statusFilterKey = String(u.status || "").toLowerCase();
+    const isInactiveUser = statusFilterKey !== "active";
+    const matchFilter = userFilter === "all"
+      || (userFilter === "inactive" ? isInactiveUser : statusFilterKey === userFilter);
     const matchCategory = userCategory==="all" || String(u.category || "").toLowerCase()===userCategory;
     return matchSearch && matchFilter && matchCategory;
   });
@@ -7500,13 +7582,16 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
   const statusBadge = (s) => {
     const map = {
       Active:[ADMIN.green,"#ECFDF5"],
+      Inactive:[ADMIN.muted,"#F3F4F6"],
       Paid:[ADMIN.green,"#ECFDF5"],
       Approved:[ADMIN.green,"#ECFDF5"],
       Pending:[ADMIN.blue,"#EFF6FF"],
       Suspended:[ADMIN.red,"#FFF0F0"],
       Banned:[ADMIN.redAlt,"#FFF0F0"],
       Rejected:[ADMIN.red,"#FFF0F0"],
+      Failed:[ADMIN.redAlt,"#FFF0F0"],
       Earning:[ADMIN.blue,"#EFF6FF"],
+      Referral:[ADMIN.blueAlt,"#EFF6FF"],
       Deposit:[ADMIN.green,"#ECFDF5"],
       Withdrawal:[ADMIN.blue,"#EFF6FF"]
     };
@@ -7867,7 +7952,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
               {/* Filters */}
               <div style={{ display:"flex",gap:10,flexWrap:"wrap",alignItems:"center" }}>
                 <div style={{ display:"flex",gap:4,background:"#fff",border:"2px solid #111",borderRadius:9,padding:3 }}>
-                  {["all","active","pending","suspended","banned"].map(f=>(
+                  {["all","active","inactive","pending","suspended","banned"].map(f=>(
                     <button key={f} onClick={()=>setUserFilter(f)} style={{ padding:"6px 14px",borderRadius:7,border:"1px solid #111",background:userFilter===f?"#111":"transparent",color:userFilter===f?"#fff":"#111",fontSize:12,fontWeight:userFilter===f?800:600,cursor:"pointer",fontFamily:"Geist,sans-serif",textTransform:"capitalize" }}>{f}</button>
                   ))}
                 </div>
@@ -7990,7 +8075,7 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                   <table style={{ width:"100%",borderCollapse:"collapse" }}>
                     <thead>
                       <tr style={{ borderBottom:"1px solid #111" }}>
-                        {["ID","User","Type","Amount","Method","Date","Status"].map(h=>(
+                        {["ID","User / Email","Type","Amount","Method","Date","Status"].map(h=>(
                           <th key={h} style={{ padding:"10px 14px",fontSize:10,fontWeight:900,color:"#111",letterSpacing:"0.1em",textAlign:"left",whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
                         ))}
                       </tr>
@@ -8001,7 +8086,10 @@ function AdminDash({ go, authUser, profileRow, onSignOut, externalTab, onTabChan
                           onMouseEnter={e=>e.currentTarget.style.background="#F3F4F6"}
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                           <td style={{ padding:"11px 14px",fontSize:11,color:ADMIN.muted,fontWeight:700 }}>{tx.id}</td>
-                          <td style={{ padding:"11px 14px",fontSize:13,fontWeight:700,color:"#111",whiteSpace:"nowrap" }}>{tx.user}</td>
+                          <td style={{ padding:"11px 14px" }}>
+                            <div style={{ fontSize:13,fontWeight:700,color:"#111",whiteSpace:"nowrap" }}>{tx.user}</div>
+                            <div style={{ fontSize:10,color:ADMIN.muted,whiteSpace:"nowrap" }}>{tx.email || "-"}</div>
+                          </td>
                           <td style={{ padding:"11px 14px" }}>{statusBadge(tx.type)}</td>
                           <td style={{ padding:"11px 14px",fontSize:13,fontWeight:800,color:tx.type==="Withdrawal"?ADMIN.red:tx.type==="Earning"?ADMIN.green:ADMIN.blue,whiteSpace:"nowrap" }}>
                             {tx.type==="Withdrawal"?"-":"+"} KES {tx.amount.toLocaleString()}
@@ -8465,10 +8553,21 @@ function CurrencyPill({ currency, onChange, compact = false }) {
       )}
     </div>
   );
-}
+    }
+
+const resolveInitialPageFromLocation = () => {
+  if (typeof window === "undefined") return "landing";
+  const path = String(window.location?.pathname || "/").toLowerCase();
+  if (path === "/dashboard" || path.startsWith("/dashboard/")) return "dashboard";
+  if (path === "/admin" || path.startsWith("/admin/")) return "admin";
+  if (path === "/login" || path.startsWith("/login/")) return "login";
+  if (path === "/signup" || path.startsWith("/signup/")) return "signup";
+  if (path === "/tier-select" || path.startsWith("/tier-select/")) return "tier-select";
+  return "landing";
+};
 
 export default function App() {
-  const [page, setPage] = useState("landing");
+  const [page, setPage] = useState(() => resolveInitialPageFromLocation());
   const [prevPage, setPrevPage] = useState("landing");
   const [dashboardTab, setDashboardTab] = useState("overview");
   const [adminTab, setAdminTab] = useState("overview");
@@ -8483,6 +8582,7 @@ export default function App() {
   const [tier, setTier] = useState(0);
   const t = TIERS[tier];
   const [session, setSession] = useState(null);
+  const authUser = session?.user || null;
   const [authReady, setAuthReady] = useState(!SUPABASE_ENABLED);
   const [profileRow, setProfileRow] = useState(null);
   const [authMessage, setAuthMessage] = useState("");
@@ -8525,6 +8625,29 @@ export default function App() {
       setPage("login");
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const u = new URL(window.location.href);
+      const payment = String(u.searchParams.get("payment") || "").trim().toLowerCase();
+      if (!payment) return;
+
+      if (payment === "success") {
+        setAuthMessage("Payment successful. Redirecting to your dashboard.");
+        setPrevPage("landing");
+        setPage(authUser?.id ? "dashboard" : "login");
+      } else if (payment === "failed") {
+        setAuthMessage("Payment failed. Please try again.");
+        if (!authUser?.id) setPage("login");
+      }
+
+      u.searchParams.delete("payment");
+      const nextSearch = u.searchParams.toString();
+      const nextPath = `${u.pathname}${nextSearch ? `?${nextSearch}` : ""}${u.hash || ""}`;
+      window.history.replaceState({}, document.title, nextPath);
+    } catch (e) {}
+  }, [authUser?.id]);
 
   useEffect(() => {
     const ref = getRefFromUrl();
@@ -8580,7 +8703,6 @@ export default function App() {
   }, [displayCurrency]);
 
   const go = (p) => { setPrevPage(page); setPage(p); };
-  const authUser = session?.user || null;
   useEffect(() => {
     if (!SUPABASE_ENABLED || !authReady) return;
     const { trackingId, merchantReference } = getPaymentParams();
@@ -8677,7 +8799,7 @@ export default function App() {
   const profileAdminFallbackEnabled = parseBooleanFlag(
     import.meta.env.VITE_ALLOW_PROFILE_ADMIN_FALLBACK || "0"
   );
-  const isAdmin = hasAppAdminRole || (profileAdminFallbackEnabled && isEmailVerified && hasProfileAdminRole);
+  const isAdmin = isEmailVerified && (hasAppAdminRole || (profileAdminFallbackEnabled && hasProfileAdminRole));
   const profileReady = !SUPABASE_ENABLED || !authUser || (profileRow !== null && profileRow?.id === authUser.id);
 
   useEffect(() => {
@@ -8862,15 +8984,16 @@ export default function App() {
     ? page
     : (() => {
       if (isAdmin) {
-        return (page === "landing" || page === "admin") ? page : "admin";
+        return "admin";
       }
       if (!authUser) {
+        if (page === "dashboard" || page === "tier-select" || page === "admin") return "login";
         return (page === "landing" || page === "login" || page === "signup") ? page : "landing";
       }
       if (mustSelectTier) {
-        return (page === "landing" || page === "tier-select") ? page : "tier-select";
+        return "tier-select";
       }
-      return (page === "landing" || page === "dashboard" || page === "tier-select") ? page : "dashboard";
+      return (page === "dashboard" || page === "tier-select") ? page : "dashboard";
     })();
   useEffect(() => {
     if (route !== "dashboard" || isAdmin || guideSeen) return;
